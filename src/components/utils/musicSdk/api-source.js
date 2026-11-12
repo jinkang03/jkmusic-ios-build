@@ -46,6 +46,9 @@ for (const api of apiSourceInfo) {
 // const getAPI = source => apiList[`${settingState.setting['common.apiSource']}_api_${source}`]
 
 const apis = source => {
+  global.lx = global.lx || { apis: {}, qualityList: {} }
+  global.lx.apis = global.lx.apis || {}
+  if (!global.lx.apis[source]) throw new Error('Api is not found')
   // if (/^user_api/.test(settingState.setting['common.apiSource'])) return global.lx.apis[source]
   // const api = getAPI(source)
   // if (api) return api

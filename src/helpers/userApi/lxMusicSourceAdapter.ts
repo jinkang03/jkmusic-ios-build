@@ -108,7 +108,13 @@ type HttpRequest = {
 	timeout: ReturnType<typeof setTimeout> | null
 }
 
+type ScriptSourceInfo = {
+	actions: string[]
+	qualitys: string[]
+}
+
 type LxRuntime = {
+	sources: Record<string, ScriptSourceInfo>
 	pendingRequests: Map<string, PendingRequest>
 	settledRequestTypes: Map<string, SettledRequest>
 	pendingHttpRequests: Map<string, HttpRequest>
@@ -234,6 +240,9 @@ const handleScriptAction = (runtime: LxRuntime, event: any) => {
 			const data = event.data
 			if (data.status) {
 				logInfo('[lxMusicAdapter] Script initialized successfully')
+				if (data.sources && typeof data.sources === 'object') {
+					runtime.sources = data.sources as Record<string, ScriptSourceInfo>
+				}
 				runtime.inited = true
 				runtime.init?.resolve()
 			} else {
@@ -444,6 +453,7 @@ const initLxMusicScript = (
 	script: string,
 ): Promise<LxRuntime> => {
 	const runtime: LxRuntime = {
+		sources: {},
 		pendingRequests: new Map(),
 		settledRequestTypes: new Map(),
 		pendingHttpRequests: new Map(),
@@ -502,6 +512,7 @@ const getMusicUrlViaScript = (
 	songmid: string,
 	quality: string,
 	requestContext?: LxRequestContext,
+	source: string = 'tx',
 ): Promise<string> => {
 	return new Promise((resolve, reject) => {
 		if (!isActiveRuntime(runtime) || !runtime.inited) {
@@ -550,7 +561,7 @@ const getMusicUrlViaScript = (
 				requestKey: wireRequestKey,
 				data: {
 					action: 'musicUrl',
-					source: 'tx',
+					source,
 					info: {
 						musicInfo: {
 							id: songmid,
@@ -559,7 +570,7 @@ const getMusicUrlViaScript = (
 							name: title,
 							singer: artist,
 							artist,
-							source: 'tx',
+							source,
 							hash: songmid,
 						},
 						requestContext: {
@@ -593,9 +604,12 @@ export const adaptLxMusicScript = async (
 
 	logInfo(`[lxMusicAdapter] Script loaded successfully: ${info.name}`)
 
-	const musicApi: IMusic.MusicApi = {
+	const supportedSources = Object.keys(runtime.sources ?? {})
+
+	const musicApi: IMusic.MusicApi & { supportedSources: string[] } = {
 		id: scriptId,
 		platform: 'tx',
+		supportedSources,
 		author: info.author || '',
 		name: info.name || 'lx-music 音源',
 		version: info.version || '',
@@ -609,7 +623,8 @@ export const adaptLxMusicScript = async (
 			songmid: string,
 			quality: string,
 			requestContext?: LxRequestContext,
-		) => getMusicUrlViaScript(runtime, title, artist, songmid, quality, requestContext),
+			source?: string,
+		) => getMusicUrlViaScript(runtime, title, artist, songmid, quality, requestContext, source ?? supportedSources[0] ?? 'tx'),
 	}
 
 	return musicApi

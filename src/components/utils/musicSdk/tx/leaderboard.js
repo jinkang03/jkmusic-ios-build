@@ -153,7 +153,6 @@ export default {
         img: (item.album.name === '' || item.album.name === '空')
           ? item.singer?.length ? `https://y.gtimg.cn/music/photo_new/T001R500x500M000${item.singer[0].mid}.jpg` : ''
           : `https://y.gtimg.cn/music/photo_new/T002R500x500M000${item.album.mid}.jpg`,
-        singerImg:`https://y.gtimg.cn/music/photo_new/T001R500x500M000${item.singer[0].mid}.jpg`,
         lrc: null,
         otherSource: null,
         types,
@@ -230,7 +229,6 @@ export default {
     return p.then(period => {
       return this.listDetailRequest(bangid, period, this.limit).then(resp => {
         if (resp.body.code !== 0) return this.getList(bangid, page, retryNum)
-        //console.log(resp.body.toplist.data.songInfoList[0])
         return {
           total: resp.body.toplist.data.songInfoList.length,
           list: this.filterData(resp.body.toplist.data.songInfoList),

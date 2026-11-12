@@ -1,210 +1,241 @@
-
-import { createRequestTimeout } from '@/helpers/requestTimeout'
+/**
+ * 请求层：对齐 JKMUSIC 桌面版 src/renderer/utils/request.js 的契约，
+ * 把 needle/Node 换成 fetch + pako，供 musicSdk 全部内置源使用。
+ *
+ * 对外暴露：http / httpGet / httpPost / httpFetch / http_jsonp / cancelHttp / checkUrl
+ */
+import { Buffer } from 'buffer'
+import pako from 'pako'
+import { debugRequest } from './env'
 import { requestMsg } from './message'
 import { bHh } from './musicSdk/options'
-//import { deflateRaw } from 'pako'
-import { Buffer } from 'buffer';
-const defaultHeaders = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36',
-}
-// var proxyUrl = "http://" + user + ":" + password + "@" + host + ":" + port;
-// var proxiedRequest = request.defaults({'proxy': proxyUrl});
 
+/** 桌面版取 process.versions.app；RN 固定为应用版本 */
+const APP_VERSION = '2.12.6'
+
+const defaultHeaders = {
+  'User-Agent': 'lx-music mobile request',
+}
+
+const handleDeflateRaw = (data) => pako.deflateRaw(data)
+
+const regx = /(?:\d\w)+/g
 
 /**
- * 请求超时自动重试
- * @param {*} url
- * @param {*} options
+ * 计算桌面版专用的签名头（kw/kg 等接口需要）。
  */
-export const httpFetch = (url, options = { method: 'get' }) => {
-  const requestObj = fetchData(url, options)
-  return {
-    promise: requestObj.request.catch(err => {
-      console.log('出错', err.message)
-      switch (err.message) {
-        case 'socket hang up':
-          return Promise.reject(new Error(requestMsg.unachievable))
-        case 'Aborted':
-          return Promise.reject(new Error(requestMsg.timeout))
-        case 'Network request failed':
-          return Promise.reject(new Error(requestMsg.notConnectNetwork))
-        default:
-          return Promise.reject(err)
-      }
-    }),
-    cancelHttp() {
-      requestObj.abort()
+const buildSignHeaders = async(url, rawHeaders) => {
+  const headers = { ...rawHeaders }
+  if (!headers[bHh]) return headers
+
+  const path = url.replace(/^https?:\/\/[\w.:]+\//, '/')
+  let s = Buffer.from(bHh, 'hex').toString()
+  s = s.replace(s.substr(-1), '')
+  s = Buffer.from(s, 'base64').toString()
+
+  const versionParts = APP_VERSION.split('-')
+  const v = versionParts[0].split('.').map(n => (n.length < 3 ? n.padStart(3, '0') : n)).join('')
+  const v2 = versionParts[1] || ''
+  if (s) {
+    const payload = Buffer.from(
+      JSON.stringify(`${path}${v}`.match(regx), null, 1).concat(v),
+    ).toString('base64')
+    const signature = Buffer.from(handleDeflateRaw(Buffer.from(payload))).toString('hex')
+    headers[s] = `${signature}&${parseInt(v)}${v2}`
+  }
+  delete headers[bHh]
+  return headers
+}
+
+const buildBody = (data, options) => {
+  if (data == null) return undefined
+  if (options.form) {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(data)) params.append(key, String(value))
+    return params.toString()
+  }
+  if (options.formData) {
+    const form = new FormData()
+    for (const [key, value] of Object.entries(data)) form.append(key, value)
+    return form
+  }
+  if (typeof data === 'string') return data
+  if (data instanceof Uint8Array) return data
+  if (options.json === false) return data
+  return JSON.stringify(data)
+}
+
+const parseBody = (text, format) => {
+  if (format === 'json') {
+    try {
+      return JSON.parse(text)
+    } catch (_) {
+      return text
+    }
+  }
+  return text
+}
+
+const toRawBuffer = (text) => {
+  const bytes = new TextEncoder().encode(text)
+  const buf = Buffer.alloc(bytes.length)
+  Buffer.from(bytes).copy(buf)
+  return buf
+}
+
+/**
+ * 真正发请求
+ */
+const fetchData = async(url, method, rawOptions, callback) => {
+  const {
+    headers = {},
+    format = 'json',
+    timeout = 15000,
+    body,
+    form,
+    formData,
+    ...options
+  } = rawOptions ?? {}
+
+  const controller = new AbortController()
+  let timer = null
+  const requestObj = {
+    abort: () => controller.abort(),
+    aborted: false,
+  }
+
+  debugRequest && console.log(`\n---send request------${url}`)
+
+  try {
+    const finalHeaders = await buildSignHeaders(url, { ...defaultHeaders, ...headers })
+    const data = buildBody(body ?? form ?? formData, { form, formData, json: options.json })
+
+    timer = setTimeout(() => controller.abort(), timeout)
+
+    const response = await fetch(url, {
+      method: (method || 'get').toUpperCase(),
+      headers: finalHeaders,
+      body: data,
+      signal: controller.signal,
+    })
+
+    const text = await response.text()
+    const parsed = parseBody(text, format)
+
+    const resp = {
+      statusCode: response.status,
+      statusMessage: response.statusText,
+      headers: Object.fromEntries(response.headers.entries?.() ?? []),
+      bytes: text.length,
+      body: parsed,
+      raw: toRawBuffer(text),
+    }
+    callback(null, resp, parsed)
+  } catch (err) {
+    const message = err?.name === 'AbortError' ? 'Aborted' : err?.message
+    callback(Object.assign(new Error(message || 'request failed'), { code: err?.code }), null, null)
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+
+  return requestObj
+}
+
+/**
+ * promise 形式的请求方法
+ */
+const buildHttpPromise = (url, options) => {
+  const obj = {
+    isCancelled: false,
+    cancelHttp: () => {
+      obj.isCancelled = true
+      if (obj.requestObj) obj.requestObj.abort()
     },
   }
+
+  obj.promise = new Promise((resolve, reject) => {
+    void fetchData(url, options.method || 'get', options, (err, resp) => {
+      obj.cancelFn = null
+      if (err) {
+        reject(err)
+        return
+      }
+      resolve(resp)
+    }).then((requestObj) => {
+      obj.requestObj = requestObj
+      if (obj.isCancelled) obj.cancelHttp()
+    }).catch(reject)
+  })
+
+  return obj
 }
 
-/**
- * http get 请求
- * @param {*} url 地址
- * @param {*} options 选项
- * @param {*} callback 回调
- * @return {Number} index 用于取消请求
- */
+export const httpFetch = (url, options = {}) => {
+  const requestObj = buildHttpPromise(url, options)
+  requestObj.promise = requestObj.promise.catch(err => {
+    switch (err?.message) {
+      case 'socket hang up':
+      case 'Network request failed':
+        return Promise.reject(new Error(requestMsg.notConnectNetwork))
+      case 'ETIMEDOUT':
+      case 'ESOCKETTIMEDOUT':
+      case 'Aborted':
+      case 'timeout':
+        return Promise.reject(new Error(requestMsg.timeout))
+      case 'ENOTFOUND':
+        return Promise.reject(new Error(requestMsg.notConnectNetwork))
+      default:
+        return Promise.reject(err)
+    }
+  })
+  return requestObj
+}
+
+export const cancelHttp = (requestObj) => {
+  if (!requestObj) return
+  requestObj.abort?.()
+  requestObj.cancelHttp?.()
+}
+
+export const http = (url, options, cb) => {
+  if (typeof options === 'function') {
+    cb = options
+    options = {}
+  }
+  const opts = options ?? {}
+  return fetchData(url, opts.method || 'get', opts, cb)
+}
+
 export const httpGet = (url, options, callback) => {
   if (typeof options === 'function') {
     callback = options
     options = {}
   }
-  const requestObj = fetchData(url, { ...options, method: 'get' })
-  requestObj.request.then(resp => {
-    callback(null, resp, resp.body)
-  }).catch(err => {
-    // debugRequest && console.log(JSON.stringify(err))
-    callback(err, null, null)
-  })
-
-  return () => {
-    requestObj.abort()
-  }
+  return fetchData(url, 'get', options ?? {}, callback)
 }
 
-/*
-const fetchWithTimeout = (resource, options) => {
-  const { timeout = 8000 } = options
-
-  const controller = new global.AbortController()
-  const id = setTimeout(() => controller.abort(), timeout)
-
-  return {
-    request: global.fetch(resource, {
-      ...options,
-      signal: controller.signal,
-    }).then(response => {
-      clearTimeout(id)
-      return response
-    }),
-    abort() {
-      controller.abort()
-    },
+export const httpPost = (url, data, options, callback) => {
+  if (typeof options === 'function') {
+    callback = options
+    options = {}
   }
-} */
+  return fetchData(url, 'post', { ...(options ?? {}), body: data }, callback)
+}
 
+export const http_jsonp = (url, options, callback) => {
+  // RN 无 script 注入能力，JSONP 统一按普通 GET 处理
+  return httpGet(url, options, callback)
+}
 
-const handleDeflateRaw = data => new Promise((resolve, reject) => {
-  //resolve(Buffer.from(deflateRaw(data)))
-  // deflateRaw(data, (err, buf) => {
-  //   if (err) return reject(err)
-  //   resolve(buf)
-  // })
+export const checkUrl = (url, options = {}) => new Promise((resolve, reject) => {
+  fetchData(url, 'head', options, (err, resp) => {
+    if (err) {
+      reject(err)
+      return
+    }
+    if (resp.statusCode === 200) resolve()
+    else reject(new Error(String(resp.statusCode)))
+  }).catch(reject)
 })
 
-const regx = /(?:\d\w)+/g
-
-const handleRequestData = async(url, {
-  method = 'get',
-  headers = {},
-  format = 'json',
-  cache = 'no-store',
-  ...options
-}) => {
-  // console.log(url, options)
-  headers = Object.assign({
-    Accept: 'application/json',
-  }, headers)
-  options.cache = cache
-  if (method.toLocaleLowerCase() === 'post' && !headers['Content-Type']) {
-    if (options.form) {
-      headers['Content-Type'] = 'application/x-www-form-urlencoded'
-      const formBody = []
-      for (let [key, value] of Object.entries(options.form)) {
-        let encodedKey = encodeURIComponent(key)
-        let encodedValue = encodeURIComponent(value)
-        formBody.push(`${encodedKey}=${encodedValue}`)
-      }
-      options.body = formBody.join('&')
-      delete options.form
-    } else if (options.formData) {
-      headers['Content-Type'] = 'multipart/form-data'
-      const formBody = []
-      for (let [key, value] of Object.entries(options.form)) {
-        let encodedKey = encodeURIComponent(key)
-        let encodedValue = encodeURIComponent(value)
-        formBody.push(`${encodedKey}=${encodedValue}`)
-      }
-      options.body = options.formData
-      delete options.formData
-    } else {
-      headers['Content-Type'] = 'application/json'
-    }
-  }
-  if (headers['Content-Type'] === 'application/json' && options.body) {
-    options.body = JSON.stringify(options.body)
-  }
-  // if (headers[bHh]) {
-  //   let s = Buffer.from(bHh, 'hex').toString()
-  //   s = s.replace(s.substr(-1), '')
-  //   s = Buffer.from(s, 'base64').toString()
-  //   const v = process.versions.app.split('-')[0].split('.').map(n => n.length < 3 ? n.padStart(3, '0') : n).join('')
-  //   const v2 = process.versions.app.split('-')[1] || ''
-  //   headers[s] = !s || `${(await handleDeflateRaw(Buffer.from(JSON.stringify(`${url}${v}`.match(regx), null, 1).concat(v)).toString('base64'))).toString('hex')}&${parseInt(v)}${v2}`
-  //   delete headers[bHh]
-  // }
-
-  return {
-    ...options,
-    method,
-    headers: Object.assign({}, defaultHeaders, headers),
-  }
-}
-
-// https://stackoverflow.com/a/64945178
-const blobToBuffer = (blob) => {
-  return new Promise((resolve, reject) => {
-    const reader = new global.FileReader()
-    reader.onerror = reject
-    reader.onload = () => {
-      const data = reader.result.slice(reader.result.indexOf('base64,') + 7)
-      resolve(Buffer.from(data, 'base64'))
-    }
-    reader.readAsDataURL(blob)
-  })
-}
-
-const fetchData = (url, { timeout = 15000, ...options }) => {
-  console.log('---start---', url)
-
-  const controller = new global.AbortController()
-  const timeoutTask = createRequestTimeout(controller, timeout)
-
-  return {
-    request: handleRequestData(url, options).then(options => {
-      return global.fetch(url, {
-        ...options,
-        signal: controller.signal,
-      }).then(resp => (options.binary ? resp.blob() : resp.text()).then(text => {
-        // console.log(options, headers, text)
-        return {
-          headers: resp.headers.map,
-          body: text,
-          statusCode: resp.status,
-          statusMessage: resp.statusText,
-          url: resp.url,
-          ok: resp.ok,
-        }
-      })).then(resp => {
-        if (options.binary) {
-          return blobToBuffer(resp.body).then(buffer => {
-            resp.body = buffer
-            return resp
-          })
-        } else {
-          try {
-            resp.body = JSON.parse(resp.body)
-          } catch {}
-          return resp
-        }
-      }).catch(err => {
-        // console.log(err, err.code, err.message)
-        return Promise.reject(controller.signal.aborted ? new Error('Aborted') : err)
-      })
-    }).finally(timeoutTask.finish),
-    abort() {
-      timeoutTask.abort()
-    },
-  }
-}
+export default { http, httpGet, httpPost, httpFetch, http_jsonp, cancelHttp, checkUrl }
