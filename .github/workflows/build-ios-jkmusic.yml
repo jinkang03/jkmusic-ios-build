@@ -41,11 +41,13 @@ jobs:
         run: |
           WS=$(ls -d ios/*.xcworkspace | head -1)
           SCHEME=$(basename "$WS" .xcworkspace)
-          if ! xcodebuild -workspace "$WS" -list 2>/dev/null | sed -n '/Schemes:/,$p' | grep -qx "  $SCHEME"; then
-            SCHEME=$(xcodebuild -workspace "$WS" -list 2>/dev/null | sed -n '/Schemes:/,$p' | tail -n +2 | xargs -n1 | grep -v "Native$" | head -1)
+          echo "workspace=$WS scheme=$SCHEME"
+          if ! xcodebuild -workspace "$WS" -scheme "$SCHEME" -showBuildSettings >/dev/null 2>&1; then
+            echo "scheme $SCHEME 不可用，改用工程内首个应用 target"
+            PROJ=$(ls -d ios/*.xcodeproj | grep -v Pods | head -1)
+            SCHEME=$(xcodebuild -project "$PROJ" -list 2>/dev/null | sed -n '/Targets:/,$p' | tail -n +2 | xargs -n1 | head -1)
           fi
-          echo "workspace=$WS"
-          echo "scheme=$SCHEME"
+          echo "final scheme=$SCHEME"
           echo "ws=$WS" >> "$GITHUB_OUTPUT"
           echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
 
