@@ -146,12 +146,14 @@ export const resolveSource = async (
 				const currentQuality = qualityOrder[currentQualityIndex]
 				try {
 					resp_url = await Promise.race([
-						nowMusicApi.getMusicUrl(
+						(nowMusicApi.getMusicUrl as any)(
 							musicItem.title,
 							musicItem.artist,
 							musicItem.id,
 							currentQuality,
 							{ requestKey, requestType, timeoutMs } as MusicUrlRequestContext,
+							// JKMUSIC 的自定义源按音源平台分发（kw/kg/tx/wy/mg）
+							musicItem.platform,
 						),
 						createTimeoutPromise(timeoutMs),
 					])

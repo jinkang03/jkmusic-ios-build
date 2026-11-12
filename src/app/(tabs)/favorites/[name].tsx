@@ -1,54 +1,38 @@
-import { PlaylistTracksList } from '@/components/PlaylistTracksList'
-import { screenPadding } from '@/constants/tokens'
-import myTrackPlayer, { playListsStore } from '@/helpers/trackPlayerIndex'
-import { Playlist } from '@/helpers/types'
+/**
+ * 列表详情：展示某个 JKMUSIC 列表内的歌曲。
+ */
+import { TracksList } from '@/components/TracksList'
+import { useAppTheme } from '@/hooks/useAppTheme'
+import { jkToTrack } from '@/jk/adapt'
+import { getListById } from '@/jk/libraryStore'
+import { useLocalSearchParams } from 'expo-router'
+import React, { useMemo } from 'react'
+import { Text, View } from 'react-native'
 
-import { useDefaultStyles } from '@/styles'
-import { Redirect, useLocalSearchParams } from 'expo-router'
-import React, { useCallback, useMemo } from 'react'
-import { ScrollView, View } from 'react-native'
-import type { Track } from '@/player/types'
+const ListDetailScreen = () => {
+	const { colors } = useAppTheme()
+	const params = useLocalSearchParams<{ name: string }>()
+	const listId = params.name
 
-const PlaylistScreen = () => {
-	const defaultStyles = useDefaultStyles()
-	const { name: playlistID } = useLocalSearchParams<{ name: string }>()
-	const playlists = playListsStore.useValue() as Playlist[] | null
+	const tracks = useMemo(() => {
+		const list = getListById(listId)
+		return list.map(jkToTrack)
+		// 依赖 listId 即可，列表变更通过重新进入页面刷新
+	}, [listId])
 
-	const playlist = useMemo(() => {
-		return playlists?.find((p) => p.id === playlistID)
-	}, [playlistID, playlists])
-
-	const songs = useMemo(() => {
-		return playlist?.songs || []
-	}, [playlist])
-
-	const handleDeleteTrack = useCallback(
-		(trackId: string) => {
-			myTrackPlayer.deleteSongFromStoredPlayList(playlist as Playlist, trackId)
-		},
-		[playlist],
-	)
-
-	if (!playlist) {
-		console.warn(`Playlist ${playlistID} was not found!`)
-		return <Redirect href={'/(tabs)/favorites'} />
+	if (!tracks.length) {
+		return (
+			<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+				<Text style={{ color: colors.textMuted }}>列表还是空的</Text>
+			</View>
+		)
 	}
 
 	return (
-		<View style={defaultStyles.container}>
-			<ScrollView
-				contentInsetAdjustmentBehavior="automatic"
-				style={{ paddingHorizontal: screenPadding.horizontal }}
-			>
-				<PlaylistTracksList
-					playlist={playlist as Playlist}
-					tracks={songs as Track[]}
-					allowDelete={true}
-					onDeleteTrack={handleDeleteTrack}
-				/>
-			</ScrollView>
+		<View style={{ flex: 1, backgroundColor: colors.background }}>
+			<TracksList id={`mylist_${listId}`} tracks={tracks} />
 		</View>
 	)
 }
 
-export default PlaylistScreen
+export default ListDetailScreen
