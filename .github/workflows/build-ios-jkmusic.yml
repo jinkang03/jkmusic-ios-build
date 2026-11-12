@@ -39,7 +39,7 @@ jobs:
       - name: Resolve workspace and scheme
         id: resolve
         run: |
-          WS=$(ls ios/*.xcworkspace | head -1)
+          WS=$(ls -d ios/*.xcworkspace | head -1)
           SCHEME=$(xcodebuild -workspace "$WS" -list 2>/dev/null | sed -n '/Schemes:/,$p' | tail -n +2 | xargs | awk '{print $1}')
           echo "workspace=$WS"
           echo "scheme=$SCHEME"
