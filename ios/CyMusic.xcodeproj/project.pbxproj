@@ -30,7 +30,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				C0F7E06345884D709A22F50E /* ShareExtension.appex in Copy Files */,
 			);
 			name = "Copy Files";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -243,8 +242,6 @@
 			files = (
 				F1A100000000000000000002 /* user-api-preload.js in Resources */,
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
-				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
-				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				262A4C9C24C0832858FE9FB8 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -50,3 +50,9 @@ android
 # Local audit downloads, build evidence and simulator captures.
 # Curated findings live in docs/audit/ and .trellis/spec/.
 /.trellis/tasks/**/research/
+
+# 本机构建产物
+ios/build/
+ios/build-pods/
+ios/obj-pods/
+ios/Pods/

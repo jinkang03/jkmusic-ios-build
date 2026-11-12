@@ -33,7 +33,7 @@ import {
 import { createMediaIndexMap } from '@/utils/mediaIndexMap'
 import { Alert, AppState, Image } from 'react-native'
 
-import { myGetLyric } from '@/helpers/userApi/getMusicSource'
+import { fetchLyric } from '@/jk/lyric'
 
 import { fakeAudioMp3Uri } from '@/constants/images'
 import { nowLanguage } from '@/utils/i18n'
@@ -938,7 +938,7 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		const appliedToken = nativeQueue.token
 
 		// 7. Fetch lyrics in background (non-blocking)
-		myGetLyric(musicItem)
+		fetchLyric(musicItem as any)
 			.then((lyc) => {
 				if (isCurrentMusic(musicItem) && nativeQueue?.token === appliedToken) {
 					nowLyricState.setValue(lyc.lyric)
