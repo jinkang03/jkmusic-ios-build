@@ -1,0 +1,17 @@
+diff --git a/node_modules/expo-localization/ios/LocalizationModule.swift b/node_modules/expo-localization/ios/LocalizationModule.swift
+--- a/node_modules/expo-localization/ios/LocalizationModule.swift
++++ b/node_modules/expo-localization/ios/LocalizationModule.swift
+@@ -125,9 +125,11 @@
+       return "roc"
+     case .iso8601:
+       return "iso8601"
++    case .dangi:
++      return "dangi"
+     @unknown default:
+-      log.error("Unhandled `Calendar.Identifier` value: \(calendar.identifier), returning `iso8601` as fallback. Add the missing case as soon as possible.")
+-      return "iso8601"
++      log.error("Unhandled `Calendar.Identifier` value: \(calendar.identifier), returning `gregory` as fallback. Add the missing case as soon as possible.")
++      return "gregory"
+     }
+   }
+ 
