@@ -26,6 +26,16 @@ else
   echo "   仓库已存在"
 fi
 
+echo "== 3/5 初始化仓库（空仓库不能直接建 blob）=="
+EMPTY=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token $GH_TOKEN" "https://api.github.com/repos/$REPO/commits")
+if [ "$EMPTY" = "409" ] || [ "$EMPTY" = "404" ]; then
+  curl -s -X PUT -H "Authorization: token $GH_TOKEN" "https://api.github.com/repos/$REPO/contents/README.md" \
+    -d '{"message":"init","content":"'$(printf 'JKMUSIC iOS build' | base64)'"}' >/dev/null
+  echo "   已创建初始提交"
+else
+  echo "   仓库已有提交"
+fi
+
 echo "== 3/5 上传源码 =="
 REPO="$REPO" GH_TOKEN="$GH_TOKEN" python3 - <<'PY'
 import base64, json, os, subprocess, time, urllib.request, urllib.error

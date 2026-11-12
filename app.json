@@ -1,21 +1,21 @@
 {
 	"expo": {
-		"name": "CyMusic",
-		"slug": "CyMusic",
+		"name": "JKMUSIC",
+		"slug": "jkmusic",
 		"version": "1.2.0",
 		"orientation": "portrait",
 		"icon": "./assets/1024.png",
 		"userInterfaceStyle": "automatic",
-		"scheme": "cymusic",
+		"scheme": "jkmusic",
 		"assetBundlePatterns": [
 			"**/*"
 		],
 		"ios": {
 			"supportsTablet": true,
-			"bundleIdentifier": "com.music.player.gyc",
+			"bundleIdentifier": "com.jkmusic.ios",
 			"usesIcloudStorage": false,
 			"infoPlist": {
-				"AppGroupIdentifier": "group.com.music.player.gyc",
+				"AppGroupIdentifier": "group.com.jkmusic.ios",
 				"UIBackgroundModes": [
 					"audio"
 				],
@@ -32,7 +32,7 @@
 				"foregroundImage": "./assets/adaptive-icon.png",
 				"backgroundColor": "#000000"
 			},
-			"package": "com.music.player.gyc"
+			"package": "com.jkmusic.ios"
 		},
 		"web": {
 			"favicon": "./assets/favicon.png"
