@@ -46,8 +46,31 @@ export const clearSources = () => {
 	ensureGlobal()
 }
 
+/**
+ * 把当前选中的自定义源绑定到 global.lx，
+ * musicSdk 取播放地址时会走这里。
+ */
+export const bindMusicApi = (api: any) => {
+	clearSources()
+	if (!api?.getMusicUrl) return
+	const supported: string[] = Array.isArray(api.supportedSources) && api.supportedSources.length
+		? api.supportedSources
+		: ['tx']
+	for (const source of supported) {
+		registerSourceApi(source, {
+			getMusicUrl: (musicInfo: any, quality: string) => {
+				const songmid = musicInfo?.songmid ?? musicInfo?.id ?? ''
+				const promise = api
+					.getMusicUrl(musicInfo?.name, musicInfo?.singer, songmid, quality, { requestType: 'current' }, source)
+					.then((url: string) => ({ url, type: quality }))
+				return { promise }
+			},
+		}, ['128k', '320k', 'flac'])
+	}
+}
+
 export const getRegisteredSources = () => Object.keys(state.apis)
 
 export const hasSource = (source: string) => !!state.apis[source]
 
-export default { registerSourceApi, unregisterSourceApi, clearSources, getRegisteredSources, hasSource }
+export default { registerSourceApi, unregisterSourceApi, clearSources, getRegisteredSources, hasSource, bindMusicApi }

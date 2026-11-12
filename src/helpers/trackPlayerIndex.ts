@@ -72,6 +72,7 @@ import {
 } from '@/player/CacheManager'
 
 import { resolveSource, preloadSource } from '@/player/MusicSourceResolver'
+import { bindMusicApi } from '@/jk/sourceRegistry'
 
 const NEXT_TRACK_PRELOAD_DELAY_MS = 8000
 const createTrackSourceLoadingToken = (musicItem: IMusic.IMusicItem) =>
@@ -248,6 +249,7 @@ async function setupTrackPlayer() {
 	}
 	if (selectedMusicApi) {
 		musicApiSelectedStore.setValue(selectedMusicApi)
+		bindMusicApi(selectedMusicApi)
 		await reloadNowSelectedMusicApi()
 	}
 	if (importedLocalMusic) {
@@ -772,6 +774,7 @@ const reloadNowSelectedMusicApi = async () => {
 
 		// 更新 musicApiStore 中的脚本
 		musicApiSelectedStore.setValue(reloadedApi)
+		bindMusicApi(reloadedApi)
 
 		// 更新 store 和持久化存储
 		PersistStatus.set('music.selectedMusicApi', reloadedApi)
@@ -843,6 +846,7 @@ const setMusicApiAsSelectedById = async (musicApiId: string) => {
 
 		// 更新重新加载后的音源
 		musicApiSelectedStore.setValue(reloadedApi)
+		bindMusicApi(reloadedApi)
 		// 更新 store 和持久化存储
 		PersistStatus.set('music.selectedMusicApi', reloadedApi)
 
@@ -859,6 +863,7 @@ const deleteMusicApiById = (musicApiId: string) => {
 	const musicApis = musicApiStore.getValue() || []
 	if (selectedMusicApi?.id === musicApiId) {
 		musicApiSelectedStore.setValue(null)
+		bindMusicApi(null)
 	}
 	const musicApisFiltered = musicApis.filter((musicApi) => musicApi.id !== musicApiId)
 	musicApiStore.setValue(musicApisFiltered)

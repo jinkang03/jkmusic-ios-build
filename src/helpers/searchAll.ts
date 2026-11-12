@@ -1,43 +1,55 @@
 // helpers/searchAll.ts
-
-import { searchArtist, searchMusic } from '@/helpers/userApi/xiaoqiu'
+// 搜索改用 JKMUSIC 全量 musicSdk：kw / kg / tx / wy / mg 多源并行
+import { searchAllSources, searchBySource, sources } from '@/jk/musicSdk'
+import { jkToTrack } from '@/jk/adapt'
 import type { Track } from '@/player/types'
 
 const PAGE_SIZE = 20
 
 type SearchType = 'songs' | 'artists'
 
-const searchAll = async (
+export const searchableSources = sources
+
+const searchArtistsFallback = async(searchText: string, page: number) => {
+	const { searchArtist } = await import('@/helpers/userApi/xiaoqiu')
+	return searchArtist(searchText, page)
+}
+
+const searchAll = async(
 	searchText: string,
 	page: number = 1,
 	type: SearchType = 'songs',
 ): Promise<{ data: Track[]; hasMore: boolean }> => {
-	console.log('search text+++', searchText, 'page:', page, 'type:', type)
-
-	let result
-	if (type === 'songs') {
-		console.log('search song')
-		result = await searchMusic(searchText, page, PAGE_SIZE)
-	} else {
-		console.log('search artist')
-		result = await searchArtist(searchText, page)
-		// console.log('search result', result)
-		// Transform artist results to Track format
-		result.data = result.data.map((artist) => ({
+	if (type === 'artists') {
+		const result = await searchArtistsFallback(searchText, page)
+		const data = (result.data ?? []).map((artist: any) => ({
 			id: artist.id,
+			platform: 'tx',
 			title: artist.name,
 			artist: artist.name,
 			artwork: artist.avatar,
 			isArtist: true,
 		})) as Track[]
+		return { data, hasMore: data.length === PAGE_SIZE }
 	}
 
-	const hasMore = result.data.length === PAGE_SIZE
-
-	return {
-		data: result.data as Track[],
-		hasMore,
+	const lists = await searchAllSources(searchText, page, PAGE_SIZE)
+	const data: Track[] = []
+	for (const group of lists) {
+		for (const music of group.list) data.push(jkToTrack(music))
 	}
+	return { data, hasMore: data.length >= PAGE_SIZE }
+}
+
+/** 指定源搜索 */
+export const searchInSource = async(
+	source: string,
+	searchText: string,
+	page = 1,
+): Promise<{ data: Track[]; hasMore: boolean }> => {
+	const list = await searchBySource(source as any, searchText, page, PAGE_SIZE)
+	const data = list.map(jkToTrack)
+	return { data, hasMore: data.length === PAGE_SIZE }
 }
 
 export default searchAll
