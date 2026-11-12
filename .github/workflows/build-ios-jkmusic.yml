@@ -36,10 +36,20 @@ jobs:
         working-directory: ios
         run: pod install
 
+      - name: Resolve workspace and scheme
+        id: resolve
+        run: |
+          WS=$(ls ios/*.xcworkspace | head -1)
+          SCHEME=$(xcodebuild -workspace "$WS" -list 2>/dev/null | sed -n '/Schemes:/,$p' | tail -n +2 | xargs | awk '{print $1}')
+          echo "workspace=$WS"
+          echo "scheme=$SCHEME"
+          echo "ws=$WS" >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+
       - name: Build unsigned app
         run: |
-          xcodebuild -workspace ios/CyMusic.xcworkspace \
-            -scheme CyMusic \
+          xcodebuild -workspace "${{ steps.resolve.outputs.ws }}" \
+            -scheme "${{ steps.resolve.outputs.scheme }}" \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath ios/build \
@@ -50,14 +60,16 @@ jobs:
 
       - name: Verify bundle contents
         run: |
-          APP=ios/build/Build/Products/Release-iphoneos/CyMusic.app
+          APP=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
+          echo "app=$APP"
           test -s "$APP/main.jsbundle"
           test -s "$APP/user-api-preload.js"
 
       - name: Package IPA
         run: |
+          APP=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
           mkdir -p Payload
-          cp -r ios/build/Build/Products/Release-iphoneos/CyMusic.app Payload/
+          cp -r "$APP" Payload/
           zip -qry JKMUSIC-ios-unsigned.ipa Payload
 
       - uses: actions/upload-artifact@v4
