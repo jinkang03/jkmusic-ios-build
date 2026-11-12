@@ -87,6 +87,24 @@ const TabsNavigation = () => {
 					}}
 				/>
 				<Tabs.Screen
+					name="songlist"
+					options={{
+						title: i18n.t('appTab.playlists'),
+						tabBarIcon: ({ color, focused }) => (
+							<Ionicons name={focused ? 'albums' : 'albums-outline'} size={24} color={color} />
+						),
+					}}
+				/>
+				<Tabs.Screen
+					name="leaderboard"
+					options={{
+						title: i18n.t('appTab.radio'),
+						tabBarIcon: ({ color, focused }) => (
+							<Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={24} color={color} />
+						),
+					}}
+				/>
+				<Tabs.Screen
 					name="search"
 					options={{
 						title: i18n.t('appTab.search'),

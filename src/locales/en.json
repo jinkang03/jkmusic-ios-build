@@ -102,10 +102,12 @@
 	"appTab": {
 		"songs": "Songs",
 		"search": "Search",
-		"radio": "Radio",
-		"favorites": "Favorites",
+		"radio": "Charts",
+		"favorites": "My Lists",
 		"favoritesSongs": "Favorite Songs",
-		"localOrCachedSongs": "Local/Cached Songs"
+		"localOrCachedSongs": "Local/Cached Songs",
+		"playlists": "Playlists",
+		"leaderboard": "Charts"
 	},
 	"addToPlaylist": {
 		"title": "Import Playlist",
