@@ -1,0 +1,63 @@
+name: Build JKMUSIC iOS IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    env:
+      EXPO_NO_TELEMETRY: '1'
+      RCT_NEW_ARCH_ENABLED: '1'
+      RCT_HERMES_V1_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Ruby / CocoaPods
+        run: |
+          ruby --version
+          sudo gem install cocoapods --no-document
+
+      - name: Install JS dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Install Pods
+        working-directory: ios
+        run: pod install
+
+      - name: Build unsigned app
+        run: |
+          xcodebuild -workspace ios/CyMusic.xcworkspace \
+            -scheme CyMusic \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Verify bundle contents
+        run: |
+          APP=ios/build/Build/Products/Release-iphoneos/CyMusic.app
+          test -s "$APP/main.jsbundle"
+          test -s "$APP/user-api-preload.js"
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -r ios/build/Build/Products/Release-iphoneos/CyMusic.app Payload/
+          zip -qry JKMUSIC-ios-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JKMUSIC-ios-unsigned-ipa
+          path: JKMUSIC-ios-unsigned.ipa
