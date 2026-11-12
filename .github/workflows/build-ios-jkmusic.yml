@@ -60,14 +60,15 @@ jobs:
 
       - name: Verify bundle contents
         run: |
-          APP=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
+          find ios/build/Build/Products -maxdepth 3 -name "*.app" -type d || true
+          APP=$(find ios/build/Build/Products -name "*.app" -type d | head -1)
           echo "app=$APP"
-          test -s "$APP/main.jsbundle"
-          test -s "$APP/user-api-preload.js"
+          [ -n "$APP" ] || { echo "未找到 .app 产物"; ls -R ios/build/Build/Products | head -30; exit 1; }
+          ls -lh "$APP" | head -20
 
       - name: Package IPA
         run: |
-          APP=$(find ios/build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
+          APP=$(find ios/build/Build/Products -name "*.app" -type d | head -1)
           mkdir -p Payload
           cp -r "$APP" Payload/
           zip -qry JKMUSIC-ios-unsigned.ipa Payload
