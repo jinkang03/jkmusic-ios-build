@@ -74,6 +74,9 @@ jobs:
       - name: Package IPA
         run: |
           APP=$(find ios/build/Build/Products -name "*.app" -type d | head -1)
+          # 自定义源脚本运行时需要的预加载脚本（原生从 Bundle 根目录查找）
+          cp src/helpers/userApi/user-api-preload.js "$APP/user-api-preload.js"
+          test -s "$APP/user-api-preload.js"
           mkdir -p Payload
           cp -r "$APP" Payload/
           zip -qry JKMUSIC-ios-unsigned.ipa Payload
