@@ -71,6 +71,7 @@ const TabsNavigation = () => {
 				<Tabs.Screen
 					name="radio"
 					options={{
+						href: null,
 						title: i18n.t('appTab.radio'),
 						tabBarIcon: ({ color, focused }) => (
 							<Ionicons name={focused ? 'radio' : 'radio-outline'} size={24} color={color} />
@@ -98,7 +99,7 @@ const TabsNavigation = () => {
 				<Tabs.Screen
 					name="leaderboard"
 					options={{
-						title: i18n.t('appTab.radio'),
+						title: i18n.t('appTab.leaderboard'),
 						tabBarIcon: ({ color, focused }) => (
 							<Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={24} color={color} />
 						),
