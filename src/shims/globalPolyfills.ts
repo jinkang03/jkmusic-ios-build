@@ -73,6 +73,16 @@ if (typeof g.crypto.getRandomValues !== 'function') {
 	}
 }
 
+
+// RN 里 navigator 存在但没有 userAgent，kg 的 infSign.min.js 在模块顶层直接
+// 调用 navigator.userAgent.match(...)，缺失会导致启动即崩
+if (typeof g.navigator === 'undefined') {
+	g.navigator = {}
+}
+if (!g.navigator.userAgent) {
+	g.navigator.userAgent = 'JKMUSIC-iOS/1.0 (React Native)'
+}
+
 if (!g.global) {
 	g.global = g
 }
