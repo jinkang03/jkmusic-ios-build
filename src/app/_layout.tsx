@@ -1,3 +1,5 @@
+// 必须最先加载：为 JKMUSIC 的 musicSdk 提供全局 Buffer / TextEncoder
+import '@/shims/globalPolyfills'
 import { playbackService } from '@/constants/playbackService'
 import { AppThemeProvider, useAppTheme } from '@/hooks/useAppTheme'
 import LyricManager from '@/helpers/lyricManager'

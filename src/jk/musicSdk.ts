@@ -1,3 +1,5 @@
+// 确保 Buffer / TextEncoder 在任何 musicSdk 模块求值前就绪
+import '@/shims/globalPolyfills'
 /**
  * JKMUSIC 多源 SDK 的 RN 封装。
  * 桌面版这里是 @renderer/utils/musicSdk + @renderer/store；这里改成直接调用 SDK，

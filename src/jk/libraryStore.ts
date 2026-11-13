@@ -20,7 +20,21 @@ export interface JkUserList {
 	list: JKMusic[]
 }
 
-const store = getOrCreateMMKV('jk_library')
+const createSafeStore = () => {
+	try {
+		return getOrCreateMMKV('jk_library')
+	} catch (err) {
+		console.log('[jk/libraryStore] MMKV 不可用，使用内存存储', err)
+		const memory = new Map<string, string>()
+		return {
+			getString: (key: string) => memory.get(key),
+			set: (key: string, value: string) => { memory.set(key, value) },
+			delete: (key: string) => { memory.delete(key) },
+		} as any
+	}
+}
+
+const store = createSafeStore()
 const KEY_LISTS = 'lists'
 const KEY_DISLIKE = 'dislike'
 
