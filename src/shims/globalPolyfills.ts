@@ -78,3 +78,21 @@ if (!g.global) {
 }
 
 export {}
+
+// 启动期 JS 致命错误捕获：把错误打到原生日志，便于在设备/模拟器控制台定位
+try {
+	const ErrorUtils = (g as any).ErrorUtils
+	if (ErrorUtils && typeof ErrorUtils.setGlobalHandler === 'function') {
+		const prev = typeof ErrorUtils.getGlobalHandler === 'function' ? ErrorUtils.getGlobalHandler() : null
+		ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
+			try {
+				console.error('[JKMUSIC_FATAL]', isFatal ? 'fatal' : 'soft', error?.message, '\n', error?.stack)
+			} catch (_) {
+				// ignore
+			}
+			if (prev) prev(error, isFatal)
+		})
+	}
+} catch (_) {
+	// ignore
+}
