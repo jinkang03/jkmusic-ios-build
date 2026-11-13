@@ -5,7 +5,7 @@
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundleDisplayName</key>
-    <string>CyMusic - Share Extension</string>
+    <string>JKMUSIC - Share Extension</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleDevelopmentRegion</key>
@@ -29,11 +29,15 @@
           <key>NSExtensionActivationSupportsText</key>
           <integer>1</integer>
         </dict>
+        <key>NSExtensionJavaScriptPreprocessingFile</key>
+        <string>ShareExtensionPreprocessor</string>
       </dict>
       <key>NSExtensionMainStoryboard</key>
       <string>MainInterface</string>
       <key>NSExtensionPointIdentifier</key>
       <string>com.apple.share-services</string>
     </dict>
+    <key>AppGroupIdentifier</key>
+    <string>group.com.jkmusic.ios</string>
   </dict>
 </plist>

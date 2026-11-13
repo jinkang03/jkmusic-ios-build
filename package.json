@@ -80,9 +80,7 @@
 			"ios": {
 				"buildFromSource": [
 					"expo-localization",
-					"expo-share-intent",
-					"ExpoModulesCore",
-					"ExpoModulesWorklets"
+					"expo-share-intent"
 				]
 			}
 		}

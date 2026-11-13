@@ -51,6 +51,28 @@ if (!g.process) {
 	}
 }
 
+
+if (typeof g.atob === 'undefined') {
+	g.atob = (input: string) => NodeBuffer.from(String(input), 'base64').toString('binary')
+}
+
+if (typeof g.btoa === 'undefined') {
+	g.btoa = (input: string) => NodeBuffer.from(String(input), 'binary').toString('base64')
+}
+
+if (!g.crypto) {
+	g.crypto = {}
+}
+
+if (typeof g.crypto.getRandomValues !== 'function') {
+	g.crypto.getRandomValues = <T extends ArrayBufferView | null>(array: T): T => {
+		if (!array) return array
+		const view = new Uint8Array((array as any).buffer ?? array, (array as any).byteOffset ?? 0, (array as any).byteLength ?? 0)
+		for (let i = 0; i < view.length; i++) view[i] = Math.floor(Math.random() * 256)
+		return array
+	}
+}
+
 if (!g.global) {
 	g.global = g
 }
