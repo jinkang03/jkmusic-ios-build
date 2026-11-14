@@ -108,6 +108,68 @@ const ListSection = () => {
 	)
 }
 
+const DownloadSection = () => {
+	const { isDark } = useAppTheme()
+	const c = macPalette(!!isDark)
+	const [size, setSize] = React.useState(0)
+	const [count, setCount] = React.useState(0)
+	const [limitMb, setLimitMb] = useSetting('download.cacheLimitMb', 500)
+	const [status, setStatus] = React.useState('')
+
+	const refresh = React.useCallback(async() => {
+		const cm = await import('@/player/CacheManager')
+		const total = await cm.getCacheSize()
+		setSize(total)
+		try {
+			const FS = await import('expo-file-system/legacy')
+			const names: string[] = await FS.readDirectoryAsync(cm.cacheDir)
+			setCount(names.filter((n: string) => !n.endsWith('.part')).length)
+		} catch { setCount(0) }
+	}, [])
+
+	React.useEffect(() => { void refresh() }, [refresh])
+
+	const clearAll = async() => {
+		try {
+			const cm = await import('@/player/CacheManager')
+			await cm.clearCache()
+			await refresh()
+			setStatus('已清理缓存')
+		} catch (err: any) {
+			setStatus(`清理失败：${err?.message ?? err}`)
+		}
+	}
+
+	const mb = (size / 1024 / 1024).toFixed(1)
+
+	return (
+		<>
+			<SettingRow label="缓存占用" hint={`${count} 个文件`}>
+				<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{mb} MB</Text>
+			</SettingRow>
+			<SettingRow label="缓存上限" hint="超出后按最久未使用淘汰">
+				<SettingSelect
+					value={String(limitMb)}
+					onChange={(v) => setLimitMb(Number(v))}
+					options={[
+						{ value: '200', label: '200 MB' }, { value: '500', label: '500 MB' },
+						{ value: '1024', label: '1 GB' }, { value: '2048', label: '2 GB' },
+					]}
+				/>
+			</SettingRow>
+			<SettingRow label="dev 标志" hint={`forceBadUrl=${String(useSetting('_dev.forceBadUrl', false)[0])} slowBufferMs=${String(useSetting('_dev.slowBufferMs', 0)[0])}`}>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>—</Text>
+			</SettingRow>
+			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 12 }}>
+				<Pressable onPress={clearAll} style={({ pressed }) => ({ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+					<Text style={{ color: c.text, fontSize: macFont.body }}>清理缓存</Text>
+				</Pressable>
+				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
+			</View>
+		</>
+	)
+}
+
 const BackupSection = () => {
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
@@ -235,11 +297,15 @@ const SettingsSectionScreen = () => {
 		logInfo(`[jk/settings] dev write ${key}=${String(raw)}`)
 	}, [params.setKey, params.setValue])
 
+	const paramsKey = JSON.stringify(params)
+	const [devStatus, setDevStatus] = React.useState('')
+
 	// dev-only 动作钩子：?action=export / exportAll，用于无点击环境下验收备份
 	React.useEffect(() => {
 		if (process.env.EXPO_PUBLIC_JK_DEV_IMPORT !== '1') return
 		const action = (params as any).action
 		if (!action) return
+		setDevStatus(`last action=${action} at ${new Date().toLocaleTimeString()}`)
 		void (async() => {
 			try {
 				const backup = await import('@/jk/backup')
@@ -251,6 +317,52 @@ const SettingsSectionScreen = () => {
 					const obj = await backup.exportPlayList()
 					const uri = await backup.writeBackupFile('lx_list_v2', obj)
 					logInfo('[jk/backup] dev exportPlayList', uri, obj.data.length)
+				} else if (action === 'stress') {
+					const scenario = String((params as any).scenario ?? 'lru') as any
+					const n = Number((params as any).n ?? 6) || 6
+					const { runStress } = await import('@/jk/devStress')
+					const result = await runStress(scenario, n, (msg) => setDevStatus(msg))
+					setDevStatus(`stress ${scenario} pass=${result.pass} ${result.detail}`)
+				} else if (action === 'playnow') {
+					// 不导航、不改路由，纯函数式触发播放（批量压测最稳）
+					const src = String((params as any).source ?? 'kw')
+					const listId = String((params as any).list ?? '')
+					const idx = Math.max(0, Number((params as any).index ?? 0) || 0)
+					const { getSongListDetail } = await import('@/jk/musicSdk')
+					const { jkToTrack } = await import('@/jk/adapt')
+					const { default: tp } = await import('@/helpers/trackPlayerIndex')
+					const res: any = await getSongListDetail(src as any, listId, 1)
+					const tracks: any[] = (res?.list ?? []).map((m: any) => jkToTrack(m))
+					if (!tracks.length) throw new Error('歌单为空')
+					const target = tracks[Math.min(idx, tracks.length - 1)]
+					logInfo(`[jk/play] playnow src=${src} idx=${idx} title=${target?.title ?? ''}`)
+					await (tp as any).playWithReplacePlayList(target, tracks)
+				} else if (action === 'setdev') {
+					const k = String((params as any).key ?? '')
+					const rawV = String((params as any).value ?? '')
+					if (!k) throw new Error('缺少 key')
+					const parsed = rawV === 'true' ? true : rawV === 'false' ? false
+						: (/^-?\d+(\.\d+)?$/.test(rawV) ? Number(rawV) : rawV)
+					setSetting(k, parsed)
+					logInfo(`[jk/dev] set ${k}=${rawV}`)
+				} else if (action === 'cleardev') {
+					setSetting('_dev.forceBadUrl', false)
+					setSetting('_dev.slowBufferMs', 0)
+					setSetting('download.cacheLimitMb', 500)
+					logInfo('[jk/dev] 已清理 dev 标志')
+				} else if (action === 'badurl') {
+					const g3: any = globalThis
+					g3.__JK_FORCE_BAD_URL__ = 'https://127.0.0.1:9/x.mp3'
+					logInfo('[jk/play] 已开启坏 URL 实验（下次播放强制失败）')
+				} else if (action === 'slowbuffer') {
+					const ms = Number((params as any).ms ?? 1500)
+					;(globalThis as any).__JK_SLOW_BUFFER_MS__ = ms
+					logInfo('[jk/play] 慢速缓冲开关 ms=', String(ms))
+				} else if (action === 'plain') {
+					const url = String((params as any).url ?? '')
+					if (!url) throw new Error('缺少 url 参数')
+					const { playPlain } = await import('@/player/plainPlay')
+					await playPlain(url)
 				} else if (action === 'playtest') {
 					// 管线对照：不经过音源脚本，直接用一个最小 Track 播放公开 mp3
 					const url = String((params as any).url ?? '')
@@ -263,10 +375,12 @@ const SettingsSectionScreen = () => {
 					logInfo('[jk/play] playtest url =', url.slice(0, 120))
 					await (tp as any).playWithReplacePlayList(track, [track])
 				} else if (action === 'forceRemote') {
-					;(globalThis as any).__JK_FORCE_REMOTE__ = true
+					const g1: any = globalThis
+					g1.__JK_FORCE_REMOTE__ = true
 					logInfo('[jk/play] 已开启强制远程（忽略缓存）')
 				} else if (action === 'allowCache') {
-					;(globalThis as any).__JK_FORCE_REMOTE__ = false
+					const g2: any = globalThis
+					g2.__JK_FORCE_REMOTE__ = false
 					logInfo('[jk/play] 已恢复使用缓存')
 				} else if (action === 'import') {
 					const path = String((params as any).path ?? '')
@@ -293,7 +407,7 @@ const SettingsSectionScreen = () => {
 				logError('[jk/backup] dev action failed', String(err?.message ?? err))
 			}
 		})()
-	}, [(params as any).action])
+	}, [paramsKey])
 	const section = String(params.section ?? 'basic')
 	const title = SECTION_TITLES[section] ?? section
 	const note = DESKTOP_ONLY[section]
@@ -303,6 +417,7 @@ const SettingsSectionScreen = () => {
 		if (section === 'player') return <PlayerSection />
 		if (section === 'list') return <ListSection />
 		if (section === 'backup') return <BackupSection />
+		if (section === 'download') return <DownloadSection />
 		return null
 	})()
 
@@ -314,6 +429,11 @@ const SettingsSectionScreen = () => {
 				</Pressable>
 				<Text style={{ color: c.textStrong, fontSize: macFont.pageTitle, fontWeight: '600' }}>{title}</Text>
 			</View>
+			{devStatus ? (
+				<Text style={{ color: c.primary, fontSize: 11, paddingHorizontal: macSpace.pageX, paddingBottom: 6 }}>
+					{devStatus}
+				</Text>
+			) : null}
 			{note ? (
 				<Text style={{ color: c.textMuted, fontSize: macFont.caption, paddingHorizontal: macSpace.pageX, paddingBottom: 10 }}>
 					{note}

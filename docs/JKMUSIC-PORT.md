@@ -59,3 +59,94 @@ Ruby 2.6 环境已通过 `ios/ruby_compat.rb` 兼容（补 `filter_map`）。
 - 桌面版的**主题编辑系统**、**桌面歌词悬浮窗**、**托盘/全局快捷键**在 iOS 无对应，沿用 CyMusic 的主题与播放页。
 - **同步服务端 / 开放 API** 未移植（需要常驻监听端口，iOS 不可行；同步客户端可后续补）。
 - 下载走 CyMusic 的缓存机制（`CacheManager`），没有桌面版的多任务下载队列 UI。
+
+## 本机构建（唯一回路）
+
+### 4 个 expo-modules-jsi 补丁
+
+`patches/expo-modules-jsi+57.1.0.patch`（patch-package 固化）：
+
+| 文件 | 改动 | 解决的问题 |
+|---|---|---|
+| `apple/Package.swift:153` | `swiftLanguageModes: [.v6]` → `[.v5]` | 包级 Swift 6 模式，导致 14 个并发隔离错误 |
+| `apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h:53,61` | 删 2 处 `SWIFT_RETURNS_RETAINED` | 构造器不是 `SWIFT_SHARED_REFERENCE` 类型，标注非法 |
+| `apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift:314` | `/^[a-zA-Z_$][a-zA-Z0-9_$]*$/` → `#/.../#` | Swift 5 模式下裸正则会按除法解析，报 `'$' is not a valid digit` |
+| `apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptPromise.swift:33` | 新增 `nonisolated init() {}` | `LongLivedState` 隐式 init 被 `@JavaScriptActor` 隔离，同步上下文调不到 |
+
+### Podfile 的 Swift 降级
+
+`ios/Podfile` 的 `post_install` 把 `SWIFT_VERSION = 5.0`、
+`SWIFT_STRICT_CONCURRENCY = minimal` 应用到名称匹配
+`ExpoModulesJSI` / `expo-modules-jsi` / `ExpoModules*` / `expo-modules-core`
+的 target —— 实测覆盖 **8 个 build configuration**（`grep -c SWIFT_STRICT_CONCURRENCY = minimal`
+在 Pods.xcodeproj 里从 2 变成 8）。
+
+不扩到 `expo-modules-core` 时，会卡在：
+
+```
+expo-modules-core/ios/Core/Events/EventEmitter.swift:52: error: sending 'emitter' risks causing data races
+expo-modules-core/ios/Core/Events/EventEmitter.swift:79: error: sending 'emitter' risks causing data races
+```
+
+### 为什么本机必须源码模式
+
+`ios/Podfile.properties.json` 里设了：
+
+```json
+"ios.buildReactNativeFromSource": "true"
+```
+
+默认的 prebuilt 模式需要下载 94MB 的 `reactnative-core-*.tar.gz`，
+本机网络反复中断（curl 18 / 传输 stalled），预编译包下不全，
+导致 `React.framework` / `ReactNativeDependencies.framework` 没被嵌进 `Frameworks/`，
+装上模拟器后启动即崩：
+
+```
+dyld: Library not loaded: @rpath/React.framework/React
+```
+
+源码模式把 RN 静态链进主二进制（Release 下 `JKMUSIC.debug.dylib` / 主二进制 100MB+），
+不再依赖动态框架，dyld 错误归零。
+
+### 为什么验收只能用 Release
+
+工程内的 bundle 阶段是：
+
+```bash
+if [[ "$CONFIGURATION" = *Debug* ]]; then export SKIP_BUNDLING=1; fi
+```
+
+Debug 不内联 JS，只能走 Metro；而 expo-dev-client 的深链 `exp+jkmusic://...`
+会在模拟器弹「在 JKMUSIC 中打开？」，`simctl` 无法点确认按钮，验收卡住。
+Release 把 JS 打进 `main.jsbundle`，`simctl launch` 即可直接验收界面。
+
+### 架构限制（Intel）
+
+Release 配置没有 `ONLY_ACTIVE_ARCH`，模拟器会同时编 arm64 + x86_64，耗时翻倍。
+全量重编时加：
+
+```bash
+./scripts/dev-sim.sh --clean --arch x86_64
+```
+
+### 增量成本表
+
+| 改动范围 | 命令 | 耗时 |
+|---|---|---|
+| 只改 `src/` 下 TS/TSX/JS | `./scripts/dev-sim.sh` | 1-3 分钟（只重跑 bundle） |
+| 只重装验证 | `./scripts/dev-sim.sh --verify` | 秒级 |
+| 改 Podfile / 加 pod | `./scripts/dev-sim.sh --clean --arch x86_64` | 15-30 分钟 |
+| 改 expo-modules-jsi 补丁 | 同上 + `npx patch-package expo-modules-jsi` | 15-30 分钟 |
+| 出 IPA（P6） | `xcodebuild -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO` | 20-40 分钟 |
+
+### 回滚
+
+```bash
+rm -f patches/expo-modules-jsi+57.1.0.patch
+# 恢复 ios/Podfile.properties.json（去掉 ios.buildReactNativeFromSource）
+cd ios && pod install
+```
+
+回滚后回到 prebuilt 模式；若预编译包能完整下载，则不需要源码模式，但
+Podfile 的 Swift 降级仍然必要（否则 Swift 6 并发错误会让编译失败）。
+

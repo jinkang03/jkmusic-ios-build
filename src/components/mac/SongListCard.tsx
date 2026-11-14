@@ -20,7 +20,7 @@ export const formatPlayCount = (value?: number | string): string => {
 }
 
 // 标题里的 emoji 在 iOS 该字号下会渲染成方框，直接过滤掉非 BMP / 符号区字符
-const clean = (s: string) => String(s ?? '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '').trim()
+const clean = (s: string) => String(s ?? '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').replace(/\uFE0F/g, '').trim()
 
 const SongListCard = ({
 	title,

@@ -38,6 +38,7 @@ while [ $# -gt 0 ]; do
     --verify)  DO_BUILD=0; shift ;;
     --status)  STATUS_ONLY=1; shift ;;
     --clean)   CLEAN=1; shift ;;
+    --fresh)   FRESH=1; shift ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
@@ -75,6 +76,19 @@ fi
 
 if [ "$DO_BUILD" -eq 1 ]; then
   # [1/6] 环境检查
+# [0/6] lint（只拦 error，warning 不阻塞）——防止 hook 顺序这类错误进构建
+if [ "${STATUS_ONLY:-0}" != "1" ] && [ "${DO_BUILD:-1}" != "0" ]; then
+  mark 0 6 RUN "eslint"
+  LINT_LOG=".build/lint.log"
+  if ! npx eslint src/components/mac src/player src/jk src/app/player.tsx "src/app/settingSection" "src/app/(tabs)" --quiet > "$LINT_LOG" 2>&1; then
+    mark 0 6 FAIL "eslint"
+    echo "[FAIL] eslint 报错，前 20 行："
+    head -20 "$LINT_LOG"
+    exit 1
+  fi
+  mark 0 6 OK "eslint"
+fi
+
   xcodebuild -showsdks 2>/dev/null | grep -q iphonesimulator || { mark 1/6 FAIL "无 iphonesimulator SDK"; echo "[FAIL] 无模拟器 SDK"; exit 1; }
   xcrun simctl list devices available | grep -q "$DEVICE (" || { mark 1/6 FAIL "设备不存在: $DEVICE"; echo "[FAIL] 无设备"; exit 1; }
   [ -f ios/Pods/Manifest.lock ] || { mark 1/6 FAIL "Pods 未安装"; echo "[FAIL] 缺 Pods"; exit 1; }
@@ -146,11 +160,18 @@ mark 4/6 OK "产物 bin=$((BIN_SIZE/1024/1024))MB jsbundle=$((JS_SIZE/1024))KB p
 # [5/6] boot + install
 xcrun simctl boot "$DEVICE" 2>/dev/null || true
 xcrun simctl bootstatus booted -b 2>/dev/null || sleep 5
-xcrun simctl uninstall booted "$BUNDLE_ID" 2>/dev/null || true
+# 默认保留数据（install 覆盖）；只有 --fresh 才 uninstall → 容器清空
+if [ "${FRESH:-0}" = "1" ]; then
+  xcrun simctl uninstall booted "$BUNDLE_ID" 2>/dev/null || true
+  echo "[dev-sim] --fresh：已卸载，容器数据将被清空"
+fi
 if ! xcrun simctl install booted "$APP" 2>/dev/null; then
   mark 5/6 FAIL "simctl install 失败"; echo "[FAIL] install"; exit 1
 fi
-mark 5/6 OK "install"
+DATA_DIR=$(xcrun simctl get_app_container booted "$BUNDLE_ID" data 2>/dev/null || true)
+CACHE_FILES=$(ls -1 "$DATA_DIR/Documents/musicCache" 2>/dev/null | wc -l | tr -d ' ')
+echo "[dev-sim] cache files=${CACHE_FILES:-0} (data=${DATA_DIR:-n/a})"
+mark 5/6 OK "install cache=${CACHE_FILES:-0}"
 
 # [6/6] launch + 验收
 LAUNCH=$(xcrun simctl launch booted "$BUNDLE_ID" 2>&1) || { mark 6/6 FAIL "launch 失败: $LAUNCH"; echo "[FAIL] launch"; exit 1; }

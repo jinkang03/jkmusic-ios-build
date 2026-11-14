@@ -9,6 +9,7 @@ import { PlayerVolumeBar } from '@/components/PlayerVolumeBar'
 import { ShowPlayerListToggle } from '@/components/ShowPlayerListToggle'
 import { unknownTrackImageUri } from '@/constants/images'
 import { macPalette } from '@/constants/macTokens'
+import { bufferingStore } from '@/player/PlayerStore'
 import { ThemeColors, fontSize, screenPadding } from '@/constants/tokens'
 import LyricManager from '@/helpers/lyricManager'
 import { isTrialClip, markHandled, switchAwayFromTrial, trialHint, wasHandled } from '@/jk/trial'
@@ -161,6 +162,7 @@ const PlayerScreenContent = () => {
 	const mac = macPalette(!!useAppTheme().isDark)
 	const artworkUri = trackToDisplay?.artwork || unknownTrackImageUri
 	// 试听检测：音频实际时长明显短于曲目声明时长 → 判定试听并尝试换源
+	const buffering = bufferingStore.useValue()
 	const { duration: audioDuration } = myTrackPlayer.useProgress(0.5)
 	const [trialDetected, setTrialDetected] = React.useState(false)
 	React.useEffect(() => {
@@ -579,6 +581,13 @@ const PlayerScreenContent = () => {
 								/>
 							</View>
 						</View>
+						{buffering ? (
+							<View style={{ alignItems: 'center', marginTop: 8 }}>
+								<Text style={{ color: mac.primary, fontSize: 12 }}>
+									缓冲中… {typeof buffering.percent === 'number' ? `${buffering.percent}%` : ''}
+								</Text>
+							</View>
+						) : null}
 						{/* 紧凑歌词区：当前行 ± 2，点行可 seek */}
 						<View style={{ flex: 1, minHeight: 120, marginTop: 12 }}>
 							<MiniLyric />

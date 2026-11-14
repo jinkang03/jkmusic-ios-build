@@ -48,7 +48,7 @@ export const isCached = async (musicItem: IMusic.IMusicItem): Promise<boolean> =
 	return fileInfo.exists
 }
 
-export const downloadToCache = async (musicItem: IMusic.IMusicItem): Promise<string> => {
+export const downloadToCache = async (musicItem: IMusic.IMusicItem, onProgress?: (percent: number) => void): Promise<string> => {
 	try {
 		await ensureCacheDirExists()
 		const localPath = getLocalFilePath(musicItem)
@@ -59,6 +59,7 @@ export const downloadToCache = async (musicItem: IMusic.IMusicItem): Promise<str
 		try { await FileSystem.deleteAsync(partUri, { idempotent: true }) } catch { /* ignore */ }
 		await downloadFile(musicItem.url, partUri, (res) => {
 			const progress = res.bytesWritten / res.contentLength
+			if (typeof onProgress === 'function') onProgress(Math.round(progress * 100))
 			logInfo(`下载进度: ${(progress * 100).toFixed(2)}%`)
 		})
 		try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
@@ -69,6 +70,62 @@ export const downloadToCache = async (musicItem: IMusic.IMusicItem): Promise<str
 		logError('下载音频文件时出错:', error)
 		throw error
 	}
+}
+
+/**
+ * LRU：缓存总量超过 limitBytes 时，按最近修改时间从旧到新删除，
+ * 正在播放的文件（activePath）不删。
+ */
+export const enforceCacheLimit = async(limitBytes: number, activePath?: string): Promise<number> => {
+	try {
+		const info: any = await FileSystem.getInfoAsync(cacheDir)
+		if (!info?.exists) return 0
+		const names: string[] = await FileSystem.readDirectoryAsync(cacheDir)
+		const entries: Array<{ uri: string, size: number, mtime: number }> = []
+		for (const name of names) {
+			const uri = `${cacheDir}${name}`
+			try {
+				const st: any = await FileSystem.getInfoAsync(uri)
+				if (!st?.exists || st.isDirectory) continue
+				entries.push({ uri, size: Number(st.size ?? 0), mtime: Number(st.modificationTime ?? 0) })
+			} catch { /* 单个文件失败不影响整体 */ }
+		}
+		let total = entries.reduce((sum, e) => sum + e.size, 0)
+		if (total <= limitBytes) return 0
+		entries.sort((a, b) => a.mtime - b.mtime)
+		let removed = 0
+		for (const entry of entries) {
+			if (total <= limitBytes) break
+			if (activePath && entry.uri.endsWith(activePath.replace(/^.*\//, ''))) continue
+			try {
+				await FileSystem.deleteAsync(entry.uri, { idempotent: true })
+				total -= entry.size
+				removed++
+			} catch { /* ignore */ }
+		}
+		logInfo(`[cache] LRU 淘汰 ${removed} 个文件，剩余 ${(total / 1024 / 1024).toFixed(1)}MB`)
+		return removed
+	} catch (err) {
+		logError('[cache] LRU 失败', String((err as any)?.message ?? err))
+		return 0
+	}
+}
+
+/** 当前缓存占用（字节） */
+export const getCacheSize = async(): Promise<number> => {
+	try {
+		const info: any = await FileSystem.getInfoAsync(cacheDir)
+		if (!info?.exists) return 0
+		const names: string[] = await FileSystem.readDirectoryAsync(cacheDir)
+		let total = 0
+		for (const name of names) {
+			try {
+				const st: any = await FileSystem.getInfoAsync(`${cacheDir}${name}`)
+				if (st?.exists && !st.isDirectory) total += Number(st.size ?? 0)
+			} catch { /* ignore */ }
+		}
+		return total
+	} catch { return 0 }
 }
 
 export const clearCache = async () => {

@@ -1,3 +1,29 @@
+## 验收前必读（四条）
+
+1. **确认容器是否被清空**
+   `scripts/dev-sim.sh` 默认 install 覆盖、保留数据；只有 `--fresh` 才卸载。
+   验证缓存/持久化前，先看构建输出里的 `cache files=N`。
+   历史上「缓存神秘消失」「日志清空」「音源每轮要重导」全部是这个原因。
+
+2. **hooks 必须在 early return 之前**
+   `eslint react-hooks/rules-of-hooks` 会拦（tsc 不会）。构建回路已接入 lint 门禁，
+   只覆盖自维护目录：components/mac、player、jk、player.tsx、settingSection、(tabs)。
+
+3. **播放策略：先下载后播放**
+   AVPlayer 在本环境无法加载网络流（表现为 position/duration/buffered 全 0 且不报错），
+   但 `file://` 完全可用。因此取到远程地址后先落盘再播；失败回退远程。
+   点播不再注入 `Icy-MetaData`（仅直播需要）。
+
+5. **批量/连续验证用「脚本化场景」，不要连发深链**
+   深链适合"打开页面看截图"；连续触发动作请用 `?action=stress&scenario=...`
+   场景内部循环、写 `Documents/dev-stress.log`，宿主机 `cat` 即可判定，
+   不依赖截图时机；避免"同一条消息送多次只生效一次"这类问题。
+
+4. **歌词取参要把 meta 摊平到顶层**
+   各源歌词接口读的是顶层 `songmid` / `hash` / `copyrightId`，而 `normalizeMusic`
+   把它们放在 `meta` 里，且从不写 `meta.raw`。`getLyric` 里必须
+   `{ ...music, ...meta }` 后再调用，否则会拿到 14 字符的「暂无歌词」兜底值。
+
 # 开发指南
 
 已完成并验证的修改默认直接在 `main` 分支提交，不再新建功能分支；用户明确要求时除外。

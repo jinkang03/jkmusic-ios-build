@@ -46,6 +46,10 @@ const MiniLyric = () => {
 		return idx
 	}, [current, lyrics])
 
+	React.useEffect(() => {
+		if (raw) LyricManager.requestRefresh()
+	}, [raw])
+
 	if (!lyrics.length) {
 		return (
 			<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -56,10 +60,6 @@ const MiniLyric = () => {
 
 	const start = Math.max(0, currentIndex - WINDOW)
 	const end = Math.min(lyrics.length, currentIndex + WINDOW + 1)
-	React.useEffect(() => {
-		if (raw) LyricManager.requestRefresh()
-	}, [raw])
-
 	const rows = lyrics.slice(start, end)
 
 	return (

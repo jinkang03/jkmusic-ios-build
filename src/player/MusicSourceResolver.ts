@@ -24,6 +24,9 @@ type MusicUrlRequestContext = {
 }
 
 /** 音源脚本常返回 302 跳转地址，先把最终地址解析出来再交给 RNTP */
+// 同一时刻只允许一个下载；新请求递增世代号，旧下载的结果会被丢弃并清理 .part
+let downloadGeneration = 0
+
 const followRedirect = async(url: string): Promise<string> => {
 	if (!/^https?:\/\//i.test(url)) return url
 	try {
@@ -227,7 +230,67 @@ export const resolveSource = async (
 				}
 				return { url: fakeAudioMp3Uri, wasCached: false }
 			}
+			const { getSetting: getDevSetting } = await import('@/jk/settingsStore')
+			const badUrl = getDevSetting('_dev.forceBadUrl', false) ? 'https://127.0.0.1:9/x.mp3' : ''
+			if (badUrl) {
+				logInfo('[jk/play] 坏 URL 实验生效:', badUrl)
+				resp_url = badUrl
+			}
 			logInfo(`${logPrefix} 最终的音乐 URL:`, resp_url)
+
+			// 先下载后播放：AVPlayer 在该环境下无法流式加载（本地文件正常），
+			// 所以取到远程地址后先落到本地，再交给播放器 file:// 路径。
+			const myGeneration = ++downloadGeneration
+			let bufferingTimer: any = null
+			try {
+				const { downloadToCache, enforceCacheLimit } = await import('@/player/CacheManager')
+				const { bufferingStore } = await import('@/player/PlayerStore')
+				const { getSetting } = await import('@/jk/settingsStore')
+				logInfo('[jk/play] 开始缓冲下载:', musicItem.title)
+				// 缓冲态延迟 200ms 才显示：本地下载通常几十毫秒，不该闪一下
+				let bufferingShown = false
+				bufferingTimer = setTimeout(() => {
+					bufferingShown = true
+					bufferingStore.setValue({ title: String(musicItem.title ?? ''), percent: 0 })
+				}, 200)
+				const recordProgress = (percent: number) => {
+						if (bufferingShown) bufferingStore.setValue({ title: String(musicItem.title ?? ''), percent })
+					}
+				const slowMs = Number(getSetting('_dev.slowBufferMs', 0)) || 0
+				if (slowMs > 0) {
+					bufferingShown = true
+					bufferingStore.setValue({ title: String(musicItem.title ?? ''), percent: 0 })
+				}
+				const localPath = await downloadToCache(
+					{ ...(musicItem as any), url: resp_url } as any,
+					recordProgress,
+				)
+				if (slowMs > 0) {
+					// dev 专用：人为拉长缓冲窗口，便于截图与边界验收
+					await new Promise(r => setTimeout(r, slowMs))
+				}
+				clearTimeout(bufferingTimer)
+				bufferingStore.setValue(null)
+				// 下载完顺手做一次 LRU（上限读设置 download.cacheLimitMb，正在播的文件不删）
+				const limitMb = Number(getSetting('download.cacheLimitMb', 500)) || 500
+				logInfo('[cache] LRU 上限', `${limitMb}MB`)
+				void enforceCacheLimit(limitMb * 1024 * 1024, localPath).catch(() => undefined)
+				if (myGeneration !== downloadGeneration) {
+					logInfo('[jk/play] 下载世代已过期，丢弃结果')
+				} else {
+					const uri = String(localPath).startsWith('file://') ? String(localPath) : `file://${localPath}`
+					logInfo('[jk/play] 缓冲完成，改播本地:', uri.slice(0, 120))
+					if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
+					return { url: uri, wasCached: true }
+				}
+			} catch (err) {
+				if (bufferingTimer) clearTimeout(bufferingTimer)
+				logError('[jk/play] 缓冲下载失败，回退远程流式', String((err as any)?.message ?? err))
+				try {
+					const { bufferingStore } = await import('@/player/PlayerStore')
+					bufferingStore.setValue(null)
+				} catch { /* ignore */ }
+			}
 			// 302 → 解析成最终地址；否则 AVPlayer 可能拿不到音频
 			resp_url = await followRedirect(resp_url as string)
 			if (isCurrentSourceRequest(requestType)) {

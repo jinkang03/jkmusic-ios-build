@@ -29,5 +29,8 @@ export const nowLyricState = new GlobalState<string>(null)
 export const trackSkipLoadingStore = new GlobalState<'next' | 'previous' | null>(null)
 /** 当前曲目音源解析中 */
 export const trackSourceLoadingStore = new GlobalState<string | null>(null)
+
+/** 缓冲（下载）进度：解析阶段就暴露给 UI，避免点歌后几秒「什么都没发生」 */
+export const bufferingStore = new GlobalState<{ title?: string, percent?: number } | null>(null)
 /** User transport intent; v5 readiness/output do not expose pending play intent. */
 export const playbackIntentStore = new GlobalState<'play' | 'pause' | 'stop'>('pause')

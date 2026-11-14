@@ -5,6 +5,8 @@
 import getOrCreateMMKV from '@/store/getOrCreateMMKV'
 import { logError } from '@/helpers/logger'
 import jkDefaultSetting from '@/constants/jkDefaultSetting'
+import * as FileSystemLegacy from 'expo-file-system/legacy'
+import { useEffect, useState } from 'react'
 
 const STORE_ID = 'jk_settings'
 
@@ -37,7 +39,7 @@ export const getSetting = <T = any>(key: string, defaultValue: T): T => {
 		// 读的时候直接换成 App 内路径，避免设置页显示 Mac 路径
 		if (key === 'download.savePath' && typeof value === 'string'
 			&& (value.includes('/Desktop') || value.includes('/Users/'))) {
-			return `${require('expo-file-system/legacy').documentDirectory}download/music` as any
+			return `${FileSystemLegacy.documentDirectory}download/music` as any
 		}
 		if (key === 'player.volume' && typeof value === 'number' && value > 1) {
 			value = value / 100
@@ -122,9 +124,11 @@ export const subscribeSetting = (fn: () => void) => {
 
 /** 组件内使用：返回 [value, setValue] */
 export const useSetting = <T = any>(key: string, defaultValue: T) => {
-	const React = require('react')
-	const [value, setValue] = React.useState(() => getSetting<T>(key, defaultValue))
-	React.useEffect(() => subscribeSetting(() => setValue(getSetting<T>(key, defaultValue))), [key])
+	const [value, setValue] = useState<T>(() => getSetting<T>(key, defaultValue))
+	useEffect(() => {
+		const unsubscribe = subscribeSetting(() => setValue(getSetting<T>(key, defaultValue)))
+		return () => { unsubscribe() }
+	}, [key])
 	const update = (next: T) => {
 		setSetting(key, next)
 		setValue(next)

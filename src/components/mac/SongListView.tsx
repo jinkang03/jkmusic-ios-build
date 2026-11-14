@@ -6,8 +6,9 @@
  */
 import React, { useEffect, useRef } from 'react'
 import { FlatList } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
+import { logInfo } from '@/helpers/logger'
 import SongRow, { SongRowHeader } from './SongRow'
 import StateView from './StateView'
 import type { Track } from '@/player/types'
@@ -29,20 +30,25 @@ export interface SongListViewProps {
 
 const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText }: SongListViewProps) => {
 	const router = useRouter()
+	const params = useLocalSearchParams<{ t?: string }>()
 	const currentMusic: any = myTrackPlayer.useCurrentMusic()
-	const autoPlayedRef = useRef(false)
+	const lastAutoPlayTokenRef = useRef<string | null>(null)
 
 	// 深链自动播放：只触发一次
+	// 用「令牌」而不是布尔：同一路由生命周期内 index 变化或带不同 t 参数都要能重新触发，
+	// 否则深链批量播放从第二次起会静默失效（P47 的教训）
+	const autoPlayToken = `${autoPlayIndex ?? ''}:${String((params as any)?.t ?? '')}`
 	useEffect(() => {
 		if (autoPlayIndex == null || autoPlayIndex < 0) return
-		if (autoPlayedRef.current) return
 		if (!tracks.length) return
+		if (lastAutoPlayTokenRef.current === autoPlayToken) return
 		const idx = Math.max(0, Math.min(tracks.length - 1, autoPlayIndex))
 		const target: any = tracks[idx]
 		if (!target) return
-		autoPlayedRef.current = true
+		lastAutoPlayTokenRef.current = autoPlayToken
+		logInfo(`[jk/play] auto-play index=${idx} t=${String((params as any)?.t ?? '')}`)
 		void myTrackPlayer.playWithReplacePlayList(target, tracks as any)
-	}, [autoPlayIndex, tracks])
+	}, [autoPlayToken, tracks])
 
 	const isCurrent = (track: any) => {
 		if (!currentMusic) return false
