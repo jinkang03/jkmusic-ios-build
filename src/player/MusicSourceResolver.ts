@@ -238,6 +238,13 @@ export const resolveSource = async (
 			}
 			logInfo(`${logPrefix} 最终的音乐 URL:`, resp_url)
 
+			const { getSetting: getStreamSetting } = await import('@/jk/settingsStore')
+			const streamMode = Boolean(getStreamSetting<boolean>('_dev.streamMode', false))
+			if (streamMode) {
+				logInfo('[jk/play] streamMode 生效，跳过下载直接返回远程 url')
+				if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
+				return { url: resp_url as string, wasCached: false }
+			}
 			// 先下载后播放：AVPlayer 在该环境下无法流式加载（本地文件正常），
 			// 所以取到远程地址后先落到本地，再交给播放器 file:// 路径。
 			const myGeneration = ++downloadGeneration
@@ -280,6 +287,10 @@ export const resolveSource = async (
 				} else {
 					const uri = String(localPath).startsWith('file://') ? String(localPath) : `file://${localPath}`
 					logInfo('[jk/play] 缓冲完成，改播本地:', uri.slice(0, 120))
+					// 起播后 2 秒后台预取下一首，切歌时命中缓存走 file://
+					setTimeout(() => {
+						void import('@/player/prefetch').then(m => m.prefetchNext()).catch(() => undefined)
+					}, 2000)
 					if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
 					return { url: uri, wasCached: true }
 				}

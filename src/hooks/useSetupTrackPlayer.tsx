@@ -9,7 +9,13 @@ const setupPlayer = () => {
 	TrackPlayer.setupPlayer({
 		progressSync: { intervalSeconds: 1 },
 		autoUpdateMetadataFromStream: false,
-	})
+		// 启用 RNTP 内置的流式缓存代理：边下边播 + 本地回环 + 预加载窗口。
+		// 不传 cache 时 proxyServer 为 nil，会退化成 AVPlayer 直连（本环境加载不了）。
+		cache: {
+			maxSizeBytes: 500 * 1024 * 1024,
+			preloading: { window: 2 },
+		},
+	} as any)
 	TrackPlayer.setCommands({
 		capabilities: [
 			PlayerCommand.PlayPause,
