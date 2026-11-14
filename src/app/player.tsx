@@ -10,6 +10,7 @@ import { ShowPlayerListToggle } from '@/components/ShowPlayerListToggle'
 import { unknownTrackImageUri } from '@/constants/images'
 import { macPalette } from '@/constants/macTokens'
 import { bufferingStore } from '@/player/PlayerStore'
+import { useSetting } from '@/jk/settingsStore'
 import { ThemeColors, fontSize, screenPadding } from '@/constants/tokens'
 import LyricManager from '@/helpers/lyricManager'
 import { isTrialClip, markHandled, switchAwayFromTrial, trialHint, wasHandled } from '@/jk/trial'
@@ -163,6 +164,9 @@ const PlayerScreenContent = () => {
 	const artworkUri = trackToDisplay?.artwork || unknownTrackImageUri
 	// 试听检测：音频实际时长明显短于曲目声明时长 → 判定试听并尝试换源
 	const buffering = bufferingStore.useValue()
+	const [bgBlur] = useSetting('playDetail.bgBlur', 0.6)
+	const [bgOpacity] = useSetting('playDetail.bgOpacity', 0.5)
+	const [zoomActive] = useSetting('playDetail.isZoomActiveLrc', true)
 	const { duration: audioDuration } = myTrackPlayer.useProgress(0.5)
 	const [trialDetected, setTrialDetected] = React.useState(false)
 	React.useEffect(() => {
@@ -426,8 +430,8 @@ const PlayerScreenContent = () => {
 					) : (
 						<View style={[StyleSheet.absoluteFill, { backgroundColor: mac.bg }]} />
 					)}
-					<BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-					<View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
+					<BlurView intensity={Math.round(Number(bgBlur) * 100)} tint="dark" style={StyleSheet.absoluteFill} />
+					<View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${Number(bgOpacity)})` }]} />
 				</View>
 				{/* 顶部栏：收起 / 收藏 / 更多（更多沿用右侧原菜单，此处只放收起与收藏） */}
 				<View style={[styles.topBar, { paddingTop: top, height: top + 48 }]} pointerEvents="box-none">

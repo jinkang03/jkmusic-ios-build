@@ -65,7 +65,7 @@ const playIndex = async(listId: string, index: number) => {
 
 const LIST_ID = 'digest-8__3287283358'
 
-export type StressScenario = 'lru' | 'cut' | 'badurl'
+export type StressScenario = 'lru' | 'cut' | 'badurl' | 'downloads'
 
 export const runStress = async(
 	scenario: StressScenario,
@@ -100,6 +100,72 @@ export const runStress = async(
 			setSetting('download.cacheLimitMb', 500)
 			await step(`[stress] DONE scenario=lru pass=${pass} detail=du=${mb.toFixed(1)}MB files=${files.length} parts=${parts}`)
 			return { pass, detail: `du=${mb.toFixed(1)}MB files=${files.length} parts=${parts}` }
+		}
+
+		if (scenario === 'downloads') {
+			const { readCacheIndex, removeCacheIndexEntry } = await import('@/player/CacheManager')
+			// 1) audit
+			const files = (await cacheFiles()).filter(f => f !== 'index.json' && !f.endsWith('.part'))
+			const withSize: Array<{ name: string, size: number, mtime: number }> = []
+			for (const name of files) {
+				try {
+					const st: any = await FS.getInfoAsync(`${CACHE_DIR}${name}`)
+					if (st?.exists) withSize.push({ name, size: Number(st.size ?? 0), mtime: Number(st.modificationTime ?? 0) })
+				} catch { /* ignore */ }
+			}
+			// 断言：先按 mtime 倒序排序，再验证「排序后首条 = 最大 mtime」且集合不变
+			const sorted = [...withSize].sort((a, b) => b.mtime - a.mtime)
+			const maxMtime = withSize.length ? Math.max(...withSize.map(it => it.mtime)) : 0
+			const sortedOk = sorted.length === 0 || sorted[0].mtime === maxMtime
+			const setName = (arr: typeof withSize) => arr.map(it => it.name).sort().join(',')
+			const sameSet = setName(sorted) === setName(withSize)
+			const auditPass = withSize.length > 0 && sortedOk && sameSet && withSize.every(it => it.size > 0)
+			await step(`[stress] step=audit pass=${auditPass} detail=count=${withSize.length} sortedHead=max:${sortedOk} sameSet:${sameSet}`)
+
+			// 2) play 第一条
+			let playPass = false
+			const first = withSize[0]
+			if (first) {
+				const { default: tp } = await import('@/helpers/trackPlayerIndex')
+				const track: any = {
+					id: first.name, platform: 'local', title: first.name, artist: '本地',
+					duration: 0, url: `file://${CACHE_DIR}${first.name}`,
+				}
+				await (tp as any).playWithReplacePlayList(track, [track])
+				await new Promise(r => setTimeout(r, 5000))
+				const pos = Number(((tp as any).getProgress?.() ?? {}).position ?? 0)
+				playPass = pos > 0
+				await step(`[stress] step=play pass=${playPass} detail=position=${pos.toFixed(2)}`)
+			} else {
+				await step('[stress] step=play pass=false detail=no files')
+			}
+
+			// 3) delete 第二条
+			let delPass = false
+			const second = withSize[1]
+			if (second) {
+				const sizeBefore = await cacheSize()
+				await FS.deleteAsync(`${CACHE_DIR}${second.name}`, { idempotent: true }).catch(() => undefined)
+				await removeCacheIndexEntry(second.name)
+				const exists = (await cacheFiles()).includes(second.name)
+				const index = await readCacheIndex()
+				const sizeAfter = await cacheSize()
+				delPass = !exists && !index[second.name] && sizeAfter < sizeBefore
+				await step(`[stress] step=delete pass=${delPass} detail=gone=${!exists} sizeDrop=${(sizeBefore - sizeAfter)}`)
+			} else {
+				await step('[stress] step=delete pass=false detail=not enough files')
+			}
+
+			// 4) clear
+			await FS.deleteAsync(CACHE_DIR, { idempotent: true }).catch(() => undefined)
+			await FS.makeDirectoryAsync(CACHE_DIR, { intermediates: true }).catch(() => undefined)
+			const after = (await cacheFiles()).filter(f => f !== 'index.json')
+			const clearPass = after.length === 0
+			await step(`[stress] step=clear pass=${clearPass} detail=remaining=${after.length}`)
+
+			const pass = auditPass && playPass && delPass && clearPass
+			await step(`[stress] DONE scenario=downloads pass=${pass} detail=audit=${auditPass} play=${playPass} delete=${delPass} clear=${clearPass}`)
+			return { pass, detail: `audit=${auditPass} play=${playPass} delete=${delPass} clear=${clearPass}` }
 		}
 
 		if (scenario === 'cut') {

@@ -14,6 +14,8 @@ import LyricManager from '@/helpers/lyricManager'
 import myTrackPlayer, { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { macFont, macPalette } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { useSetting } from '@/jk/settingsStore'
+import { logInfo } from '@/helpers/logger'
 
 const ROW_HEIGHT = 28
 const WINDOW = 2
@@ -24,6 +26,8 @@ const MiniLyric = () => {
 	const state: any = LyricManager.useLyricState()
 	const current: any = LyricManager.useCurrentLyric()
 	const raw: string = nowLyricState.useValue() as any
+	const [zoomActive] = useSetting('playDetail.isZoomActiveLrc', true)
+	const [delayScroll] = useSetting('playDetail.isDelayScroll', false)
 	// 切歌时清掉上一首的歌词：否则新曲还在加载中会显示「上一首」的歌词（实测出现过串台）
 	const currentTrack: any = myTrackPlayer.useCurrentMusic()
 	const lastTrackRef = React.useRef<string>('')
@@ -50,6 +54,17 @@ const MiniLyric = () => {
 		if (raw) LyricManager.requestRefresh()
 	}, [raw])
 
+	// 延迟跟随：delayScroll=true 时索引变化后 400ms 才切换窗口
+	const [followIndex, setFollowIndex] = React.useState(0)
+	React.useEffect(() => {
+		if (!delayScroll) { setFollowIndex(currentIndex); return }
+		const timer = setTimeout(() => {
+			setFollowIndex(currentIndex)
+			logInfo(`[minilyric] follow index=${currentIndex} delay=400ms`)
+		}, 400)
+		return () => clearTimeout(timer)
+	}, [currentIndex, delayScroll])
+
 	if (!lyrics.length) {
 		return (
 			<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -58,8 +73,9 @@ const MiniLyric = () => {
 		)
 	}
 
-	const start = Math.max(0, currentIndex - WINDOW)
-	const end = Math.min(lyrics.length, currentIndex + WINDOW + 1)
+	const effectiveIndex = delayScroll ? followIndex : currentIndex
+	const start = Math.max(0, effectiveIndex - WINDOW)
+	const end = Math.min(lyrics.length, effectiveIndex + WINDOW + 1)
 	const rows = lyrics.slice(start, end)
 
 	return (
@@ -79,7 +95,7 @@ const MiniLyric = () => {
 
 			{rows.map((item: any, idx: number) => {
 				const absoluteIndex = start + idx
-				const distance = Math.abs(absoluteIndex - currentIndex)
+				const distance = Math.abs(absoluteIndex - effectiveIndex)
 				const isCurrent = distance === 0
 				const opacity = isCurrent ? 1 : distance === 1 ? 0.75 : 0.5
 				return (
@@ -97,8 +113,8 @@ const MiniLyric = () => {
 							style={{
 								textAlign: 'center',
 								color: isCurrent ? c.primary : c.textMuted,
-								fontSize: isCurrent ? 16 : macFont.body,
-								fontWeight: isCurrent ? '700' : '400',
+								fontSize: (isCurrent && zoomActive) ? 16 : macFont.body,
+								fontWeight: (isCurrent && zoomActive) ? '700' : '400',
 								opacity,
 							}}
 						>

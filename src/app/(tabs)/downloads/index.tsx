@@ -11,6 +11,7 @@ import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { getSetting, setSetting, useSetting } from '@/jk/settingsStore'
 import { logError, logInfo } from '@/helpers/logger'
+import { readCacheIndex, removeCacheIndexEntry } from '@/player/CacheManager'
 
 const FILTERS = ['全部', '已完成', '正在下载'] as const
 const QUALITIES = [
@@ -24,6 +25,8 @@ interface CacheItem {
 	uri: string
 	size: number
 	mtime: number
+	title?: string
+	artist?: string
 }
 
 const DownloadsScreen = () => {
@@ -42,7 +45,9 @@ const DownloadsScreen = () => {
 	const load = useCallback(async() => {
 		setLoading(true)
 		try {
-			const names: string[] = await FS.readDirectoryAsync(cacheDir).catch(() => [])
+			const names: string[] = (await FS.readDirectoryAsync(cacheDir).catch(() => []))
+				.filter((n: string) => n !== 'index.json' && !n.endsWith('.part'))
+			const index = await readCacheIndex()
 			const list: CacheItem[] = []
 			let sum = 0
 			for (const name of names) {
@@ -54,7 +59,13 @@ const DownloadsScreen = () => {
 					sum += size
 					const mt = Number(st.modificationTime ?? 0)
 					// RN 返回秒级时间戳，new Date() 需要毫秒
-					list.push({ name, uri, size, mtime: mt > 1e12 ? mt : mt * 1000 })
+					const meta = index[name] ?? {}
+					list.push({
+						name, uri, size,
+						mtime: mt > 1e12 ? mt : mt * 1000,
+						title: meta.title,
+						artist: meta.artist,
+					})
 				} catch { /* 单个文件失败忽略 */ }
 			}
 			list.sort((a, b) => b.mtime - a.mtime)
@@ -93,6 +104,7 @@ const DownloadsScreen = () => {
 	const removeOne = async(uri: string) => {
 		try {
 			await FS.deleteAsync(uri, { idempotent: true })
+			await removeCacheIndexEntry(uri.split('/').pop() ?? '')
 			await load()
 		} catch (err) {
 			logError('[downloads] 删除失败', String((err as any)?.message ?? err))
@@ -156,8 +168,13 @@ const DownloadsScreen = () => {
 						<View style={{ flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: macSpace.pageX / 2, borderBottomWidth: 0.5, borderBottomColor: c.divider }}>
 							<View style={{ flex: 1 }}>
 								<Text numberOfLines={1} style={{ color: c.text, fontSize: macFont.body }}>
-									{item.name.replace(/\.(mp3|flac|m4a)$/i, '')}
+									{item.title || item.name.replace(/\.(mp3|flac|m4a)$/i, '')}
 								</Text>
+								{item.artist ? (
+									<Text numberOfLines={1} style={{ color: c.textMuted, fontSize: macFont.badge, marginTop: 1 }}>
+										{item.artist}
+									</Text>
+								) : null}
 								<Text style={{ color: c.textMuted, fontSize: macFont.badge, marginTop: 2 }}>
 									{(item.size / 1024 / 1024).toFixed(1)}MB · {quality} · {new Date(item.mtime).toLocaleDateString()}
 								</Text>

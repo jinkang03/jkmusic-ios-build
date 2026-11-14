@@ -48,6 +48,47 @@ export const isCached = async (musicItem: IMusic.IMusicItem): Promise<boolean> =
 	return fileInfo.exists
 }
 
+/** 缓存索引：basename → 元数据，让下载页能显示歌名而不是 kw_162152 */
+const INDEX_PATH = `${cacheDir}index.json`
+type CacheIndexEntry = {
+	title?: string, artist?: string, album?: string, quality?: string,
+	size?: number, mtime?: number, songmid?: string, source?: string
+}
+type CacheIndex = Record<string, CacheIndexEntry>
+
+let indexQueue: Promise<any> = Promise.resolve()
+
+export const readCacheIndex = async(): Promise<CacheIndex> => {
+	try {
+		const raw = await FileSystem.readAsStringAsync(INDEX_PATH, { encoding: FileSystem.EncodingType.UTF8 })
+		const parsed = JSON.parse(raw)
+		return parsed && typeof parsed === 'object' ? parsed : {}
+	} catch { return {} }
+}
+
+const writeCacheIndex = async(index: CacheIndex) => {
+	try {
+		await FileSystem.writeAsStringAsync(INDEX_PATH, JSON.stringify(index), { encoding: FileSystem.EncodingType.UTF8 })
+	} catch (err) { logError('[cache] 写索引失败', String((err as any)?.message ?? err)) }
+}
+
+export const upsertCacheIndex = (basename: string, entry: CacheIndexEntry) => {
+	indexQueue = indexQueue.then(async() => {
+		const index = await readCacheIndex()
+		index[basename] = { ...(index[basename] ?? {}), ...entry, mtime: entry.mtime ?? Date.now() }
+		await writeCacheIndex(index)
+	}).catch(() => undefined)
+	return indexQueue
+}
+
+export const removeCacheIndexEntry = (basename: string) => {
+	indexQueue = indexQueue.then(async() => {
+		const index = await readCacheIndex()
+		if (index[basename]) { delete index[basename]; await writeCacheIndex(index) }
+	}).catch(() => undefined)
+	return indexQueue
+}
+
 export const downloadToCache = async (musicItem: IMusic.IMusicItem, onProgress?: (percent: number) => void): Promise<string> => {
 	try {
 		await ensureCacheDirExists()
@@ -64,6 +105,20 @@ export const downloadToCache = async (musicItem: IMusic.IMusicItem, onProgress?:
 		})
 		try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
 		await FileSystem.moveAsync({ from: partUri, to: finalUri })
+		// 写索引：供下载页显示歌名
+		try {
+			const st: any = await FileSystem.getInfoAsync(finalUri)
+			void upsertCacheIndex(String(localPath).split('/').pop() ?? '', {
+				title: (musicItem as any).title,
+				artist: (musicItem as any).artist,
+				album: (musicItem as any).album,
+				quality: String((globalThis as any).__jkQuality ?? '') || undefined,
+				size: Number(st?.size ?? 0),
+				mtime: Date.now(),
+				songmid: String((musicItem as any).id ?? ''),
+				source: (musicItem as any).platform,
+			})
+		} catch { /* 索引失败不影响播放 */ }
 		logInfo('音频文件已缓存到本地:', localPath)
 		return localPath
 	} catch (error) {

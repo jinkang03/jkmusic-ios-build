@@ -108,6 +108,25 @@ const ListSection = () => {
 	)
 }
 
+const PlayDetailSection = () => {
+	const [blur, setBlur] = useSetting('playDetail.bgBlur', 0.6)
+	const [opacity, setOpacity] = useSetting('playDetail.bgOpacity', 0.5)
+	const [zoom, setZoom] = useSetting('playDetail.isZoomActiveLrc', true)
+	const [delay, setDelay] = useSetting('playDetail.isDelayScroll', false)
+	return (
+		<>
+			<SettingRow label="背景模糊" hint="0 = 无模糊，1 = 最强">
+				<SettingSlider value={Number(blur)} min={0} max={1} step={0.05} onChange={setBlur} format={v => `${Math.round(v * 100)}%`} />
+			</SettingRow>
+			<SettingRow label="背景遮罩" hint="0 = 透明，1 = 全黑">
+				<SettingSlider value={Number(opacity)} min={0} max={1} step={0.05} onChange={setOpacity} format={v => `${Math.round(v * 100)}%`} />
+			</SettingRow>
+			<SettingRow label="歌词当前行放大"><SettingSwitch value={zoom} onChange={setZoom} /></SettingRow>
+			<SettingRow label="歌词滚动延迟"><SettingSwitch value={delay} onChange={setDelay} /></SettingRow>
+		</>
+	)
+}
+
 const DownloadSection = () => {
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
@@ -418,6 +437,7 @@ const SettingsSectionScreen = () => {
 		if (section === 'list') return <ListSection />
 		if (section === 'backup') return <BackupSection />
 		if (section === 'download') return <DownloadSection />
+		if (section === 'detail') return <PlayDetailSection />
 		return null
 	})()
 
