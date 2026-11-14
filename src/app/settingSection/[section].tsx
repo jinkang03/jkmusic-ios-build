@@ -108,6 +108,53 @@ const ListSection = () => {
 	)
 }
 
+const NetworkSection = () => {
+	const { isDark } = useAppTheme()
+	const c = macPalette(!!isDark)
+	const [proxyEnable, setProxyEnable] = useSetting('network.proxy.enable', false)
+	const [proxyHost, setProxyHost] = useSetting('network.proxy.host', '')
+	const [proxyPort, setProxyPort] = useSetting('network.proxy.port', 8080)
+	const [maxDl, setMaxDl] = useSetting('download.maxDownloadNum', 3)
+	const [timeoutMs, setTimeoutMs] = useSetting('_ios.requestTimeoutMs', 15000)
+	return (
+		<>
+			<Text style={{ color: c.textMuted, fontSize: macFont.caption, paddingHorizontal: macSpace.pageX, paddingBottom: 10 }}>
+				iOS 端暂不支持系统级代理，配置会保存但不生效（仅桌面版可用）
+			</Text>
+			<SettingRow label="启用代理" hint="仅保存，不生效">
+				<SettingSwitch value={proxyEnable} onChange={setProxyEnable} />
+			</SettingRow>
+			<SettingRow label="代理地址" hint="仅保存，不生效">
+				<SettingSelect
+					value={String(proxyHost || 'none')}
+					onChange={(v) => setProxyHost(v === 'none' ? '' : v)}
+					options={[{ value: 'none', label: '未设置' }, { value: '127.0.0.1', label: '127.0.0.1' }]}
+				/>
+			</SettingRow>
+			<SettingRow label="代理端口" hint="仅保存，不生效">
+				<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{String(proxyPort)}</Text>
+			</SettingRow>
+			<SettingRow label="并发下载数" hint="影响下载/预取队列上限">
+				<SettingSelect
+					value={String(maxDl)}
+					onChange={(v) => setMaxDl(Number(v))}
+					options={[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }]}
+				/>
+			</SettingRow>
+			<SettingRow label="请求超时" hint="影响音源解析与下载">
+				<SettingSelect
+					value={String(timeoutMs)}
+					onChange={(v) => setTimeoutMs(Number(v))}
+					options={[{ value: '10000', label: '10 秒' }, { value: '15000', label: '15 秒' }, { value: '30000', label: '30 秒' }]}
+				/>
+			</SettingRow>
+			<Text style={{ color: c.textMuted, fontSize: macFont.badge, paddingHorizontal: macSpace.pageX, paddingTop: 12 }}>
+				当前：并发 {String(maxDl)} · 超时 {String(timeoutMs)}ms
+			</Text>
+		</>
+	)
+}
+
 const OtherSection = () => {
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
@@ -523,6 +570,7 @@ const SettingsSectionScreen = () => {
 		if (section === 'search') return <SearchSection />
 		if (section === 'ocd') return <OdcSection />
 		if (section === 'other') return <OtherSection />
+		if (section === 'network') return <NetworkSection />
 		return null
 	})()
 

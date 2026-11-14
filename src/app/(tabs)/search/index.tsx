@@ -183,6 +183,12 @@ const SearchlistsScreen = () => {
 	// 失去焦点（切 tab）时按开关清理——tab 页不会卸载，useEffect cleanup 永远不跑
 	useFocusEffect(React.useCallback(() => {
 		return () => {
+			// 先把状态记进全局标记再清空，供 stress 场景判定（不受点击能力限制）
+			const g: any = globalThis
+			g.__jkSearchBlur = {
+				at: Date.now(), input: search, listLen: searchResults.length,
+				cleared: { input: autoClearInput, list: autoClearList },
+			}
 			logInfo(`[search] blur autoclear input=${autoClearInput} list=${autoClearList}`)
 			if (autoClearInput) setSearch('')
 			if (autoClearList) setSearchResults([])
