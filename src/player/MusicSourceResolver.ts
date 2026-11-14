@@ -106,29 +106,12 @@ const setQuality = (quality: IMusic.IQualityKey) => {
 	PersistStatus.set('music.quality', quality)
 }
 
-const loggedTimeoutKeys = new Set<string>()
-
 export const resolveSource = async (
 	musicItem: IMusic.IMusicItem,
 	options: ResolveSourceOptions = {},
 ): Promise<SourceResult> => {
 	const preloadKey = makePreloadKey(musicItem)
 	const requestType = options.requestType ?? 'current'
-
-	// 超时/并发日志放在最前面：任何分支（含 preload/缓存命中）都会先打一次，
-	// 否则命中分支 return 后日志永远看不到（P57 的教训）
-	try {
-		const { getSetting: getNet } = await import('@/jk/settingsStore')
-		const configured = Number(getNet('_ios.requestTimeoutMs', 0)) || 0
-		// 内置值只作兜底，不再作为上限（P58 发现设置被 min 钳在 5000）
-		const effTimeout = configured > 0 ? configured : getSourceRequestTimeoutMs(requestType)
-		const key = `${requestType}:${effTimeout}`
-		if (!loggedTimeoutKeys.has(key)) {
-			loggedTimeoutKeys.add(key)
-			logInfo('[net] timeoutMs=', effTimeout, 'requestType=', requestType,
-				'maxDownloadNum=', Number(getNet('download.maxDownloadNum', 3)))
-		}
-	} catch { /* ignore */ }
 
 	const localFile = await resolveLocalFile(musicItem.url)
 	if (localFile.status !== 'nonlocal') {
