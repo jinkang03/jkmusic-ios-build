@@ -108,6 +108,34 @@ const ListSection = () => {
 	)
 }
 
+const SearchSection = () => {
+	const [hot, setHot] = useSetting('search.isShowHotSearch', true)
+	const [history, setHistory] = useSetting('search.isShowHistorySearch', true)
+	const [focus, setFocus] = useSetting('search.isFocusSearchBox', false)
+	return (
+		<>
+			<SettingRow label="显示热门搜索"><SettingSwitch value={hot} onChange={setHot} /></SettingRow>
+			<SettingRow label="显示历史搜索"><SettingSwitch value={history} onChange={setHistory} /></SettingRow>
+			<SettingRow label="进入时聚焦搜索框"><SettingSwitch value={focus} onChange={setFocus} /></SettingRow>
+		</>
+	)
+}
+
+const OdcSection = () => {
+	const [clearInput, setClearInput] = useSetting('odc.isAutoClearSearchInput', false)
+	const [clearList, setClearList] = useSetting('odc.isAutoClearSearchList', false)
+	return (
+		<>
+			<SettingRow label="离开搜索页清空输入" hint="回到搜索页时输入框为空">
+				<SettingSwitch value={clearInput} onChange={setClearInput} />
+			</SettingRow>
+			<SettingRow label="离开搜索页清空结果" hint="回到搜索页时结果列表为空">
+				<SettingSwitch value={clearList} onChange={setClearList} />
+			</SettingRow>
+		</>
+	)
+}
+
 const PlayDetailSection = () => {
 	const [blur, setBlur] = useSetting('playDetail.bgBlur', 0.6)
 	const [opacity, setOpacity] = useSetting('playDetail.bgOpacity', 0.5)
@@ -438,6 +466,8 @@ const SettingsSectionScreen = () => {
 		if (section === 'backup') return <BackupSection />
 		if (section === 'download') return <DownloadSection />
 		if (section === 'detail') return <PlayDetailSection />
+		if (section === 'search') return <SearchSection />
+		if (section === 'ocd') return <OdcSection />
 		return null
 	})()
 

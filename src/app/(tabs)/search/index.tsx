@@ -1,5 +1,7 @@
 import SongListView from '@/components/mac/SongListView'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { useSetting } from '@/jk/settingsStore'
+import { logInfo } from '@/helpers/logger'
 import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
 import { ThemeColors } from '@/constants/tokens'
 import { useThemeColors } from '@/hooks/useAppTheme'
@@ -8,7 +10,7 @@ import i18n from '@/utils/i18n'
 import debounce from 'lodash/debounce'
 import { useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
 	Animated,
 	Dimensions,
@@ -50,6 +52,12 @@ const SearchlistsScreen = () => {
 	const searchRequestRef = useRef(0)
 	const [searchType, setSearchType] = useState<SearchType>('songs')
 	const [activeSourcePill, setActiveSourcePill] = useState<string>('all')
+	const [showHot] = useSetting('search.isShowHotSearch', true)
+	const [showHistory] = useSetting('search.isShowHistorySearch', true)
+	const [autoFocus] = useSetting('search.isFocusSearchBox', false)
+	const [autoClearInput] = useSetting('odc.isAutoClearSearchInput', false)
+	const [autoClearList] = useSetting('odc.isAutoClearSearchList', false)
+	const [history, setHistory] = useState<string[]>([])
 	// 深链参数 ?q= 仅触发一次搜索（jkmusic://search?q=周杰伦），之后仍由搜索框驱动
 	const routeParams = useLocalSearchParams<{ q?: string }>()
 	const initialQuery = typeof routeParams.q === 'string' ? routeParams.q : ''
@@ -148,6 +156,20 @@ const SearchlistsScreen = () => {
 		}
 	}, [isLoading, hasMore, page, fetchSearchResults, search])
 
+	const rememberHistory = (kw: string) => {
+		if (!kw.trim()) return
+		setHistory(prev => [kw, ...prev.filter(h => h !== kw)].slice(0, 10))
+	}
+
+	React.useEffect(() => {
+		return () => {
+			logInfo(`[search] autoclear input=${autoClearInput} list=${autoClearList}`)
+			if (autoClearInput) setSearch('')
+			if (autoClearList) setSearchResults([])
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [autoClearInput, autoClearList])
+
 	const handleSearchTypeChange = (type: SearchType) => {
 		const toValue = type === 'songs' ? 0 : SEGMENT_WIDTH
 		Animated.spring(slideAnim, {
@@ -174,6 +196,7 @@ const SearchlistsScreen = () => {
 						value={search}
 						onChangeText={setSearch}
 						placeholder="在线搜索歌曲或歌手"
+						autoFocus={Boolean(autoFocus)}
 						placeholderTextColor={mac.textMuted}
 						returnKeyType="search"
 						style={{ flex: 1, color: mac.text, fontSize: macFont.body, padding: 0 }}
