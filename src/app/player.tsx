@@ -169,6 +169,15 @@ const PlayerScreenContent = () => {
 	// 试听检测：音频实际时长明显短于曲目声明时长 → 判定试听并尝试换源
 	const buffering = bufferingStore.useValue()
 	// 统一歌词抓取：只要当前曲目变化就尝试，覆盖 playnow / 缓存命中 / 详情页点歌所有路径
+	// 起播后 2 秒预取下一首（缓存命中也要触发，不再挂在下载成功分支上）
+	React.useEffect(() => {
+		if (!currentActiveTrack) return
+		const timer = setTimeout(() => {
+			void import('@/player/prefetch').then(m => m.prefetchNext()).catch(() => undefined)
+		}, 2000)
+		return () => clearTimeout(timer)
+	}, [currentActiveTrack?.id, currentActiveTrack?.platform])
+
 	React.useEffect(() => {
 		const t: any = currentActiveTrack
 		if (!t) return
