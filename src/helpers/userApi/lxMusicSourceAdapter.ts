@@ -240,8 +240,14 @@ const handleScriptAction = (runtime: LxRuntime, event: any) => {
 			const data = event.data
 			if (data.status) {
 				logInfo('[lxMusicAdapter] Script initialized successfully')
-				if (data.sources && typeof data.sources === 'object') {
-					runtime.sources = data.sources as Record<string, ScriptSourceInfo>
+				// 脚本上报的形状是 { status, info: { sources } }，sources 在 info 下面
+				// （check-source-load 的 JSC 探针实测输出：{"info":{"sources":{...}},"status":true}）
+				const reportedSources = (data as any)?.info?.sources ?? (data as any)?.sources
+				if (reportedSources && typeof reportedSources === 'object') {
+					runtime.sources = reportedSources as Record<string, ScriptSourceInfo>
+					logInfo(`[lxMusicAdapter] sources: ${Object.keys(runtime.sources).join(',')}`)
+				} else {
+					logError('[lxMusicAdapter] init 事件里没有 sources', JSON.stringify(data).slice(0, 200))
 				}
 				runtime.inited = true
 				runtime.init?.resolve()
@@ -640,15 +646,28 @@ export const reloadLxMusicScript = async (
 		const info = parseLxMusicScriptInfo(musicApi.script)
 		const runtime = await initLxMusicScript(musicApi.id, info, musicApi.script)
 
+		// 脚本 init 时上报的能力表就是「这个音源支持哪些平台」，必须带出去：
+		// bindMusicApi 依赖 api.supportedSources 决定把哪个源的取流请求交给脚本
+		const supportedSources = Object.keys((runtime as any).sources ?? {})
 		return {
 			...musicApi,
+			supportedSources,
 			getMusicUrl: (
 				title: string,
 				artist: string,
 				songmid: string,
 				quality: string,
 				requestContext?: LxRequestContext,
-			) => getMusicUrlViaScript(runtime, title, artist, songmid, quality, requestContext),
+				source?: string,
+			) => getMusicUrlViaScript(
+				runtime,
+				title,
+				artist,
+				songmid,
+				quality,
+				requestContext,
+				source ?? supportedSources[0] ?? 'tx',
+			),
 		}
 	} catch (err) {
 		logError(

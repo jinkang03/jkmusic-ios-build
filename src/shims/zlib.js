@@ -2,6 +2,7 @@
  * zlib 兼容层：用 pako 实现 Node 的 inflate / deflateRaw。
  * 供 JKMUSIC musicSdk（kw 歌词解密、tx qrc 解码）使用。
  */
+import { Buffer } from 'buffer'
 import pako from 'pako'
 
 const toU8 = (input) => {
@@ -22,7 +23,9 @@ const wrap = (fn) => (input, options, callback) => {
     opts = undefined
   }
   try {
-    const out = fn(toU8(input), opts)
+    // 返回 Buffer 而非 Uint8Array：上游代码会调用 out.toString('utf8')，
+    // Uint8Array 的 toString 会把字节拼成 "1,2,3"（歌词变数字串就是这个原因）
+    const out = Buffer.from(fn(toU8(input), opts))
     if (cb) cb(null, out)
     return out
   } catch (err) {
@@ -32,7 +35,7 @@ const wrap = (fn) => (input, options, callback) => {
 }
 
 export const inflate = wrap((data) => pako.inflate(data))
-export const inflateSync = (data) => pako.inflate(toU8(data))
+export const inflateSync = (data) => Buffer.from(pako.inflate(toU8(data)))
 export const inflateRaw = wrap((data) => pako.inflateRaw(data))
 export const deflate = wrap((data) => pako.deflate(data))
 export const deflateRaw = wrap((data) => pako.deflateRaw(data))

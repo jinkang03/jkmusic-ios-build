@@ -1,4 +1,6 @@
+import { Ionicons } from '@expo/vector-icons'
 import Lyric from '@/components/lyric'
+import MiniLyric from '@/components/mac/MiniLyric'
 import { MovingText } from '@/components/MovingText'
 import { PlayerControls } from '@/components/PlayerControls'
 import { PlayerProgressBar } from '@/components/PlayerProgressbar'
@@ -6,11 +8,14 @@ import { PlayerRepeatToggle } from '@/components/PlayerRepeatToggle'
 import { PlayerVolumeBar } from '@/components/PlayerVolumeBar'
 import { ShowPlayerListToggle } from '@/components/ShowPlayerListToggle'
 import { unknownTrackImageUri } from '@/constants/images'
+import { macPalette } from '@/constants/macTokens'
 import { ThemeColors, fontSize, screenPadding } from '@/constants/tokens'
 import LyricManager from '@/helpers/lyricManager'
+import { isTrialClip, markHandled, switchAwayFromTrial, trialHint, wasHandled } from '@/jk/trial'
+import { showToast } from '@/utils/utils'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { getSingerMidBySingerName } from '@/helpers/userApi/getMusicSource'
-import { ThemeOverrideProvider, useThemeColors } from '@/hooks/useAppTheme'
+import { ThemeOverrideProvider, useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
 import { usePlayerBackground } from '@/hooks/usePlayerBackground'
 import { useTrackPlayerFavorite } from '@/hooks/useTrackPlayerFavorite'
 import PersistStatus from '@/store/PersistStatus'
@@ -33,6 +38,7 @@ import {
 	useWindowDimensions,
 	View,
 } from 'react-native'
+import { BlurView } from 'expo-blur'
 import { Image } from 'expo-image'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
@@ -152,7 +158,32 @@ const PlayerScreenContent = () => {
 
 	const trackToDisplay = currentActiveTrack ?? prevTrackRef.current
 
+	const mac = macPalette(!!useAppTheme().isDark)
 	const artworkUri = trackToDisplay?.artwork || unknownTrackImageUri
+	// 试听检测：音频实际时长明显短于曲目声明时长 → 判定试听并尝试换源
+	const { duration: audioDuration } = myTrackPlayer.useProgress(0.5)
+	const [trialDetected, setTrialDetected] = React.useState(false)
+	React.useEffect(() => {
+		const t: any = trackToDisplay
+		if (!t || !audioDuration || audioDuration <= 0) return
+		const expect = Number(t?.duration ?? 0)
+		if (!isTrialClip(audioDuration, expect)) return
+		if (wasHandled(t)) return
+		markHandled(t)
+		setTrialDetected(true)
+		console.log(`[jk/trial] detected ${t?.title} audio=${Math.round(audioDuration)}s expect=${expect}s`)
+		void (async() => {
+			const switched = await switchAwayFromTrial(t)
+			if (switched === '__all_trial__') {
+				showToast('提示', '该曲各平台均为试听', 'info')
+			} else if (switched) {
+				showToast('提示', `该曲在当前平台仅提供试听，已切换到 ${switched}`, 'info')
+			} else {
+				showToast('提示', '该曲在当前平台仅提供试听片段', 'info')
+			}
+		})()
+	}, [trackToDisplay, audioDuration])
+
 	const artworkSource = useMemo(() => ({ uri: artworkUri }), [artworkUri])
 	const { backgroundColor } = usePlayerBackground(artworkUri)
 	const artworkFade = useMemo(
@@ -385,7 +416,28 @@ const PlayerScreenContent = () => {
 	return (
 		<>
 			<StatusBar style="light" />
-			<View style={[styles.screen, { backgroundColor }]}>
+			<View style={[styles.screen, { backgroundColor: 'transparent' }]}>
+				{/* 背景：封面铺满 + 模糊 + 压暗，保证文字对比度 */}
+				<View style={StyleSheet.absoluteFill} pointerEvents="none">
+					{artworkUri ? (
+						<Image source={{ uri: artworkUri }} contentFit="cover" style={StyleSheet.absoluteFill} />
+					) : (
+						<View style={[StyleSheet.absoluteFill, { backgroundColor: mac.bg }]} />
+					)}
+					<BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+					<View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
+				</View>
+				{/* 顶部栏：收起 / 收藏 / 更多（更多沿用右侧原菜单，此处只放收起与收藏） */}
+				<View style={[styles.topBar, { paddingTop: top, height: top + 48 }]} pointerEvents="box-none">
+					<TouchableOpacity onPress={() => router.back()} hitSlop={12} accessibilityLabel="收起">
+						<Ionicons name="chevron-down" size={26} color={colors.text} />
+					</TouchableOpacity>
+					<View style={{ flexDirection: 'row', gap: 20, alignItems: 'center' }}>
+						<TouchableOpacity onPress={handleFavorite} hitSlop={12} accessibilityLabel="收藏">
+							<Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={22} color={isFavorite ? mac.primary : colors.text} />
+						</TouchableOpacity>
+					</View>
+				</View>
 				{showLyrics ? (
 					<View
 						style={[
@@ -495,7 +547,7 @@ const PlayerScreenContent = () => {
 						<View style={styles.artworkRegion}>
 							<View style={styles.artworkCanvas}>
 								<GestureDetector gesture={swipeGesture}>
-									<Animated.View style={[styles.artworkImageContainer, artworkAnimatedStyle]}>
+									<Animated.View style={[styles.artworkSquare, artworkAnimatedStyle]}>
 										<TouchableOpacity
 											style={styles.artworkTouchable}
 											activeOpacity={1}
@@ -517,12 +569,8 @@ const PlayerScreenContent = () => {
 										</TouchableOpacity>
 									</Animated.View>
 								</GestureDetector>
-								<LinearGradient
-									pointerEvents="none"
-									style={StyleSheet.absoluteFill}
-									colors={artworkFade}
-									locations={[0, 0.48, 0.68, 0.86, 1]}
-								/>
+								{/* artworkFade：原来用于封面铺满时的淡出，改成方块封面后它只会盖住背景，已删除 */}
+
 								<LinearGradient
 									pointerEvents="none"
 									style={[styles.topScrim, { height: top + 100 }]}
@@ -530,6 +578,10 @@ const PlayerScreenContent = () => {
 									locations={[0, 0.55, 1]}
 								/>
 							</View>
+						</View>
+						{/* 紧凑歌词区：当前行 ± 2，点行可 seek */}
+						<View style={{ flex: 1, minHeight: 120, marginTop: 12 }}>
+							<MiniLyric />
 						</View>
 						<View style={[styles.controlsPanel, { paddingBottom: Math.max(bottom, 16) }]}>
 							<View>
@@ -609,6 +661,16 @@ const PlayerScreenContent = () => {
 											artists={trackToDisplay.artist}
 											onViewArtist={handleViewArtist}
 										/>
+									) : null}
+									{trackToDisplay?.album ? (
+										<Text numberOfLines={1} style={[styles.trackArtistText, { marginTop: 2, opacity: 0.6 }]}>
+											{trackToDisplay.album}
+										</Text>
+									) : null}
+									{trialDetected ? (
+										<Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
+											{trialHint(Number(trackToDisplay?.duration ?? 0))}
+										</Text>
 									) : null}
 								</View>
 
@@ -698,25 +760,38 @@ const createStyles = (colors: ThemeColors, defaultStyles: ReturnType<typeof useD
 		screen: {
 			flex: 1,
 		},
+		topBar: {
+			flexDirection: 'row',
+			alignItems: 'center',
+			justifyContent: 'space-between',
+			paddingHorizontal: 20,
+			height: 48,
+			zIndex: 10,
+		},
 		playerLayout: {
 			flex: 1,
 		},
 		lyricsLayout: {
 			flex: 1,
 			paddingHorizontal: screenPadding.horizontal,
-			backgroundColor: colors.overlay,
 		},
 		artworkRegion: {
 			flex: 1,
+			justifyContent: 'center',
 		},
 		artworkCanvas: {
-			position: 'absolute',
-			top: 0,
-			// Finish the fade before metadata so bright artwork cannot dilute text contrast.
-			bottom: 0,
-			left: 0,
-			right: 0,
+			// 流式布局：封面在文档流里居中，不再 absolute 撑满（原来会在下方留大块空白）
+			alignItems: 'center',
+			justifyContent: 'center',
 			overflow: 'hidden',
+			marginTop: 8,
+		},
+		artworkSquare: {
+			width: '62%',
+			aspectRatio: 1,
+			borderRadius: 12,
+			overflow: 'hidden',
+			backgroundColor: '#00000033',
 		},
 		artworkImageContainer: {
 			flex: 1,
@@ -739,6 +814,7 @@ const createStyles = (colors: ThemeColors, defaultStyles: ReturnType<typeof useD
 		controlsPanel: {
 			flexShrink: 0,
 			zIndex: 1,
+			marginTop: 'auto',
 			paddingHorizontal: screenPadding.horizontal,
 		},
 		trackTitleContainer: {

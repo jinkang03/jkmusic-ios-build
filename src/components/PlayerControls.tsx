@@ -1,4 +1,5 @@
 import { useThemeColors } from '@/hooks/useAppTheme'
+import { macPalette } from '@/constants/macTokens'
 import myTrackPlayer, { playbackIntentStore, trackSkipLoadingStore, trackSourceLoadingStore } from '@/helpers/trackPlayerIndex'
 import { FontAwesome6 } from '@expo/vector-icons'
 import React from 'react'
@@ -27,7 +28,7 @@ export const PlayerControls = React.memo(({ style }: PlayerControlsProps) => {
 	)
 })
 
-export const PlayPauseButton = React.memo(({ style, iconSize = 48 }: PlayerButtonProps) => {
+export const PlayPauseButton = React.memo(({ style, iconSize = 48, variant = 'full' }: PlayerButtonProps & { variant?: 'mini' | 'full' }) => {
 	const playing = useIsPlaying()
 	const state = usePlaybackState()
 	const intent = playbackIntentStore.useValue()
@@ -35,14 +36,35 @@ export const PlayPauseButton = React.memo(({ style, iconSize = 48 }: PlayerButto
 	const shouldPause = playing || (intent === 'play' && (sourcePending || state === PlaybackState.Buffering))
 	const colors = useThemeColors()
 
+	if (variant === 'mini') {
+		// 迷你播放条复用同一按钮，保持原尺寸，不受大圆样式影响
+		return (
+			<View style={[{ height: iconSize }, style]}>
+				<TouchableOpacity
+					activeOpacity={0.85}
+					hitSlop={10}
+					onPress={() => shouldPause ? myTrackPlayer.pause() : void myTrackPlayer.play()}
+				>
+					<FontAwesome6 name={shouldPause ? 'pause' : 'play'} size={iconSize} color={colors.text} />
+				</TouchableOpacity>
+			</View>
+		)
+	}
+
+	// 播放详情页：56 直径圆形 primary 底 + 白色图标
 	return (
 		<View style={[{ height: iconSize }, style]}>
 			<TouchableOpacity
 				activeOpacity={0.85}
 				hitSlop={10}
 				onPress={() => shouldPause ? myTrackPlayer.pause() : void myTrackPlayer.play()}
+				style={{
+					width: 56, height: 56, borderRadius: 28,
+					backgroundColor: macPalette(false).primary,
+					alignItems: 'center', justifyContent: 'center',
+				}}
 			>
-				<FontAwesome6 name={shouldPause ? 'pause' : 'play'} size={iconSize} color={colors.text} />
+				<FontAwesome6 name={shouldPause ? 'pause' : 'play'} size={24} color="#fff" />
 			</TouchableOpacity>
 		</View>
 	)

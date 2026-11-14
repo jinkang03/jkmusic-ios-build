@@ -2,6 +2,7 @@
  * crypto 兼容层：用 crypto-js 实现 musicSdk 需要的
  * createCipheriv / createDecipheriv / createHash / randomBytes。
  */
+import { Buffer } from 'buffer'
 import CryptoJS from 'crypto-js'
 
 export const constants = {
@@ -113,11 +114,115 @@ export const randomBytes = (size) => {
   return bytes
 }
 
-export const publicEncrypt = () => {
-  throw new Error('publicEncrypt 由原生 Crypto 模块提供')
+/* ---------------- 纯 JS RSA（wy 的 weapi 依赖） ---------------- */
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+const b64ToBytes = (s) => {
+  const clean = s.replace(/-----[^-]+-----/g, '').replace(/[^A-Za-z0-9+/]/g, '')
+  const out = new Uint8Array(Math.floor(clean.length * 3 / 4))
+  let o = 0, buf = 0, bits = 0
+  for (const ch of clean) {
+    const v = B64.indexOf(ch)
+    if (v < 0) continue
+    buf = (buf << 6) | v
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      out[o++] = (buf >> bits) & 0xff
+    }
+  }
+  return out.subarray(0, o)
 }
+
+const derNode = (b, off) => {
+  const tag = b[off]
+  let len = b[off + 1]
+  let p = off + 2
+  if (len & 0x80) {
+    const n = len & 0x7f
+    len = 0
+    for (let i = 0; i < n; i++) len = len * 256 + b[p + i]
+    p += n
+  }
+  return { tag, start: p, end: p + len }
+}
+
+const bytesToBig = (bytes) => {
+  let v = 0n
+  for (const b of bytes) v = (v << 8n) | BigInt(b)
+  return v
+}
+
+const bigToBytes = (v, len) => {
+  const out = new Uint8Array(len)
+  for (let i = len - 1; i >= 0; i--) {
+    out[i] = Number(v & 0xffn)
+    v >>= 8n
+  }
+  return out
+}
+
+const parsePublicKey = (pem) => {
+  const der = b64ToBytes(pem)
+  const seq = derNode(der, 0)
+  const alg = derNode(der, seq.start)
+  const bit = derNode(der, alg.end)
+  const inner = derNode(der, bit.start + 1) // 跳过 unused-bits 字节
+  const nInt = derNode(der, inner.start)
+  const eInt = derNode(der, nInt.end)
+  const n = bytesToBig(der.subarray(nInt.start, nInt.end))
+  const e = bytesToBig(der.subarray(eInt.start, eInt.end))
+  return { n, e, k: Math.ceil(n.toString(2).length / 8) }
+}
+
+const modPow = (base, exp, mod) => {
+  let r = 1n
+  base %= mod
+  while (exp > 0n) {
+    if (exp & 1n) r = (r * base) % mod
+    base = (base * base) % mod
+    exp >>= 1n
+  }
+  return r
+}
+
+const keyCache = new Map()
+const getKey = (pem) => {
+  let k = keyCache.get(pem)
+  if (!k) {
+    k = parsePublicKey(pem)
+    keyCache.set(pem, k)
+  }
+  return k
+}
+
+export const publicEncrypt = ({ key, padding }, data) => {
+  const { n, e, k } = getKey(key)
+  const msg = data instanceof Uint8Array ? data : new Uint8Array(data)
+  let block
+  if (padding === constants.RSA_NO_PADDING) {
+    if (msg.length > k) throw new Error('data too large for key size')
+    block = new Uint8Array(k)
+    block.set(msg, k - msg.length)
+  } else if (padding === constants.RSA_PKCS1_PADDING) {
+    const psLen = k - msg.length - 3
+    if (psLen < 8) throw new Error('data too large for key size')
+    block = new Uint8Array(k)
+    block[0] = 0
+    block[1] = 2
+    const rnd = randomBytes(psLen)
+    for (let i = 0; i < psLen; i++) block[2 + i] = rnd[i] || 1
+    block[2 + psLen] = 0
+    block.set(msg, 3 + psLen)
+  } else {
+    throw new Error('unsupported RSA padding: ' + padding)
+  }
+  return Buffer.from(bigToBytes(modPow(bytesToBig(block), e, n), k))
+}
+
 export const privateDecrypt = () => {
-  throw new Error('privateDecrypt 由原生 Crypto 模块提供')
+  throw new Error('privateDecrypt not supported')
 }
 
 export default { createCipheriv, createDecipheriv, createHash, randomBytes, publicEncrypt, privateDecrypt, constants }

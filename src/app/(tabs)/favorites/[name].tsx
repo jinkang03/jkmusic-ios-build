@@ -1,7 +1,7 @@
 /**
  * 列表详情：展示某个 JKMUSIC 列表内的歌曲。
  */
-import { TracksList } from '@/components/TracksList'
+import SongListView from '@/components/mac/SongListView'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { jkToTrack } from '@/jk/adapt'
 import { getListById } from '@/jk/libraryStore'
@@ -30,7 +30,7 @@ const ListDetailScreen = () => {
 
 	return (
 		<View style={{ flex: 1, backgroundColor: colors.background }}>
-			<TracksList id={`mylist_${listId}`} tracks={tracks} />
+			<SongListView tracks={tracks} queueId={`mylist_${listId}`} emptyText="列表还是空的" />
 		</View>
 	)
 }

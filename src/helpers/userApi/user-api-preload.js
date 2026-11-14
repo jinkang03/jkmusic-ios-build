@@ -10,6 +10,7 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
   }
   const nativeFuncNames = [
     '__lx_native_call__set_timeout',
+    '__lx_native_call__clear_timeout',
     '__lx_native_call__utils_str2b64',
     '__lx_native_call__utils_b642buf',
     '__lx_native_call__utils_str2md5',
@@ -67,6 +68,8 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
     const tagret = callbacks.get(id)
     if (!tagret) return
     callbacks.delete(id)
+    // 同步释放原生侧定时器句柄，否则 JS 回调删了、原生 timer 还在跑（发热/泄漏）
+    if (nativeFuncs.clear_timeout) nativeFuncs.clear_timeout(id)
   }
   const handleSetTimeout = (id) => {
     const tagret = callbacks.get(id)
@@ -533,12 +536,17 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
   globalThis.setTimeout = _setTimeout
   globalThis.clearTimeout = _clearTimeout
 
+  // 音源脚本约定通过 globalThis.lx 访问运行时（const { EVENT_NAMES, request, on, send, env, version } = globalThis.lx）。
+  // 注意：这段代码运行在 CyMusicUserApiRuntime 自己的 JavaScriptCore 上下文里，
+  // 与 RN 主上下文的 global.lx.apis（src/jk/sourceRegistry.ts 使用）不是同一个全局对象，互不覆盖。
+  globalThis.lx = globalThis.lxu
+
   const freezeObject = (obj) => {
     if (typeof obj != 'object') return
     Object.freeze(obj)
     for (const subObj of Object.values(obj)) freezeObject(subObj)
   }
-  freezeObject(globalThis.lx)
+  freezeObject(globalThis.lxu)
 
   const _toString = Function.prototype.toString
   // eslint-disable-next-line no-extend-native

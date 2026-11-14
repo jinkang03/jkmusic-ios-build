@@ -4,6 +4,8 @@
  * 把适配后的音源注入 global.lx.apis / qualityList，供 musicSdk 取播放地址。
  */
 
+import { logError, logInfo } from '@/helpers/logger'
+
 export interface JkSourceApi {
 	getMusicUrl: (musicInfo: any, quality: string) => { promise: Promise<{ url: string, type: string }>, canceleFn?: () => void }
 	getLyric?: (musicInfo: any) => { promise: Promise<any>, canceleFn?: () => void }
@@ -55,7 +57,13 @@ export const bindMusicApi = (api: any) => {
 	if (!api?.getMusicUrl) return
 	const supported: string[] = Array.isArray(api.supportedSources) && api.supportedSources.length
 		? api.supportedSources
-		: ['tx']
+		: []
+	if (!supported.length) {
+		// 不再悄悄退化成 tx —— 那会把「脚本没上报源」这个问题藏起来，
+		// 症状是取流走到错误分支、播放只有 15 秒
+		logError('[jk/source] 音源没有上报任何源，跳过注册', api?.name)
+		return
+	}
 	for (const source of supported) {
 		registerSourceApi(source, {
 			getMusicUrl: (musicInfo: any, quality: string) => {
@@ -67,6 +75,8 @@ export const bindMusicApi = (api: any) => {
 			},
 		}, ['128k', '320k', 'flac'])
 	}
+	// 这条日志是 P5 的验收锚点：logScreen 里必须能看到注册了哪些源
+	logInfo(`[jk/source] registered ${Object.keys(state.apis).join(',')}`)
 }
 
 export const getRegisteredSources = () => Object.keys(state.apis)

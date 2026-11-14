@@ -1,5 +1,6 @@
 // 必须最先加载：为 JKMUSIC 的 musicSdk 提供全局 Buffer / TextEncoder
 import '@/shims/globalPolyfills'
+import { ensureDefaults } from '@/jk/settingsStore'
 import { playbackService } from '@/constants/playbackService'
 import { AppThemeProvider, useAppTheme } from '@/hooks/useAppTheme'
 import LyricManager from '@/helpers/lyricManager'
@@ -196,6 +197,18 @@ const RootNavigation = () => {
 				}}
 			/>
 			<Stack.Screen
+				name="settingSection/[section]"
+				options={{ headerShown: false }}
+			/>
+			<Stack.Screen
+				name="logScreen"
+				options={{
+					presentation: 'card',
+					headerShown: true,
+					headerTitle: '应用日志',
+				}}
+			/>
+			<Stack.Screen
 				name="(modals)/logScreen"
 				options={{
 					presentation: 'modal',
@@ -213,6 +226,13 @@ const RootNavigation = () => {
 			/>
 		</Stack>
 	)
+}
+
+// 首次启动写入桌面版默认设置（幂等）
+try {
+	ensureDefaults()
+} catch (err) {
+	console.log('[jk/settings] ensureDefaults failed', err)
 }
 
 export default App

@@ -49,6 +49,9 @@ export const getOnlineOtherSourceMusicUrl = async ({
 	// const cachedUrl = await getStoreMusicUrl(musicInfo, itemQuality)
 	// if (cachedUrl && !isRefresh) return { url: cachedUrl, musicInfo, quality: itemQuality, isFromCache: true }
 
+	// 取流参数留痕：失败排查时要能对上 songmid / quality
+	// eslint-disable-next-line no-console
+	console.log(`[jk/play] url req source=${musicInfo.source} songmid=${(musicInfo as any)?.meta?.songmid ?? musicInfo.id} quality=${itemQuality}`)
 	let reqPromise
 	try {
 		reqPromise = musicSdk[musicInfo.source].getMusicUrl(
@@ -65,9 +68,16 @@ export const getOnlineOtherSourceMusicUrl = async ({
 			return { musicInfo, url, quality: type, isFromCache: false }
 			// eslint-disable-next-line @typescript-eslint/promise-function-async
 		})
-		.catch((err: any) => {
+		.catch(async(err: any) => {
 			if (err.message == requestMsg.tooManyRequests) throw err
-			console.log(err)
+			// eslint-disable-next-line no-console
+			console.log('[jk/play] 取流失败', musicInfo.source, err?.message ?? err)
+			// 失败必须可见：先提示正在换源，换源再失败会在下面抛错
+			showToast(
+				`获取播放地址失败（${musicInfo.source}）`,
+				String(err?.message ?? err).slice(0, 80),
+				'error',
+			)
 			return getOnlineOtherSourceMusicUrl({
 				musicInfos,
 				quality,

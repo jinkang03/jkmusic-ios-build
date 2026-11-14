@@ -34,6 +34,7 @@ import { createMediaIndexMap } from '@/utils/mediaIndexMap'
 import { Alert, AppState, Image } from 'react-native'
 
 import { fetchLyric } from '@/jk/lyric'
+import LyricManager from './lyricManager'
 
 import { fakeAudioMp3Uri } from '@/constants/images'
 import { nowLanguage } from '@/utils/i18n'
@@ -228,6 +229,11 @@ async function setupTrackPlayer() {
 		setQuality(quality as IMusic.IQualityKey)
 	}
 	if (playLists) {
+		const cleanSongUrl = (song: any) => {
+			if (!song) return song
+			const { url, ...rest } = song
+			return rest
+		}
 		const resolvedPlayLists = await Promise.all(
 			playLists.map(async (playList) => {
 				const [artwork, coverImg] = await Promise.all([
@@ -235,9 +241,10 @@ async function setupTrackPlayer() {
 					resolveLocalFile(playList.coverImg),
 				])
 				return {
-					...playList,
-					...(artwork.status === 'resolved' ? { artwork: artwork.fileUri } : {}),
-					...(coverImg.status === 'resolved' ? { coverImg: coverImg.fileUri } : {}),
+				...playList,
+				songs: Array.isArray((playList as any).songs) ? (playList as any).songs.map(cleanSongUrl) : (playList as any).songs,
+				...(artwork.status === 'resolved' ? { artwork: artwork.fileUri } : {}),
+				...(coverImg.status === 'resolved' ? { coverImg: coverImg.fileUri } : {}),
 				}
 			}),
 		)
@@ -256,7 +263,16 @@ async function setupTrackPlayer() {
 		importedLocalMusicStore.setValue(importedLocalMusic)
 	}
 	if (restoredQueue && Array.isArray(restoredQueue)) {
-		addAll(restoredQueue, undefined, repeatMode === MusicRepeatMode.SHUFFLE)
+		// 每次重装容器 UUID 都会变，持久化队列里的 file:// 绝对路径必然失效。
+		// 恢复时丢掉任何持久化的播放地址（url），需要时再按音源重新解析。
+		const sanitize = (item: any) => {
+			if (!item) return item
+			const { url, ...rest } = item
+			return rest
+		}
+		const cleanedQueue = restoredQueue.map(sanitize)
+		logInfo(`[jk/queue] 恢复队列 ${cleanedQueue.length} 首，已清掉持久化 url`)
+		addAll(cleanedQueue, undefined, repeatMode === MusicRepeatMode.SHUFFLE)
 	}
 	if (autoCacheLocal == true || autoCacheLocal == false) {
 		autoCacheLocalStore.setValue(autoCacheLocal)
@@ -307,6 +323,8 @@ const getFakeNextTrack = (): Track => {
 
 /** 播放失败时的情况 */
 async function failToPlay() {
+	// 每次进入失败恢复都计一次；连续 3 次由 skipToNext 的硬保护拦下
+	notePlaybackFailure('failToPlay')
 	const revision = controlRevision
 	const failedMusic = currentMusicStore.getValue()
 	const sourceToken = trackSourceLoadingStore.getValue()
@@ -544,6 +562,13 @@ const setTrackSource = (track: Track) => {
 	]
 	// Keep the complete resolved source in JS. v5 getter projections lose headers.
 	nativeQueue = { token, track, startedAt: Date.now(), handoffConsumed: false }
+	// 对照实验用：把最终交给 RNTP 的 url 完整打出来（判断是 file:// 还是 https）
+	try {
+		logInfo('[jk/play] item0 =', JSON.stringify(items[0]).slice(0, 800))
+		logInfo('[jk/play] item1 =', JSON.stringify(items[1]).slice(0, 300))
+	} catch (e) {
+		logInfo('[jk/play] item stringify failed', String((e as any)?.message ?? e))
+	}
 	ReactNativeTrackPlayer.setMediaItems(items)
 	setCurrentMusic(track as IMusic.IMusicItem)
 	PersistStatus.set('music.musicItem', track as IMusic.IMusicItem)
@@ -851,10 +876,11 @@ const setMusicApiAsSelectedById = async (musicApiId: string) => {
 		PersistStatus.set('music.selectedMusicApi', reloadedApi)
 
 		logInfo(`Music API "${reloadedApi.name}" set as selected and reloaded successfully`)
-		Alert.alert('成功', `音源 "${reloadedApi.name}" 已设置为当前选中并重新加载`)
+		// 改成非模态提示：Alert 会挡住后续所有截图与自动化操作
+		showToast('音源已切换', `${reloadedApi.name} 已设为当前音源`, 'success')
 	} catch (error) {
 		logError('Error setting music API as selected:', error)
-		Alert.alert('错误', '设置选中音源时发生错误')
+		showToast('音源切换失败', String((error as any)?.message ?? error).slice(0, 80), 'error')
 	}
 }
 
@@ -940,8 +966,12 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		// 7. Fetch lyrics in background (non-blocking)
 		fetchLyric(musicItem as any)
 			.then((lyc) => {
-				if (isCurrentMusic(musicItem) && nativeQueue?.token === appliedToken) {
+				// 歌词只跟「当前这首歌」绑定。原来的 nativeQueue.token 守卫在试听换源后
+				// 会因为队列 token 变化而永远不写入，导致播放页一直「暂无歌词」。
+				if (isCurrentMusic(musicItem)) {
 					nowLyricState.setValue(lyc.lyric)
+					// 写入后主动请求一次重建（链路 B），避免只等 progress 事件
+					void LyricManager.requestRefresh?.()
 				}
 			})
 			.catch((err) => logError('获取歌词失败:', err))
@@ -1038,6 +1068,8 @@ const playWithReplacePlayList = async (
 	musicItem: IMusic.IMusicItem,
 	newPlayList: IMusic.IMusicItem[],
 ) => {
+	// 用户主动点歌 = 一次新的尝试，清零连续失败计数
+	notePlaybackSuccess()
 	if (newPlayList.length !== 0) {
 		const now = Date.now()
 		const playListItems = newPlayList.map((item, index) => ({
@@ -1076,7 +1108,27 @@ const runWithTrackSkipLoading = async (
 	}
 }
 
+// 硬保护：连续播放失败 3 次就停止自动跳转（不受 autoSkipOnError 设置影响），
+// 否则一次失败会连锁跳几十首并把每首都下载完（实测两分钟 160MB）
+let consecutiveFailures = 0
+
+export const notePlaybackFailure = (reason?: any) => {
+	consecutiveFailures++
+	logError(`[jk/play] consecutive failures=${consecutiveFailures}`, reason)
+	return consecutiveFailures
+}
+
+export const notePlaybackSuccess = () => {
+	consecutiveFailures = 0
+}
+
 const skipToNext = async () => {
+	if (consecutiveFailures >= 3) {
+		logError('[jk/play] consecutive failures=3, stop auto skip')
+		showToast('播放连续失败，已暂停', '请检查音源或网络', 'error')
+		try { await ReactNativeTrackPlayer.pause() } catch { /* ignore */ }
+		return
+	}
 	await runWithTrackSkipLoading('next', async (operation) => {
 		if (isPlayListEmpty()) {
 			setCurrentMusic(null)
@@ -1268,6 +1320,8 @@ const myTrackPlayer = {
 	add,
 	addAsNextTrack,
 	skipToNext,
+	notePlaybackFailure,
+	notePlaybackSuccess,
 	skipToPrevious,
 	play,
 	playWithReplacePlayList,

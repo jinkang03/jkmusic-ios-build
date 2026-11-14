@@ -1,29 +1,46 @@
-import { SearchList } from '@/components/SearchList'
+import SongListView from '@/components/mac/SongListView'
+import { useAppTheme } from '@/hooks/useAppTheme'
+import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
 import { ThemeColors } from '@/constants/tokens'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import searchAll from '@/helpers/searchAll'
-import { useNavigationSearch } from '@/hooks/useNavigationSearch'
 import i18n from '@/utils/i18n'
 import debounce from 'lodash/debounce'
+import { useLocalSearchParams } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
 	Animated,
 	Dimensions,
 	Pressable,
+	ScrollView,
 	StyleSheet,
 	Text,
 	View,
+	TextInput,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import type { Track } from '@/player/types'
 
 type SearchType = 'songs' | 'artists'
 
+// 桌面版源胶囊（聚合 = 全源并行）
+const SOURCE_PILLS: Array<{ id: string, label: string }> = [
+	{ id: 'kw', label: '酷我' },
+	{ id: 'kg', label: '酷狗' },
+	{ id: 'tx', label: '企鹅' },
+	{ id: 'wy', label: '网易' },
+	{ id: 'mg', label: '咪咕' },
+	{ id: 'all', label: '聚合搜索' },
+]
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const SEGMENT_WIDTH = (SCREEN_WIDTH - 32 - 4) / 2 // 32 for padding, 4 for container padding
 
 const SearchlistsScreen = () => {
 	const colors = useThemeColors()
+	const { isDark } = useAppTheme()
+	const mac = macPalette(!!isDark)
 	const styles = useMemo(() => createStyles(colors), [colors])
 	// const router = useRouter()
 	const [searchResults, setSearchResults] = useState<Track[]>([])
@@ -32,13 +49,14 @@ const SearchlistsScreen = () => {
 	const [hasMore, setHasMore] = useState(true)
 	const searchRequestRef = useRef(0)
 	const [searchType, setSearchType] = useState<SearchType>('songs')
+	const [activeSourcePill, setActiveSourcePill] = useState<string>('all')
+	// 深链参数 ?q= 仅触发一次搜索（jkmusic://search?q=周杰伦），之后仍由搜索框驱动
+	const routeParams = useLocalSearchParams<{ q?: string }>()
+	const initialQuery = typeof routeParams.q === 'string' ? routeParams.q : ''
+	const initialQueryApplied = useRef(false)
+	const [resultsFromDeepLink, setResultsFromDeepLink] = useState<Track[]>([])
 	const slideAnim = useRef(new Animated.Value(0)).current
-	const search = useNavigationSearch({
-		searchBarOptions: {
-			placeholder: i18n.t('find.inSearch'),
-			cancelButtonText: i18n.t('find.cancel'),
-		},
-	})
+	const [search, setSearch] = useState('')
 
 	const fetchSearchResults = useCallback(
 		async (currentPage: number) => {
@@ -72,6 +90,30 @@ const SearchlistsScreen = () => {
 		},
 		[search, searchType],
 	)
+	// 深链带 query 时，直接跑一次搜索填充结果（不依赖原生搜索框的文本状态）
+	useEffect(() => {
+		if (!initialQuery || initialQueryApplied.current) return
+		initialQueryApplied.current = true
+		let cancelled = false
+		;(async() => {
+			try {
+				setIsLoading(true)
+				const { data, hasMore: moreResults } = await searchAll(initialQuery, 1, 'songs')
+				if (!cancelled) {
+					setResultsFromDeepLink(data)
+					setSearchResults(data)
+					setHasMore(moreResults)
+					setPage(1)
+				}
+			} catch (err) {
+				console.log('[search] deep link query failed', initialQuery, err)
+			} finally {
+				if (!cancelled) setIsLoading(false)
+			}
+		})()
+		return () => { cancelled = true }
+	}, [initialQuery])
+
 	const debouncedFetchSearchResults = useRef(
 		debounce((currentPage: number) => {
 			fetchSearchResults(currentPage)
@@ -118,27 +160,74 @@ const SearchlistsScreen = () => {
 	}
 
 	return (
-		<SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
+		<SafeAreaView style={[styles.safeArea, { backgroundColor: mac.bg }]} edges={['top', 'left', 'right']}>
+			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 8 }}>
+				<Text style={{ color: mac.textStrong, fontSize: macFont.display, fontWeight: '700' }}>搜索</Text>
+				{/* 自绘胶囊搜索框：高 44，左放大镜，右侧清除 */}
+				<View style={{
+					flexDirection: 'row', alignItems: 'center', gap: 8,
+					height: 44, borderRadius: macRadius.pill, backgroundColor: mac.fillSubtle,
+					paddingHorizontal: 14, marginTop: 12,
+				}}>
+					<Ionicons name="search" size={18} color={mac.textMuted} />
+					<TextInput
+						value={search}
+						onChangeText={setSearch}
+						placeholder="在线搜索歌曲或歌手"
+						placeholderTextColor={mac.textMuted}
+						returnKeyType="search"
+						style={{ flex: 1, color: mac.text, fontSize: macFont.body, padding: 0 }}
+					/>
+					{search.length > 0 ? (
+						<Pressable onPress={() => setSearch('')} hitSlop={8}>
+							<Ionicons name="close-circle" size={18} color={mac.textMuted} />
+						</Pressable>
+					) : null}
+				</View>
+			</View>
+
+			{/* 源胶囊行（桌面版：酷我/酷狗/企鹅/网易/咪咕/聚合） */}
+			<ScrollView
+				horizontal
+				showsHorizontalScrollIndicator={false}
+				style={{ flexGrow: 0, flexShrink: 0, marginTop: 10 }}
+				contentContainerStyle={{ paddingHorizontal: macSpace.pageX, gap: 8 }}
+			>
+				{SOURCE_PILLS.map(pill => {
+					const active = pill.id === activeSourcePill
+					return (
+						<Pressable
+							key={pill.id}
+							onPress={() => setActiveSourcePill(pill.id)}
+							style={{
+								paddingHorizontal: 14,
+								paddingVertical: 6,
+								borderRadius: macRadius.pill,
+								borderWidth: active ? 1 : 0.5,
+								borderColor: active ? mac.primary : mac.divider,
+								backgroundColor: active ? 'transparent' : mac.fillSubtle,
+							}}
+						>
+							<Text style={{ color: active ? mac.primary : mac.text, fontSize: macFont.caption }}>{pill.label}</Text>
+						</Pressable>
+					)
+				})}
+			</ScrollView>
+
 			<View style={styles.contentContainer}>
 				<View style={styles.segmentedControlContainer}>
 					<View style={styles.segmentedControl}>
 						<Animated.View
 							style={[
 								styles.activeSegment,
-								{
-									position: 'absolute',
-									width: SEGMENT_WIDTH,
-									transform: [{ translateX: slideAnim }],
-								},
+								{ position: 'absolute', width: SEGMENT_WIDTH, transform: [{ translateX: slideAnim }] },
 							]}
 						/>
 						<Pressable
 							style={[styles.segment, { borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }]}
 							onPress={() => handleSearchTypeChange('songs')}
 						>
-							<Text
-								style={[styles.segmentText, searchType === 'songs' && styles.activeSegmentText]}
-							>
+							<Text style={[styles.segmentText, searchType === 'songs' && styles.activeSegmentText]}>
 								{i18n.t('find.songs')}
 							</Text>
 						</Pressable>
@@ -146,20 +235,18 @@ const SearchlistsScreen = () => {
 							style={[styles.segment, { borderTopRightRadius: 8, borderBottomRightRadius: 8 }]}
 							onPress={() => handleSearchTypeChange('artists')}
 						>
-							<Text
-								style={[styles.segmentText, searchType === 'artists' && styles.activeSegmentText]}
-							>
+							<Text style={[styles.segmentText, searchType === 'artists' && styles.activeSegmentText]}>
 								{i18n.t('find.artists')}
 							</Text>
 						</Pressable>
 					</View>
 				</View>
-				<SearchList
-					tracks={searchResults}
-					id={'search'}
-					onLoadMore={handleLoadMore}
-					hasMore={hasMore}
-					isLoading={isLoading}
+
+				{/* 结果：五列 SongRow，点行播放（当前结果集作为队列） */}
+				<SongListView
+					tracks={searchResults as any}
+					queueId={`search_${searchType}`}
+					emptyText={search ? '没有搜索结果' : '输入关键词开始搜索'}
 				/>
 			</View>
 		</SafeAreaView>

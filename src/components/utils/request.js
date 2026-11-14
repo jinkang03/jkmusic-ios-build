@@ -76,13 +76,6 @@ const parseBody = (text, format) => {
   return text
 }
 
-const toRawBuffer = (text) => {
-  const bytes = new TextEncoder().encode(text)
-  const buf = Buffer.alloc(bytes.length)
-  Buffer.from(bytes).copy(buf)
-  return buf
-}
-
 /**
  * 真正发请求
  */
@@ -110,6 +103,22 @@ const fetchData = async(url, method, rawOptions, callback) => {
     const finalHeaders = await buildSignHeaders(url, { ...defaultHeaders, ...headers })
     const data = buildBody(body ?? form ?? formData, { form, formData, json: options.json })
 
+    // form 提交必须显式带 Content-Type：RN 默认按 text/plain 发，服务端不解析表单
+    // （migu 报 "resourceId与copyrightId不能同时为空" 就是这个原因）。
+    // formData 分支绝不手写 Content-Type —— 交给 fetch 自己生成带 boundary 的 multipart 头。
+    const hasContentType = Object.keys(finalHeaders).some(k => k.toLowerCase() === 'content-type')
+    if (!hasContentType) {
+      if (form) {
+        finalHeaders['Content-Type'] = 'application/x-www-form-urlencoded'
+      } else if (formData) {
+        // 交给 fetch
+      } else if (typeof data === 'string') {
+        finalHeaders['Content-Type'] = 'application/x-www-form-urlencoded'
+      } else if (data != null && options.json !== false) {
+        finalHeaders['Content-Type'] = 'application/json'
+      }
+    }
+
     timer = setTimeout(() => controller.abort(), timeout)
 
     const response = await fetch(url, {
@@ -119,16 +128,20 @@ const fetchData = async(url, method, rawOptions, callback) => {
       signal: controller.signal,
     })
 
-    const text = await response.text()
+    // 必须拿 arrayBuffer：response.text() 会按 UTF-8 解码，二进制（flac 头、加密歌词、
+    // 压缩数据）再被 TextEncoder 编码回去就已经损坏，kw 歌词解压失败就是这个原因
+    const ab = await response.arrayBuffer()
+    const bytes = new Uint8Array(ab)
+    const text = new TextDecoder('utf-8').decode(bytes)
     const parsed = parseBody(text, format)
 
     const resp = {
       statusCode: response.status,
       statusMessage: response.statusText,
       headers: Object.fromEntries(response.headers.entries?.() ?? []),
-      bytes: text.length,
+      bytes: bytes.length,
       body: parsed,
-      raw: toRawBuffer(text),
+      raw: Buffer.from(bytes),
     }
     callback(null, resp, parsed)
   } catch (err) {

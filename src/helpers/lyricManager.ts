@@ -85,6 +85,13 @@ function shouldRebuildParser(
 }
 
 // 重新获取歌词
+/** 外部可请求重建（供 trackPlayerIndex / MiniLyric 调用），不改动既有订阅逻辑 */
+function requestRefresh() {
+	refreshLyric(true, true).catch((e) => {
+		console.log(e, 'LRC_REQUEST_REFRESH')
+	})
+}
+
 async function refreshLyric(fromStart?: boolean, forceRequest = false, positionOverride?: number) {
 	const musicItem = myTrackPlayer.getCurrentMusic()
 	try {
@@ -214,6 +221,7 @@ const LyricManager = {
 	useLyricState: lyricStateStore.useValue,
 	getLyricState: lyricStateStore.getValue,
 	useCurrentLyric: currentLyricStore.useValue,
+	requestRefresh,
 	getCurrentLyric: currentLyricStore.getValue,
 	setCurrentLyric: currentLyricStore.setValue,
 	refreshLyric,

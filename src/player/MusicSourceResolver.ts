@@ -23,6 +23,23 @@ type MusicUrlRequestContext = {
 	timeoutMs: number
 }
 
+/** 音源脚本常返回 302 跳转地址，先把最终地址解析出来再交给 RNTP */
+const followRedirect = async(url: string): Promise<string> => {
+	if (!/^https?:\/\//i.test(url)) return url
+	try {
+		const res = await fetch(url, { method: 'HEAD' })
+		const finalUrl = (res as any)?.url
+		if (finalUrl && finalUrl !== url) {
+			logInfo('[jk/play] 重定向解析:', url.slice(0, 80), '→', finalUrl.slice(0, 120))
+			return finalUrl
+		}
+	} catch (err) {
+		logInfo('[jk/play] 重定向解析失败，沿用原地址', String((err as any)?.message ?? err))
+	}
+	return url
+}
+
+
 const preloadCache = new Map<string, string>()
 const CURRENT_SOURCE_REQUEST_TIMEOUT_MS = 5000
 const PRELOAD_SOURCE_REQUEST_TIMEOUT_MS = 12000
@@ -106,12 +123,28 @@ export const resolveSource = async (
 		return { url: localFile.fileUri, wasCached: false }
 	}
 
-	const cached = await isCached(musicItem)
+	const forceRemote = (globalThis as any).__JK_FORCE_REMOTE__ === true
+	const cached = forceRemote ? false : await isCached(musicItem)
 	if (cached) {
 		const localPath = getLocalFilePath(musicItem)
-		preloadCache.delete(preloadKey)
-		logInfo('使用缓存的音频路径播放:', localPath)
-		return { url: localPath, wasCached: true }
+		// 缓存记录可能指向旧容器路径（重装后 UUID 变化），或文件是半截的。
+		// 播放前校验：存在且 size > 0 才用，否则视为未缓存，回退到远程音源。
+		const uri = String(localPath).startsWith('file://') ? String(localPath) : `file://${localPath}`
+		try {
+			const FS = await import('expo-file-system/legacy')
+			const info: any = await FS.getInfoAsync(uri)
+			const size = Number(info?.size ?? 0)
+			if (info?.exists && size > 0) {
+				preloadCache.delete(preloadKey)
+				logInfo('使用缓存的音频路径播放:', uri, `size=${size}`)
+				logInfo('[jk/play] resolved url = file:', uri.slice(0, 160), `size=${size}`)
+				return { url: uri, wasCached: true }
+			}
+			logError('[jk/play] 缓存文件不可用，回退远程', uri, `exists=${info?.exists} size=${size}`)
+			await FS.deleteAsync(uri, { idempotent: true }).catch(() => undefined)
+		} catch (err) {
+			logError('[jk/play] 校验缓存失败，回退远程', String((err as any)?.message ?? err))
+		}
 	}
 
 	// 只在本地与磁盘缓存都未命中时，才复用预加载的远端音源
@@ -195,6 +228,8 @@ export const resolveSource = async (
 				return { url: fakeAudioMp3Uri, wasCached: false }
 			}
 			logInfo(`${logPrefix} 最终的音乐 URL:`, resp_url)
+			// 302 → 解析成最终地址；否则 AVPlayer 可能拿不到音频
+			resp_url = await followRedirect(resp_url as string)
 			if (isCurrentSourceRequest(requestType)) {
 				nowApiState.setValue('正常')
 			}

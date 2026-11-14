@@ -158,5 +158,7 @@ export const getMusicInfo = async(copyrightId) => {
 }
 
 export const getMusicInfos = async(copyrightIds) => {
-  return filterMusicInfoList(await Promise.all(createGetMusicInfosTask(copyrightIds)).then(data => data.flat()))
+  // createGetMusicInfosTask 已返回 Promise，外层再包 Promise.all 会抛 object is not iterable。
+  // 这里恢复与上游一致：直接 await 该 Promise 再 flat。
+  return filterMusicInfoList(await createGetMusicInfosTask(copyrightIds).then(data => data.flat()))
 }

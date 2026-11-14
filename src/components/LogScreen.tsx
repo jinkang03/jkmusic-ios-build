@@ -20,10 +20,12 @@ import {
 	View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-const LogScreen = () => {
+const LogScreen = ({ logsOverride }: { logsOverride?: any[] } = {}) => {
 	const colors = useThemeColors()
 	const styles = useMemo(() => createStyles(colors), [colors])
-	const { logs, clearLogs } = useLoggerHook()
+	const { logs: storeLogs, clearLogs } = useLoggerHook()
+	// 路由层可能已做过 clear / filter，优先用传入的列表
+	const logs = logsOverride ?? storeLogs
 	const [selectedLog, setSelectedLog] = useState<null | any>(null)
 	const fadeAnim = useRef(new Animated.Value(0)).current
 	const handleShare = async () => {
@@ -101,8 +103,10 @@ const LogScreen = () => {
 					</View>
 				</View>
 				<FlatList
-					data={logs}
-					keyExtractor={(item, index) => index.toString()}
+					// inverted：最新的日志在底部，打开就能看到（原来要手动往下滚）
+					inverted
+					data={[...logs].reverse()}
+					keyExtractor={(item, index) => `${item?.time ?? ''}-${index}`}
 					renderItem={renderItem}
 					ListEmptyComponent={<Text style={styles.emptyText}>{i18n.t('logScreen.empty')}</Text>}
 					contentContainerStyle={logs.length === 0 && styles.emptyContainer}

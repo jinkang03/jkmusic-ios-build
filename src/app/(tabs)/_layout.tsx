@@ -1,6 +1,7 @@
 import { FloatingPlayer } from '@/components/FloatingPlayer'
 import { BlurTint } from '@/constants/tokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { macPalette } from '@/constants/macTokens'
 import i18n from '@/utils/i18n'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
@@ -28,7 +29,8 @@ const TabBarBackground = ({ tint }: { tint: BlurTint }) => (
 
 const TabsNavigation = () => {
 	const { bottom } = useSafeAreaInsets()
-	const { blurTint, colors } = useAppTheme()
+	const { blurTint, colors, isDark } = useAppTheme()
+	const mac = macPalette(!!isDark)
 
 	const floatingPlayerStyle = useMemo(() => ({
 		position: 'absolute' as const,
@@ -41,8 +43,9 @@ const TabsNavigation = () => {
 		<>
 			<Tabs
 				screenOptions={{
-					tabBarActiveTintColor: colors.primary,
-					tabBarInactiveTintColor: colors.textMuted,
+					// 选中色以 macTokens 为准（spec: #E240F7），不再取主题的 colors.primary
+					tabBarActiveTintColor: mac.primary,
+					tabBarInactiveTintColor: mac.textMuted,
 					tabBarLabelStyle: {
 						fontSize: 11,
 						fontWeight: '500',
@@ -59,61 +62,70 @@ const TabsNavigation = () => {
 					tabBarBackground: () => <TabBarBackground tint={blurTint} />,
 				}}
 			>
+				{/* 顺序严格照桌面版：搜索 / 歌单 / 排行榜 / 我的列表 / 下载 / 设置 */}
 				<Tabs.Screen
-					name="(songs)"
+					name="search"
 					options={{
-						title: i18n.t('appTab.songs'),
+						headerShown: false,
+						title: '搜索',
 						tabBarIcon: ({ color, focused }) => (
-							<Ionicons name={focused ? 'musical-notes' : 'musical-notes-outline'} size={24} color={color} />
-						),
-					}}
-				/>
-				<Tabs.Screen
-					name="radio"
-					options={{
-						href: null,
-						title: i18n.t('appTab.radio'),
-						tabBarIcon: ({ color, focused }) => (
-							<Ionicons name={focused ? 'radio' : 'radio-outline'} size={24} color={color} />
-						),
-					}}
-				/>
-				<Tabs.Screen
-					name="favorites"
-					options={{
-						title: i18n.t('appTab.favorites'),
-						tabBarIcon: ({ color, focused }) => (
-							<Ionicons name={focused ? 'heart' : 'heart-outline'} size={24} color={color} />
+							<Ionicons name={focused ? 'search' : 'search-outline'} size={22} color={color} />
 						),
 					}}
 				/>
 				<Tabs.Screen
 					name="songlist"
 					options={{
-						title: i18n.t('appTab.playlists'),
+						headerShown: false,
+						title: '歌单',
 						tabBarIcon: ({ color, focused }) => (
-							<Ionicons name={focused ? 'albums' : 'albums-outline'} size={24} color={color} />
+							<Ionicons name={focused ? 'albums' : 'albums-outline'} size={22} color={color} />
 						),
 					}}
 				/>
 				<Tabs.Screen
 					name="leaderboard"
 					options={{
-						title: i18n.t('appTab.leaderboard'),
+						headerShown: false,
+						title: '排行榜',
 						tabBarIcon: ({ color, focused }) => (
-							<Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={24} color={color} />
+							<Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={22} color={color} />
 						),
 					}}
 				/>
 				<Tabs.Screen
-					name="search"
+					name="favorites"
 					options={{
-						title: i18n.t('appTab.search'),
+						headerShown: false,
+						title: '我的列表',
 						tabBarIcon: ({ color, focused }) => (
-							<Ionicons name={focused ? 'search' : 'search-outline'} size={24} color={color} />
+							<Ionicons name={focused ? 'heart' : 'heart-outline'} size={22} color={color} />
 						),
 					}}
 				/>
+				<Tabs.Screen
+					name="downloads"
+					options={{
+						headerShown: false,
+						title: '下载',
+						tabBarIcon: ({ color, focused }) => (
+							<Ionicons name={focused ? 'download' : 'download-outline'} size={22} color={color} />
+						),
+					}}
+				/>
+				<Tabs.Screen
+					name="settings"
+					options={{
+						headerShown: false,
+						title: '设置',
+						tabBarIcon: ({ color, focused }) => (
+							<Ionicons name={focused ? 'settings' : 'settings-outline'} size={22} color={color} />
+						),
+					}}
+				/>
+				{/* 桌面版没有「音乐」首页与电台，隐藏但保留路由，避免深链失效 */}
+				<Tabs.Screen name="(songs)" options={{ href: null }} />
+				<Tabs.Screen name="radio" options={{ href: null }} />
 			</Tabs>
 
 			<FloatingPlayer style={floatingPlayerStyle} />

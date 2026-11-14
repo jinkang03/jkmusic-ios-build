@@ -1,21 +1,27 @@
 /**
  * 歌单详情：分页拉取歌曲。
  */
-import { TracksList } from '@/components/TracksList'
+import SongListView from '@/components/mac/SongListView'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { jkToTrack } from '@/jk/adapt'
 import { getSongListDetail } from '@/jk/musicSdk'
 import type { JKSource } from '@/jk/musicSdk'
 import { useLocalSearchParams } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import myTrackPlayer from '@/helpers/trackPlayerIndex'
+import { logInfo } from '@/helpers/logger'
+import React, { useEffect, useState, useRef } from 'react'
 import { ActivityIndicator, View } from 'react-native'
 import type { Track } from '@/player/types'
 
 const SongListDetailScreen = () => {
 	const { colors } = useAppTheme()
-	const params = useLocalSearchParams<{ id: string, source?: string }>()
+	const params = useLocalSearchParams<{ id: string, source?: string, play?: string, index?: string }>()
 	const source = (params.source ?? 'kw') as JKSource
 	const [tracks, setTracks] = useState<Track[]>([])
+
+	const autoPlayIndex = String(params.play ?? '') === '1'
+		? Math.max(0, Number(params.index ?? 0) || 0)
+		: undefined
 	const [loading, setLoading] = useState(true)
 
 	useEffect(() => {
@@ -47,7 +53,7 @@ const SongListDetailScreen = () => {
 
 	return (
 		<View style={{ flex: 1, backgroundColor: colors.background }}>
-			<TracksList id={`songlist_${source}_${params.id}`} tracks={tracks} />
+			<SongListView tracks={tracks} queueId={`songlist_${source}_${params.id}`} autoPlayIndex={autoPlayIndex} />
 		</View>
 	)
 }

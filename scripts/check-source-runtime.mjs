@@ -53,7 +53,7 @@ try {
 		'-I', nativeRoot, path.join(nativeRoot, 'CyMusicUserApiRuntime.m'), path.join(root, 'scripts/check-source-runtime.m'),
 		'-framework', 'Foundation', '-framework', 'JavaScriptCore', '-framework', 'Security', '-o', binary,
 	], { stdio: 'inherit' })
-	execFileSync(binary, [path.join(root, 'ios/CyMusic/user-api-preload.js'), fixture], { stdio: 'inherit', timeout: 15000 })
+	execFileSync(binary, [path.join(root, 'src/helpers/userApi/user-api-preload.js'), fixture], { stdio: 'inherit', timeout: 15000 })
 } catch (error) {
 	if (typeof error.status === 'number') process.exitCode = error.status
 	else throw error

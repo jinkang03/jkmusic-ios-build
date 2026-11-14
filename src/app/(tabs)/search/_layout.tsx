@@ -14,9 +14,8 @@ const PlaylistsScreenLayout = () => {
 				<Stack.Screen
 					name="index"
 					options={{
-						...getStackScreenWithSearchBar(colors),
-						headerTransparent: false,
-						headerTitle: i18n.t('appTab.search'),
+						// 搜索页用页面内自绘搜索框，关掉原生 header，避免出现两个「搜索」
+						headerShown: false,
 					}}
 				/>
 

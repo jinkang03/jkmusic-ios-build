@@ -13,15 +13,18 @@ const parseInterval = (interval?: string | null): number => {
 
 export const jkToTrack = (music: JKMusic): Track => {
 	const meta: any = music.meta ?? {}
+	// songmid 必须来自 meta：kw 的 id 是数字 rid、kg 是 hash、mg 是 copyrightId，
+	// 而脚本要的是原始 songmid；取不到会退化成 15 秒试听片段
+	const sm = String(meta?.songmid ?? music.id ?? '')
 	return {
-		id: music.id,
+		id: sm,
 		platform: music.source,
 		title: music.name,
 		artist: music.singer,
 		album: meta.albumName ?? '',
 		artwork: meta.picUrl ?? '',
 		duration: parseInterval(music.interval),
-		songmid: music.id,
+		songmid: sm,
 		// 保留原始条目，取播放地址时直接复用
 		lxMusic: music,
 	} as Track

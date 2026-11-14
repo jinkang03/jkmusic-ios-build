@@ -52,10 +52,17 @@ export const downloadToCache = async (musicItem: IMusic.IMusicItem): Promise<str
 	try {
 		await ensureCacheDirExists()
 		const localPath = getLocalFilePath(musicItem)
-		await downloadFile(musicItem.url, getCacheFileUri(localPath), (res) => {
+		// 原子写：先下到 .part，完成后再 rename 成目标文件，
+		// 避免播放器读到写了一半的文件（会报 "The operation could not be completed"）
+		const finalUri = getCacheFileUri(localPath)
+		const partUri = `${finalUri}.part`
+		try { await FileSystem.deleteAsync(partUri, { idempotent: true }) } catch { /* ignore */ }
+		await downloadFile(musicItem.url, partUri, (res) => {
 			const progress = res.bytesWritten / res.contentLength
 			logInfo(`下载进度: ${(progress * 100).toFixed(2)}%`)
 		})
+		try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
+		await FileSystem.moveAsync({ from: partUri, to: finalUri })
 		logInfo('音频文件已缓存到本地:', localPath)
 		return localPath
 	} catch (error) {
