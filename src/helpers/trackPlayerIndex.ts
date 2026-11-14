@@ -1070,6 +1070,8 @@ const playWithReplacePlayList = async (
 ) => {
 	// 用户主动点歌 = 一次新的尝试，清零连续失败计数
 	notePlaybackSuccess()
+	// 作废进行中的预取
+	void import('@/player/prefetch').then(m => m.bumpPrefetchGeneration()).catch(() => undefined)
 	if (newPlayList.length !== 0) {
 		const now = Date.now()
 		const playListItems = newPlayList.map((item, index) => ({
