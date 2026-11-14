@@ -10,6 +10,9 @@ import { ShowPlayerListToggle } from '@/components/ShowPlayerListToggle'
 import { unknownTrackImageUri } from '@/constants/images'
 import { macPalette } from '@/constants/macTokens'
 import { bufferingStore } from '@/player/PlayerStore'
+import { nowLyricState } from '@/helpers/trackPlayerIndex'
+import { fetchLyric } from '@/jk/lyric'
+import { logError, logInfo } from '@/helpers/logger'
 import { useSetting } from '@/jk/settingsStore'
 import { ThemeColors, fontSize, screenPadding } from '@/constants/tokens'
 import LyricManager from '@/helpers/lyricManager'
@@ -158,12 +161,42 @@ const PlayerScreenContent = () => {
 		}
 	}, [currentActiveTrack])
 
+	const lastLyricKeyRef = React.useRef<string>('')
 	const trackToDisplay = currentActiveTrack ?? prevTrackRef.current
 
 	const mac = macPalette(!!useAppTheme().isDark)
 	const artworkUri = trackToDisplay?.artwork || unknownTrackImageUri
 	// 试听检测：音频实际时长明显短于曲目声明时长 → 判定试听并尝试换源
 	const buffering = bufferingStore.useValue()
+	// 统一歌词抓取：只要当前曲目变化就尝试，覆盖 playnow / 缓存命中 / 详情页点歌所有路径
+	React.useEffect(() => {
+		const t: any = currentActiveTrack
+		if (!t) return
+		const key = `${t.platform ?? ''}:${t.id ?? ''}`
+		if (!key || key === lastLyricKeyRef.current) return
+		lastLyricKeyRef.current = key
+		const timer = setTimeout(() => {
+			const raw = String(nowLyricState.getValue() ?? '')
+			if (raw && raw.length > 20) {
+				logInfo('[lyric] skip（已有歌词）', raw.length)
+				return
+			}
+			logInfo('[lyric] fetch start', String(t.title ?? ''))
+			void fetchLyric(t as any)
+				.then((res: any) => {
+					const lyric = String(res?.lyric ?? '')
+					if (lyric) {
+						nowLyricState.setValue(lyric)
+						LyricManager.requestRefresh?.()
+						logInfo('[lyric] fetch ok len=' + lyric.length)
+					} else {
+						logError('[lyric] fetch empty', String(t.title ?? ''))
+					}
+				})
+				.catch((err: any) => logError('[lyric] fetch failed', String(err?.message ?? err)))
+		}, 300)
+		return () => clearTimeout(timer)
+	}, [currentActiveTrack?.id, currentActiveTrack?.platform])
 	const [bgBlur] = useSetting('playDetail.bgBlur', 0.6)
 	const [bgOpacity] = useSetting('playDetail.bgOpacity', 0.5)
 	const [zoomActive] = useSetting('playDetail.isZoomActiveLrc', true)

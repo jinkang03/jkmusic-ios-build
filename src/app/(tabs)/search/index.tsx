@@ -1,6 +1,6 @@
 import SongListView from '@/components/mac/SongListView'
 import { useAppTheme } from '@/hooks/useAppTheme'
-import { useSetting } from '@/jk/settingsStore'
+import { getSetting, setSetting, useSetting } from '@/jk/settingsStore'
 import { logInfo } from '@/helpers/logger'
 import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
 import { ThemeColors } from '@/constants/tokens'
@@ -8,7 +8,7 @@ import { useThemeColors } from '@/hooks/useAppTheme'
 import searchAll from '@/helpers/searchAll'
 import i18n from '@/utils/i18n'
 import debounce from 'lodash/debounce'
-import { useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -57,7 +57,7 @@ const SearchlistsScreen = () => {
 	const [autoFocus] = useSetting('search.isFocusSearchBox', false)
 	const [autoClearInput] = useSetting('odc.isAutoClearSearchInput', false)
 	const [autoClearList] = useSetting('odc.isAutoClearSearchList', false)
-	const [history, setHistory] = useState<string[]>([])
+	const [history, setHistory] = useState<string[]>(() => { const raw = getSetting<any>('search.history', []); return Array.isArray(raw) ? raw : [] })
 	// 深链参数 ?q= 仅触发一次搜索（jkmusic://search?q=周杰伦），之后仍由搜索框驱动
 	const routeParams = useLocalSearchParams<{ q?: string }>()
 	const initialQuery = typeof routeParams.q === 'string' ? routeParams.q : ''
@@ -158,17 +158,21 @@ const SearchlistsScreen = () => {
 
 	const rememberHistory = (kw: string) => {
 		if (!kw.trim()) return
-		setHistory(prev => [kw, ...prev.filter(h => h !== kw)].slice(0, 10))
+		setHistory(prev => {
+			const next = [kw, ...prev.filter(h => h !== kw)].slice(0, 20)
+			setSetting('search.history', next)
+			return next
+		})
 	}
 
-	React.useEffect(() => {
+	// 失去焦点（切 tab）时按开关清理——tab 页不会卸载，useEffect cleanup 永远不跑
+	useFocusEffect(React.useCallback(() => {
 		return () => {
-			logInfo(`[search] autoclear input=${autoClearInput} list=${autoClearList}`)
+			logInfo(`[search] blur autoclear input=${autoClearInput} list=${autoClearList}`)
 			if (autoClearInput) setSearch('')
 			if (autoClearList) setSearchResults([])
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [autoClearInput, autoClearList])
+	}, [autoClearInput, autoClearList]))
 
 	const handleSearchTypeChange = (type: SearchType) => {
 		const toValue = type === 'songs' ? 0 : SEGMENT_WIDTH
@@ -264,6 +268,40 @@ const SearchlistsScreen = () => {
 						</Pressable>
 					</View>
 				</View>
+
+				{(showHot || showHistory) && !search ? (
+					<View style={{ marginHorizontal: macSpace.pageX, marginTop: 12, borderRadius: macRadius.card, backgroundColor: mac.fillSubtle, padding: 14 }}>
+						{showHot ? (
+							<View style={{ marginBottom: showHistory ? 14 : 0 }}>
+								<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600', marginBottom: 8 }}>热门搜索</Text>
+								<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>暂无热门搜索</Text>
+							</View>
+						) : null}
+						{showHistory ? (
+							<View>
+								<View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+									<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600' }}>历史搜索</Text>
+									{history.length > 0 ? (
+										<Pressable onPress={() => setHistory([])} hitSlop={8}>
+											<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>清空</Text>
+										</Pressable>
+									) : null}
+								</View>
+								{history.length === 0 ? (
+									<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>暂无历史</Text>
+								) : (
+									<View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+										{history.map(h => (
+											<Pressable key={h} onPress={() => setSearch(h)} style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: macRadius.pill, borderWidth: 0.5, borderColor: mac.divider }}>
+												<Text style={{ color: mac.text, fontSize: macFont.caption }}>{h}</Text>
+											</Pressable>
+										))}
+									</View>
+								)}
+							</View>
+						) : null}
+					</View>
+				) : null}
 
 				{/* 结果：五列 SongRow，点行播放（当前结果集作为队列） */}
 				<SongListView
