@@ -1,4 +1,69 @@
-# JKMUSIC iOS 未签名 IPA（交付说明）
+# JKMUSIC iOS 未签名 IPA（1.0.0）
+
+## 产物
+
+| 项 | 值 |
+|---|---|
+| 路径 | `artifacts/ipa/JKMUSIC-1.0.0-unsigned.ipa` |
+| 大小 | 17 MB |
+| sha256 | `201678941b3b4f759c7c59f44dbd0e44bb1bdf4277f5c3b2d69c153a95f71bc6` |
+| 构建日期 | 2026-11-14 |
+| commit | `ae43e2a` |
+| 版本 | CFBundleShortVersionString **1.0.0** / CFBundleVersion 1 |
+| bundle id | com.jkmusic.ios |
+| 架构 | arm64 |
+| 最低系统 | iOS 16.4 |
+
+## 十条断言（实测输出）
+
+```
+a) CFBundleShortVersionString = 1.0.0
+b) CFBundleVersion            = 1
+c) CFBundleIdentifier         = com.jkmusic.ios
+d) lipo -info                 = architecture: arm64
+e) LC_BUILD_VERSION           = platform 2 (iOS), minos 16.4
+f) main.jsbundle              = 5.9M
+g) user-api-preload.js        = 21K
+h) AppIcon60x60@2x.png sha256 = 73685eba9bde5f48ca3bf74926139a40fe9fb76a7e8732bb9b5a25f3a0820750
+i) grep "setdev|playnow"      = 0
+j) codesign -dv               = code object is not signed at all
+```
+
+## 构建过程（两次）
+
+1. 全量：`rm -rf .build/dd-device` → 1690 编译步骤、0 error、`BUILD SUCCEEDED`
+2. 增量（修正版本号来源）：保留 dd-device → `BUILD SUCCEEDED`、0 error
+
+版本号有两个来源，第一次构建后仍是 1.2.0：
+- `ios/JKMUSIC/Info.plist` 里硬编码了 `1.2.0` → 改为 `$(MARKETING_VERSION)`
+- `project.pbxproj` 里另有两处 `MARKETING_VERSION = 1.2.0` → 改为 `1.0.0`
+
+## 已知限制
+
+1. iOS 27 真机未验证（本机最高 iOS 26.3 模拟器 / 26.2 SDK）
+2. 首次播放需 2-4 秒（先下载后播放；本环境 AVPlayer 不加载网络流）
+3. 部分曲目受上游版权限制只能试听，会自动换源
+4. 桌面专属设置（桌面歌词/快捷键/托盘/窗口尺寸）仅保存不生效
+5. 下载页、五个设置分区、全量回归在本轮未做运行时验证
+
+## 安装方式
+
+未签名 IPA 不能直接安装：
+- Sideloadly / AltStore / SideStore（Apple ID 重签，免费账号 7 天）
+- TrollStore（限特定系统版本）
+- Xcode → Devices and Simulators 拖入 .app
+
+## 回滚
+
+```bash
+npx patch-package --reverse
+git checkout -- node_modules/@rntp/player ios/Podfile ios/Podfile.properties.json
+cd ios && pod install
+```
+
+## 工程约定（新增）
+
+- git 索引锁：`rm -f .git/index.lock`；不要用 `git add -A`（大目录会卡死并写坏索引），用路径逐个 add
 
 ## 1. 产物
 
