@@ -119,8 +119,9 @@ export const resolveSource = async (
 	// 否则命中分支 return 后日志永远看不到（P57 的教训）
 	try {
 		const { getSetting: getNet } = await import('@/jk/settingsStore')
-		const configured = Number(getNet('_ios.requestTimeoutMs', 15000)) || 15000
-		const effTimeout = Math.min(getSourceRequestTimeoutMs(requestType), configured)
+		const configured = Number(getNet('_ios.requestTimeoutMs', 0)) || 0
+		// 内置值只作兜底，不再作为上限（P58 发现设置被 min 钳在 5000）
+		const effTimeout = configured > 0 ? configured : getSourceRequestTimeoutMs(requestType)
 		const key = `${requestType}:${effTimeout}`
 		if (!loggedTimeoutKeys.has(key)) {
 			loggedTimeoutKeys.add(key)

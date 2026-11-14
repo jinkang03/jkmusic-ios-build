@@ -8,7 +8,7 @@ import { useThemeColors } from '@/hooks/useAppTheme'
 import searchAll from '@/helpers/searchAll'
 import i18n from '@/utils/i18n'
 import debounce from 'lodash/debounce'
-import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams, useSegments } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
