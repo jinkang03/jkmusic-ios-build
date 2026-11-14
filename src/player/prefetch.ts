@@ -6,6 +6,8 @@
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { isCached, downloadToCache } from './CacheManager'
 import { logError, logInfo } from '@/helpers/logger'
+import { withLimit, getActive } from '@/jk/limiter'
+import { getSetting } from '@/jk/settingsStore'
 
 let prefetching = false
 let lastPrefetchedKey = ''
@@ -30,7 +32,11 @@ export const prefetchNext = async() => {
 		logInfo('[prefetch] 预取下一首:', next.title)
 		// 需要有 url 才能下载；没有就跳过（切歌时再按正常流程解析）
 		if (next.url && next.url !== 'Unknown') {
-			await downloadToCache(next).catch(err => logError('[prefetch] 失败', String((err as any)?.message ?? err)))
+			const limit = Math.max(1, Number(getSetting('download.maxDownloadNum', 3)) || 3)
+			logInfo(`[limit] start limit=${limit} active=${getActive()}`)
+			await withLimit(limit, () => downloadToCache(next))
+				.catch(err => logError('[prefetch] 失败', String((err as any)?.message ?? err)))
+			logInfo(`[limit] done active=${getActive()}`)
 			logInfo('[prefetch] 完成:', next.title)
 		}
 	} catch (err) {

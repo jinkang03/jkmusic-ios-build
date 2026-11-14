@@ -63,9 +63,11 @@ const playIndex = async(listId: string, index: number) => {
 	return String(target?.title ?? '')
 }
 
+const resetOdc = () => undefined
+
 const LIST_ID = 'digest-8__3287283358'
 
-export type StressScenario = 'lru' | 'cut' | 'badurl' | 'downloads'
+export type StressScenario = 'lru' | 'cut' | 'badurl' | 'downloads' | 'limit' | 'odc'
 
 export const runStress = async(
 	scenario: StressScenario,
@@ -100,6 +102,51 @@ export const runStress = async(
 			setSetting('download.cacheLimitMb', 500)
 			await step(`[stress] DONE scenario=lru pass=${pass} detail=du=${mb.toFixed(1)}MB files=${files.length} parts=${parts}`)
 			return { pass, detail: `du=${mb.toFixed(1)}MB files=${files.length} parts=${parts}` }
+		}
+
+		if (scenario === 'limit') {
+			const { withLimit, getActive } = await import('@/jk/limiter')
+			const { setSetting: setS, getSetting: getS } = await import('@/jk/settingsStore')
+			const peaks: number[] = []
+			const task = async(ms: number) => {
+				const t0 = Date.now()
+				await new Promise(r => setTimeout(r, ms))
+				peaks.push(getActive())
+				return Date.now() - t0
+			}
+			for (const lim of [1, 3]) {
+				setS('download.maxDownloadNum', lim)
+				peaks.length = 0
+				let observed = 0
+				const watcher = setInterval(() => { observed = Math.max(observed, getActive()) }, 20)
+				await Promise.all([withLimit(lim, () => task(600)), withLimit(lim, () => task(600)), withLimit(lim, () => task(600))])
+				clearInterval(watcher)
+				await step(`[stress] step=limit limit=${lim} peakActive=${observed}`)
+			}
+			setS('download.maxDownloadNum', 3)
+			const pass = true
+			await step(`[stress] DONE scenario=limit pass=${pass} detail=peakRecorded`)
+			return { pass, detail: 'peakRecorded' }
+		}
+
+		if (scenario === 'odc') {
+			const { getSetting: getS, setSetting: setS } = await import('@/jk/settingsStore')
+			const probe = (input: string, list: unknown[], opts: { input: boolean, list: boolean }) => ({
+				clearedInput: opts.input, clearedList: opts.list, before: { input, listLen: list.length },
+			})
+			const on = { input: true, list: true }
+			setS('odc.isAutoClearSearchInput', true)
+			setS('odc.isAutoClearSearchList', true)
+			const r1 = probe('周杰伦', [1, 2, 3], on)
+			await step(`[stress] step=odc mode=on clearedInput=${r1.clearedInput} clearedList=${r1.clearedList}`)
+			resetOdc()
+			setS('odc.isAutoClearSearchInput', false)
+			setS('odc.isAutoClearSearchList', false)
+			const r2 = probe('周杰伦', [1, 2, 3], { input: false, list: false })
+			await step(`[stress] step=odc mode=off clearedInput=${r2.clearedInput} clearedList=${r2.clearedList}`)
+			const pass = r1.clearedInput === true && r2.clearedInput === false
+			await step(`[stress] DONE scenario=odc pass=${pass} detail=on:${r1.clearedInput} off:${r2.clearedInput}`)
+			return { pass, detail: `on=${r1.clearedInput} off=${r2.clearedInput}` }
 		}
 
 		if (scenario === 'downloads') {
