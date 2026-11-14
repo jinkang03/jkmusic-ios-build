@@ -52,7 +52,9 @@ const DownloadsScreen = () => {
 					if (!st?.exists || st.isDirectory) continue
 					const size = Number(st.size ?? 0)
 					sum += size
-					list.push({ name, uri, size, mtime: Number(st.modificationTime ?? 0) })
+					const mt = Number(st.modificationTime ?? 0)
+					// RN 返回秒级时间戳，new Date() 需要毫秒
+					list.push({ name, uri, size, mtime: mt > 1e12 ? mt : mt * 1000 })
 				} catch { /* 单个文件失败忽略 */ }
 			}
 			list.sort((a, b) => b.mtime - a.mtime)
@@ -69,6 +71,24 @@ const DownloadsScreen = () => {
 	}, [cacheDir])
 
 	useEffect(() => { void load() }, [load])
+
+	const playLocal = async(item: CacheItem) => {
+		try {
+			const tp = (await import('@/helpers/trackPlayerIndex')).default as any
+			const track: any = {
+				id: item.name.replace(/\.[^.]+$/, ''),
+				platform: 'local',
+				title: item.name.replace(/\.[^.]+$/, ''),
+				artist: '本地缓存',
+				duration: 0,
+				url: item.uri.startsWith('file://') ? item.uri : `file://${item.uri}`,
+			}
+			logInfo('[downloads] 试听本地文件', track.url)
+			await tp.playWithReplacePlayList(track, [track])
+		} catch (err) {
+			logError('[downloads] 试听失败', String((err as any)?.message ?? err))
+		}
+	}
 
 	const removeOne = async(uri: string) => {
 		try {
@@ -142,6 +162,9 @@ const DownloadsScreen = () => {
 									{(item.size / 1024 / 1024).toFixed(1)}MB · {quality} · {new Date(item.mtime).toLocaleDateString()}
 								</Text>
 							</View>
+							<Pressable onPress={() => playLocal(item)} hitSlop={8} style={{ paddingHorizontal: 8 }}>
+								<Text style={{ color: c.primary, fontSize: macFont.caption }}>试听</Text>
+							</Pressable>
 							<Pressable onPress={() => removeOne(item.uri)} hitSlop={8} style={{ paddingHorizontal: 8 }}>
 								<Text style={{ color: c.danger, fontSize: macFont.caption }}>删除</Text>
 							</Pressable>
