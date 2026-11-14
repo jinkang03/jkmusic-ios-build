@@ -57,6 +57,7 @@ const SearchlistsScreen = () => {
 	const [autoFocus] = useSetting('search.isFocusSearchBox', false)
 	const [autoClearInput] = useSetting('odc.isAutoClearSearchInput', false)
 	const [autoClearList] = useSetting('odc.isAutoClearSearchList', false)
+	const [hotWords, setHotWords] = useState<string[]>([])
 	const [history, setHistory] = useState<string[]>(() => { const raw = getSetting<any>('search.history', []); return Array.isArray(raw) ? raw : [] })
 	// 深链参数 ?q= 仅触发一次搜索（jkmusic://search?q=周杰伦），之后仍由搜索框驱动
 	const routeParams = useLocalSearchParams<{ q?: string }>()
@@ -155,6 +156,20 @@ const SearchlistsScreen = () => {
 			fetchSearchResults(page + 1)
 		}
 	}, [isLoading, hasMore, page, fetchSearchResults, search])
+
+	React.useEffect(() => {
+		let cancelled = false
+		void (async() => {
+			try {
+				const { getHotSearch } = await import('@/jk/musicSdk')
+				const words = await getHotSearch()
+				if (!cancelled) setHotWords(words)
+			} catch (err) {
+				logInfo('[search] 热搜失败', String((err as any)?.message ?? err))
+			}
+		})()
+		return () => { cancelled = true }
+	}, [])
 
 	const rememberHistory = (kw: string) => {
 		if (!kw.trim()) return
@@ -274,7 +289,17 @@ const SearchlistsScreen = () => {
 						{showHot ? (
 							<View style={{ marginBottom: showHistory ? 14 : 0 }}>
 								<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600', marginBottom: 8 }}>热门搜索</Text>
-								<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>暂无热门搜索</Text>
+								{hotWords.length === 0 ? (
+									<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>暂无热门搜索</Text>
+								) : (
+									<View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+										{hotWords.map(w => (
+											<Pressable key={w} onPress={() => setSearch(w)} style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: macRadius.pill, borderWidth: 0.5, borderColor: mac.divider }}>
+												<Text style={{ color: mac.text, fontSize: macFont.caption }}>{w}</Text>
+											</Pressable>
+										))}
+									</View>
+								)}
 							</View>
 						) : null}
 						{showHistory ? (

@@ -108,6 +108,60 @@ const ListSection = () => {
 	)
 }
 
+const OtherSection = () => {
+	const { isDark } = useAppTheme()
+	const c = macPalette(!!isDark)
+	const insets = useSafeAreaInsets()
+	const router = useRouter()
+	const [confirm, setConfirm] = React.useState(false)
+	const [status, setStatus] = React.useState('')
+	const version = '1.0.0'
+	const build = '1'
+
+	const wipeAll = async() => {
+		try {
+			const FS = await import('expo-file-system/legacy')
+			const cm = await import('@/player/CacheManager')
+			await cm.clearCache()
+			await FS.deleteAsync(`${FS.documentDirectory}mmkv`, { idempotent: true }).catch(() => undefined)
+			setStatus('已清空缓存与设置，请手动重启 App 生效')
+		} catch (err: any) {
+			setStatus(`清空失败：${err?.message ?? err}`)
+		}
+		setConfirm(false)
+	}
+
+	return (
+		<>
+			<SettingRow label="App 版本"><Text style={{ color: c.textMuted, fontSize: macFont.body }}>{version} ({build})</Text></SettingRow>
+			<SettingRow label="播放引擎"><Text style={{ color: c.textMuted, fontSize: macFont.body }}>RNTP + JSC</Text></SettingRow>
+			<SettingRow label="查看日志">
+				<Pressable onPress={() => router.push('/logScreen' as any)}>
+					<Text style={{ color: c.primary, fontSize: macFont.body }}>打开 ›</Text>
+				</Pressable>
+			</SettingRow>
+			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 16 }}>
+				<Pressable onPress={() => setConfirm(true)} style={({ pressed }) => ({ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+					<Text style={{ color: c.danger, fontSize: macFont.body }}>清空所有数据</Text>
+				</Pressable>
+				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
+			</View>
+			{confirm ? (
+				<View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+					<View style={{ backgroundColor: c.bg, borderRadius: 12, padding: 20, width: '100%' }}>
+						<Text style={{ color: c.textStrong, fontSize: macFont.body, marginBottom: 8 }}>确认清空所有数据？</Text>
+						<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginBottom: 16 }}>将删除缓存与全部设置，不可撤销。</Text>
+						<View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
+							<Pressable onPress={() => setConfirm(false)}><Text style={{ color: c.textMuted, fontSize: macFont.body }}>取消</Text></Pressable>
+							<Pressable onPress={wipeAll}><Text style={{ color: c.danger, fontSize: macFont.body }}>确认清空</Text></Pressable>
+						</View>
+					</View>
+				</View>
+			) : null}
+		</>
+	)
+}
+
 const SearchSection = () => {
 	const [hot, setHot] = useSetting('search.isShowHotSearch', true)
 	const [history, setHistory] = useSetting('search.isShowHistorySearch', true)
@@ -468,6 +522,7 @@ const SettingsSectionScreen = () => {
 		if (section === 'detail') return <PlayDetailSection />
 		if (section === 'search') return <SearchSection />
 		if (section === 'ocd') return <OdcSection />
+		if (section === 'other') return <OtherSection />
 		return null
 	})()
 

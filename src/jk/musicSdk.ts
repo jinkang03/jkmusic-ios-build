@@ -1,3 +1,4 @@
+import { logInfo, logError } from '@/helpers/logger'
 // 确保 Buffer / TextEncoder 在任何 musicSdk 模块求值前就绪
 import '@/shims/globalPolyfills'
 /**
@@ -233,6 +234,31 @@ export const getLyric = async(music: JKMusic) => {
 	const req: any = mod.getLyric(target, true)
 	const res = req && typeof req.then === 'function' ? await req : await (req?.promise ?? req)
 	return res
+}
+
+/**
+ * 热门搜索（包装 kw 的 hotSearch 导出，不改 SDK 内部实现）
+ * 30 分钟内存缓存
+ */
+let hotSearchCache: { at: number, words: string[] } | null = null
+export const getHotSearch = async(): Promise<string[]> => {
+	const now = Date.now()
+	if (hotSearchCache && now - hotSearchCache.at < 30 * 60 * 1000) return hotSearchCache.words
+	try {
+		const mod: any = (musicSdk as any).kw
+		let list: any[] = []
+		if (mod?.hotSearch?.getList) {
+			const res: any = await mod.hotSearch.getList()
+			list = res?.list ?? []
+		}
+		const words = list.map((x: any) => (typeof x === 'string' ? x : x?.name ?? '')).filter(Boolean).slice(0, 12)
+		hotSearchCache = { at: now, words }
+		logInfo('[hotsearch] ok count=' + words.length)
+		return words
+	} catch (err) {
+		logError('[hotsearch] failed', String((err as any)?.message ?? err))
+		return []
+	}
 }
 
 export default {
