@@ -66,5 +66,18 @@ target 'JKMUSIC' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    # 本机 Xcode 26.3 的 Swift 编译器比 expo-modules-jsi 要求的更旧，
+    # 该库在 -swift-version 6 下会因严格并发检查报错。
+    # 对这两个 pod 降级为 Swift 5 + minimal 并发检查。
+    installer.pods_project.targets.each do |t|
+      if t.name.include?('ExpoModulesJSI') || t.name.start_with?('expo-modules-jsi') || t.name.start_with?('ExpoModules') || t.name.include?('expo-modules-core')
+        t.build_configurations.each do |c|
+          c.build_settings['SWIFT_VERSION'] = '5.0'
+          c.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+          c.build_settings['SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY'] = 'NO'
+        end
+      end
+    end
   end
 end

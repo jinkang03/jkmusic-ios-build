@@ -56,3 +56,7 @@ ios/build/
 ios/build-pods/
 ios/obj-pods/
 ios/Pods/
+
+# Ruby bundle
+vendor/bundle/
+.build/
