@@ -121,6 +121,16 @@ export const runStress = async(
 
 		setSetting('_dev.forceBadUrl', true)
 		try {
+			// 先删掉 index=0 的缓存，确保这次一定走「解析 + 下载」分支，而不是缓存命中
+			const res0: any = await getSongListDetail('kw' as any, LIST_ID, 1)
+			const firstId = String(res0?.list?.[0]?.id ?? '')
+			const purgeName = `kw_${firstId}.mp3`
+			let deleted = false
+			try {
+				await FS.deleteAsync(`${CACHE_DIR}${purgeName}`, { idempotent: true })
+				deleted = true
+			} catch { /* ignore */ }
+			await step(`[stress] step=purge cache=${purgeName} deleted=${deleted}`)
 			const files0 = await cacheFiles()
 			await step(`[stress] step=init forceBadUrl=true filesBefore=${files0.length}`)
 			const title = await playIndex(LIST_ID, 0).catch(e => `play-failed:${String(e?.message ?? e)}`)
