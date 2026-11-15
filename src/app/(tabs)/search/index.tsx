@@ -58,6 +58,8 @@ const SearchlistsScreen = () => {
 	const [autoClearInput] = useSetting('odc.isAutoClearSearchInput', false)
 	const [autoClearList] = useSetting('odc.isAutoClearSearchList', false)
 	const [hotWords, setHotWords] = useState<string[]>([])
+	const [hotFailed, setHotFailed] = useState(false)
+	const [hotTick, setHotTick] = useState(0)
 	const [history, setHistory] = useState<string[]>(() => { const raw = getSetting<any>('search.history', []); return Array.isArray(raw) ? raw : [] })
 	// 深链参数 ?q= 仅触发一次搜索（jkmusic://search?q=周杰伦），之后仍由搜索框驱动
 	const routeParams = useLocalSearchParams<{ q?: string }>()
@@ -77,7 +79,19 @@ const SearchlistsScreen = () => {
 			setIsLoading(true)
 
 			try {
-				const { data, hasMore: moreResults } = await searchAll(search, currentPage, searchType)
+				let data: Track[] = []
+				let moreResults = false
+				if (activeSourcePill === 'all') {
+					const res = await searchAll(search, currentPage, searchType)
+					data = res.data
+					moreResults = res.hasMore
+				} else {
+					const { searchBySource } = await import('@/jk/musicSdk')
+					const { jkToTrack } = await import('@/jk/adapt')
+					const list = await searchBySource(activeSourcePill as any, search, currentPage)
+					data = (list ?? []).map((m: any) => jkToTrack(m))
+					moreResults = (list ?? []).length >= 20
+				}
 
 				if (requestId === searchRequestRef.current) {
 					setHasMore(moreResults)
@@ -97,7 +111,7 @@ const SearchlistsScreen = () => {
 				}
 			}
 		},
-		[search, searchType],
+		[search, searchType, activeSourcePill],
 	)
 	// 深链带 query 时，直接跑一次搜索填充结果（不依赖原生搜索框的文本状态）
 	useEffect(() => {
@@ -132,6 +146,16 @@ const SearchlistsScreen = () => {
 	useEffect(() => {
 		debouncedFetchSearchResults.cancel()
 	}, [search])
+
+	// 切换音源：清空结果、重置分页、作废在途请求，然后重查
+	useEffect(() => {
+		searchRequestRef.current++
+		setSearchResults([])
+		setPage(1)
+		setHasMore(true)
+		if (search) void fetchSearchResults(1)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [activeSourcePill])
 	useEffect(() => {
 		setPage(1)
 		setHasMore(true)
@@ -163,13 +187,14 @@ const SearchlistsScreen = () => {
 			try {
 				const { getHotSearch } = await import('@/jk/musicSdk')
 				const words = await getHotSearch()
-				if (!cancelled) setHotWords(words)
+				if (!cancelled) { setHotWords(words); setHotFailed(words.length === 0) }
 			} catch (err) {
+				if (!cancelled) setHotFailed(true)
 				logInfo('[search] 热搜失败', String((err as any)?.message ?? err))
 			}
 		})()
 		return () => { cancelled = true }
-	}, [])
+	}, [hotTick])
 
 	const rememberHistory = (kw: string) => {
 		if (!kw.trim()) return
@@ -296,11 +321,15 @@ const SearchlistsScreen = () => {
 							<View style={{ marginBottom: showHistory ? 14 : 0 }}>
 								<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600', marginBottom: 8 }}>热门搜索</Text>
 								{hotWords.length === 0 ? (
-									<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>暂无热门搜索</Text>
+									<Pressable onPress={() => { setHotFailed(false); setHotTick(v => v + 1) }} disabled={!hotFailed}>
+										<Text style={{ color: hotFailed ? mac.primary : mac.textMuted, fontSize: macFont.caption }}>
+											{hotFailed ? '加载失败，点击重试' : '暂无热门搜索'}
+										</Text>
+									</Pressable>
 								) : (
 									<View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
 										{hotWords.map(w => (
-											<Pressable key={w} onPress={() => setSearch(w)} style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: macRadius.pill, borderWidth: 0.5, borderColor: mac.divider }}>
+											<Pressable key={w} onPress={() => { setSearch(w); rememberHistory(w) }} style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: macRadius.pill, borderWidth: 0.5, borderColor: mac.divider }}>
 												<Text style={{ color: mac.text, fontSize: macFont.caption }}>{w}</Text>
 											</Pressable>
 										))}
@@ -336,6 +365,7 @@ const SearchlistsScreen = () => {
 
 				{/* 结果：五列 SongRow，点行播放（当前结果集作为队列） */}
 				<SongListView
+					onTrackPress={() => rememberHistory(search)}
 					tracks={searchResults as any}
 					queueId={`search_${searchType}`}
 					emptyText={search ? '没有搜索结果' : '输入关键词开始搜索'}

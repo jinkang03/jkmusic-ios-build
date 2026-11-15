@@ -26,9 +26,11 @@ export interface SongListViewProps {
 	/** 加载完成后自动播放第 N 首（深链 ?play=1&index=N 用） */
 	autoPlayIndex?: number
 	emptyText?: string
+	/** 用户点击某行（无论播放与否）时回调，用于记录历史等 */
+	onTrackPress?: () => void
 }
 
-const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText }: SongListViewProps) => {
+const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress }: SongListViewProps) => {
 	const router = useRouter()
 	const params = useLocalSearchParams<{ t?: string }>()
 	const currentMusic: any = myTrackPlayer.useCurrentMusic()
@@ -77,6 +79,7 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText }: SongListVie
 						badge={item?.platform ? String(item.platform).toUpperCase() : undefined}
 						active={active}
 						onPress={() => {
+							onTrackPress?.()
 							if (active) {
 								router.push('/player' as any)
 								return

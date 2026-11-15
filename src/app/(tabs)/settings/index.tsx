@@ -15,17 +15,18 @@ const SECTIONS: Array<{ id: string, title: string, hint?: string }> = [
 	{ id: 'basic', title: '基本设置' },
 	{ id: 'player', title: '播放设置' },
 	{ id: 'detail', title: '播放详情页设置' },
-	{ id: 'desktopLyric', title: '桌面歌词设置', hint: '仅桌面版支持' },
 	{ id: 'search', title: '搜索设置' },
 	{ id: 'list', title: '列表设置' },
 	{ id: 'download', title: '下载设置' },
-	{ id: 'hotkey', title: '快捷键设置', hint: '仅桌面版支持' },
-	{ id: 'sync', title: '数据同步' },
-	{ id: 'openapi', title: '开放 API', hint: '仅桌面版支持' },
 	{ id: 'network', title: '网络设置' },
 	{ id: 'ocd', title: '强迫症设置' },
 	{ id: 'backup', title: '备份与恢复' },
 	{ id: 'other', title: '其他' },
+]
+
+const DESKTOP_ONLY: Array<{ id: string, title: string }> = [
+	{ id: 'desktopLyric', title: '桌面歌词设置' },
+	{ id: 'hotkey', title: '快捷键设置' },
 ]
 
 const SettingsScreen = () => {
@@ -35,6 +36,7 @@ const SettingsScreen = () => {
 	const router = useRouter()
 	const selectedSource = musicApiSelectedStore.useValue()
 	const sourceLabel = selectedSource?.name ? String(selectedSource.name) : '未导入'
+	const [desktopOpen, setDesktopOpen] = React.useState(false)
 
 	return (
 		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
@@ -61,6 +63,34 @@ const SettingsScreen = () => {
 						<Text style={{ color: c.textMuted, fontSize: macFont.body }}>›</Text>
 					</View>
 				</Pressable>
+				{/* 桌面专属：折叠，避免首屏出现不能用的项 */}
+				<Pressable
+					onPress={() => setDesktopOpen(v => !v)}
+					style={({ pressed }) => ({
+						flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+						paddingHorizontal: macSpace.pageX, height: 44,
+						backgroundColor: pressed ? c.fillSubtle : 'transparent',
+					})}
+				>
+					<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>桌面专属（仅保存）</Text>
+					<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{desktopOpen ? '收起' : '展开'}</Text>
+				</Pressable>
+				{desktopOpen ? DESKTOP_ONLY.map(section => (
+					<Pressable
+						key={section.id}
+						onPress={() => router.push(`/settingSection/${section.id}` as any)}
+						style={({ pressed }) => ({
+							flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+							paddingHorizontal: macSpace.pageX, height: 48,
+							backgroundColor: pressed ? c.fillSubtle : 'transparent',
+							borderBottomWidth: 0.5, borderBottomColor: c.divider,
+						})}
+					>
+						<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{section.title}</Text>
+						<Text style={{ color: c.textMuted, fontSize: macFont.body }}>›</Text>
+					</Pressable>
+				)) : null}
+
 				{SECTIONS.map(section => (
 					<Pressable
 						key={section.id}
