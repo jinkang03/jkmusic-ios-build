@@ -5,6 +5,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { FlatList, Pressable, ScrollView, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useFocusEffect } from 'expo-router'
 import * as FS from 'expo-file-system/legacy'
 import StateView from '@/components/mac/StateView'
 import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
@@ -81,17 +82,23 @@ const DownloadsScreen = () => {
 		}
 	}, [cacheDir])
 
-	useEffect(() => {
+	const runBackfill = useCallback(async() => {
+		try {
+			const { backfillCacheIndex } = await import('@/jk/cacheBackfill')
+			const r = await backfillCacheIndex()
+			if (r.filled > 0) await load()
+		} catch { /* ignore */ }
+	}, [load])
+
+	useEffect(() => { void load() }, [load])
+
+	// tab 页的 useEffect 只跑一次，回填必须挂在 focus 上（P110 教训）
+	useFocusEffect(React.useCallback(() => {
 		void (async() => {
 			await load()
-			// 老文件回填：只补 kw_<songmid>.mp3，失败不影响列表
-			try {
-				const { backfillCacheIndex } = await import('@/jk/cacheBackfill')
-				const r = await backfillCacheIndex()
-				if (r.filled > 0) await load()
-			} catch { /* ignore */ }
+			await runBackfill()
 		})()
-	}, [load])
+	}, [load, runBackfill]))
 
 	const playLocal = async(item: CacheItem) => {
 		try {
@@ -203,9 +210,14 @@ const DownloadsScreen = () => {
 			{/* 底部信息条 */}
 			<View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: macSpace.pageX, paddingVertical: 12, borderTopWidth: 0.5, borderTopColor: c.divider }}>
 				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>已用 {mb} MB / 上限 {limitMb} MB</Text>
-				<Pressable onPress={clearAll} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-					<Text style={{ color: c.text, fontSize: macFont.caption }}>清理全部</Text>
-				</Pressable>
+				<View style={{ flexDirection: 'row', gap: 8 }}>
+					<Pressable onPress={() => { void runBackfill() }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+						<Text style={{ color: c.text, fontSize: macFont.caption }}>刷新信息</Text>
+					</Pressable>
+					<Pressable onPress={clearAll} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+						<Text style={{ color: c.text, fontSize: macFont.caption }}>清理全部</Text>
+					</Pressable>
+				</View>
 			</View>
 		</View>
 	)
