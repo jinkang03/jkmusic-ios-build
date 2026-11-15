@@ -79,14 +79,8 @@ export const searchAllSources = async(name: string, page = 1, limit = 20) => {
 		.filter(item => Array.isArray(item?.list) && item.list.length)
 		.map(item => ({
 			source: item.source as JKSource,
-			list: item.list.map((music: any): JKMusic => ({
-				id: music.id ?? music.songmid ?? '',
-				name: music.name ?? '',
-				singer: music.singer ?? '',
-				source: (music.source ?? item.source) as JKSource,
-				interval: music.interval ?? null,
-				meta: music.meta ?? {},
-			})),
+			// 用统一的 normalizeMusic，避免手写映射丢掉 albumName 等顶层字段（P108 发现聚合结果专辑列为空）
+			list: item.list.map((music: any): JKMusic => normalizeMusic(music, (music.source ?? item.source) as JKSource)),
 		}))
 }
 
@@ -242,15 +236,15 @@ export const getLyric = async(music: JKMusic) => {
  */
 let hotSearchCache: { at: number, words: string[] } | null = null
 export const getHotSearch = async(): Promise<string[]> => {
+	const now = Date.now()
+	// 强制失败开关必须在缓存判断之前，否则缓存命中后永远走不到（P108 实测）
 	try {
-		const { getSetting } = await import('./settingsStore')
-		const hotFail = getSetting<boolean>('_dev.hotFail', false)
-		if (hotFail) {
+		const { getSetting: gs } = await import('./settingsStore')
+		if (gs<boolean>('_dev.hotFail', false)) {
 			logError('[hotsearch] 强制失败（_dev.hotFail）')
 			return []
 		}
 	} catch { /* ignore */ }
-	const now = Date.now()
 	if (hotSearchCache && now - hotSearchCache.at < 30 * 60 * 1000) return hotSearchCache.words
 	try {
 		const mod: any = (musicSdk as any).kw

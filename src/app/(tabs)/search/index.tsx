@@ -155,8 +155,8 @@ const SearchlistsScreen = () => {
 			if (!cmd) return
 			g.__jkSearchCmd = null
 			if (cmd.pill) setActiveSourcePill(cmd.pill)
-			if (cmd.q) {
-				setSearch(cmd.q)
+			if (cmd.q !== undefined) {
+				setSearch(String(cmd.q))
 				if (cmd.kind === 'searchSubmit') rememberHistory(cmd.q)
 			}
 		}, 400)
