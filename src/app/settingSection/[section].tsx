@@ -492,6 +492,24 @@ const SettingsSectionScreen = () => {
 					const obj = await backup.exportPlayList()
 					const uri = await backup.writeBackupFile('lx_list_v2', obj)
 					logInfo('[jk/backup] dev exportPlayList', uri, obj.data.length)
+				} else if (action === 'importSource') {
+					const url = String((params as any).url ?? '')
+					if (!url) throw new Error('缺少 url')
+					const { createMusicApiFromScript, fetchScriptFromUrl } = await import('@/helpers/userApi/importMusicSource')
+					const { musicApiStore: store } = await import('@/player/PlayerStore')
+					const { default: PersistStatus } = await import('@/store/PersistStatus')
+					const code = await fetchScriptFromUrl(url)
+					const api: any = await createMusicApiFromScript(code)
+					const list: any[] = (store.getValue() as any[]) ?? []
+					const next = [...list.filter((x: any) => String(x?.name) !== String(api?.name)), api]
+					store.setValue(next as any)
+					PersistStatus.set('music.musicApi', next.map((x: any) => {
+						const { getMusicUrl, ...rest } = x ?? {}
+						return rest
+					}) as any)
+					const tp: any = (await import('@/helpers/trackPlayerIndex')).default
+					await tp.setMusicApiAsSelectedById(String(api?.id ?? ''))
+					logInfo(`[dev] importSource ok name=${String(api?.name ?? '')} sources=${(api?.supportedSources ?? []).join('/')}`)
 				} else if (action === 'searchSource' || action === 'searchSubmit') {
 					const pill = String((params as any).pill ?? 'all')
 					const q = String((params as any).q ?? '')
