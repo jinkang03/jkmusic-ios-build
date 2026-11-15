@@ -131,6 +131,29 @@ const SourceManageScreen = () => {
 		}
 	}, [])
 
+	// 兜底恢复：musicApiSelectedStore 会从持久化恢复，但 musicApiStore（列表）不会。
+	// 幂等：已有非空列表时不动，避免覆盖运行时状态。
+	useEffect(() => {
+		const current = musicApiStore.getValue() as any[] | undefined
+		const persisted = (PersistStatus.get('music.musicApi') as any[] | undefined) ?? []
+		logInfo('[source] mount list=', current?.length ?? 0, 'persist=', persisted.length)
+		if (current && current.length) {
+			logInfo('[source] list already in memory, skip restore')
+		} else if (persisted.length) {
+			logInfo('[source] restore list from persist len=', persisted.length)
+			musicApiStore.setValue(persisted as any)
+			const sel = musicApiSelectedStore.getValue() as any
+			if (sel && Array.isArray(sel.supportedSources) && sel.supportedSources.length) {
+				logInfo('[source] rebind', String(sel.name ?? ''), sel.supportedSources.join('/'))
+				try { bindMusicApi(sel) } catch (err) {
+					logError('[source] rebind failed', String((err as any)?.message ?? err))
+				}
+			}
+		} else {
+			logError('[source] persist empty —— 写入侧可能没写成功')
+		}
+	}, [])
+
 	useEffect(() => {
 		if (!selectedName) return
 		appendEvidence(`VISIBLE name=${selectedName} id=${selectedId} sources=${selectedSources || '(none)'}`)
