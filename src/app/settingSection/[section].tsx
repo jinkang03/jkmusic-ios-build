@@ -192,6 +192,7 @@ const OtherSection = () => {
 					<Text style={{ color: c.danger, fontSize: macFont.body }}>清空所有数据</Text>
 				</Pressable>
 				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
+
 			</View>
 			{confirm ? (
 				<View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -263,6 +264,8 @@ const DownloadSection = () => {
 	const [count, setCount] = React.useState(0)
 	const [limitMb, setLimitMb] = useSetting('download.cacheLimitMb', 500)
 	const [status, setStatus] = React.useState('')
+	const [showGoFavorites, setShowGoFavorites] = React.useState(false)
+	const router = useRouter()
 
 	const refresh = React.useCallback(async() => {
 		const cm = await import('@/player/CacheManager')
@@ -313,6 +316,14 @@ const DownloadSection = () => {
 					<Text style={{ color: c.text, fontSize: macFont.body }}>清理缓存</Text>
 				</Pressable>
 				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
+				{showGoFavorites ? (
+					<Pressable
+						onPress={() => router.push('/(tabs)/favorites' as any)}
+						style={({ pressed }) => ({ marginTop: 10, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}
+					>
+						<Text style={{ color: c.text, fontSize: macFont.body }}>查看我的列表</Text>
+					</Pressable>
+				) : null}
 			</View>
 		</>
 	)
@@ -321,7 +332,9 @@ const DownloadSection = () => {
 const BackupSection = () => {
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
+	const router = useRouter()
 	const [status, setStatus] = React.useState<string>('')
+	const [showGoFavorites, setShowGoFavorites] = React.useState(false)
 	const [total, setTotal] = React.useState<number>(0)
 	const [lastPath, setLastPath] = React.useState<string>('')
 
@@ -383,7 +396,13 @@ const BackupSection = () => {
 				setStatus(`导入设置：成功 ${r.applied} 项，跳过 ${r.skipped} 项`)
 			} else {
 				const r = importAllData(obj)
-				setStatus(`导入全部：设置 ${r.setting.applied} 项（跳过 ${r.setting.skipped}），歌单 ${r.playListCount} 个（未写入）`)
+				const pl: any = (r as any).playListResult ?? { lists: 0, merged: 0, songs: 0 }
+				if (!r.playListCount) {
+					setStatus(`备份中没有歌单。设置 ${r.setting.applied} 项（跳过 ${r.setting.skipped}）`)
+				} else {
+					setStatus(`设置 ${r.setting.applied} 项（跳过 ${r.setting.skipped}），歌单 ${r.playListCount} 个（新增 ${pl.lists} / 合并 ${pl.merged}），歌曲 ${pl.songs} 首`)
+					setShowGoFavorites(true)
+				}
 			}
 			const m = await import('@/jk/settingsStore')
 			setTotal(Object.keys(m.getAllSettings()).length)
@@ -416,6 +435,14 @@ const BackupSection = () => {
 				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>当前设置项总数：{total}</Text>
 				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>上次导出：{lastPath || '—'}</Text>
 				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
+				{showGoFavorites ? (
+					<Pressable
+						onPress={() => router.push('/(tabs)/favorites' as any)}
+						style={({ pressed }) => ({ marginTop: 10, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}
+					>
+						<Text style={{ color: c.text, fontSize: macFont.body }}>查看我的列表</Text>
+					</Pressable>
+				) : null}
 			</View>
 		</View>
 	)

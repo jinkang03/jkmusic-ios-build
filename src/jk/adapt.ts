@@ -22,7 +22,7 @@ export const jkToTrack = (music: JKMusic): Track => {
 		title: music.name,
 		artist: music.singer,
 		album: meta.albumName ?? '',
-		artwork: meta.picUrl ?? '',
+		artwork: meta.picUrl ?? (meta as any).img ?? '',
 		duration: parseInterval(music.interval),
 		songmid: sm,
 		// 保留原始条目，取播放地址时直接复用

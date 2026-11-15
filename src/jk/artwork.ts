@@ -21,7 +21,8 @@ export const resolveArtwork = async(track: any): Promise<string> => {
 		if (!query) { cache.set(key, ''); return '' }
 		const list: any[] = (await searchBySource('tx' as any, query, 1, 3)) ?? []
 		const found = list.find((x: any) => String(x?.name ?? '').includes(String(track.title ?? ''))) ?? list[0]
-		const url = String(found?.meta?.picUrl ?? found?.meta?.img ?? '')
+		logInfo('[artwork] tx hit', String(found?.name ?? ''), 'img=', String(found?.meta?.img ?? '').slice(0, 60))
+		const url = String(found?.meta?.img ?? found?.meta?.picUrl ?? '')
 		cache.set(key, url)
 		logInfo('[artwork] resolved', key, url ? 'ok' : 'empty')
 		return url
