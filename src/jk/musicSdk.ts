@@ -242,6 +242,14 @@ export const getLyric = async(music: JKMusic) => {
  */
 let hotSearchCache: { at: number, words: string[] } | null = null
 export const getHotSearch = async(): Promise<string[]> => {
+	try {
+		const { getSetting } = await import('./settingsStore')
+		const hotFail = getSetting<boolean>('_dev.hotFail', false)
+		if (hotFail) {
+			logError('[hotsearch] 强制失败（_dev.hotFail）')
+			return []
+		}
+	} catch { /* ignore */ }
 	const now = Date.now()
 	if (hotSearchCache && now - hotSearchCache.at < 30 * 60 * 1000) return hotSearchCache.words
 	try {

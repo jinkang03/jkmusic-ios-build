@@ -465,6 +465,20 @@ const SettingsSectionScreen = () => {
 					const obj = await backup.exportPlayList()
 					const uri = await backup.writeBackupFile('lx_list_v2', obj)
 					logInfo('[jk/backup] dev exportPlayList', uri, obj.data.length)
+				} else if (action === 'searchSource' || action === 'searchSubmit') {
+					const pill = String((params as any).pill ?? 'all')
+					const q = String((params as any).q ?? '')
+					const g: any = globalThis
+					g.__jkSearchCmd = { kind: action, pill, q, at: Date.now() }
+					logInfo(`[dev] action=${action} pill=${pill} q=${q} ok`)
+				} else if (action === 'hotFail') {
+					const v = String((params as any).value ?? 'true') === 'true'
+					setSetting('_dev.hotFail', v)
+					logInfo(`[dev] action=hotFail value=${v} ok`)
+				} else if (action === 'nav') {
+					const to = String((params as any).to ?? 'search')
+					logInfo(`[dev] action=nav to=${to} ok`)
+					router.push(`/(tabs)/${to}` as any)
 				} else if (action === 'stress') {
 					const scenario = String((params as any).scenario ?? 'lru') as any
 					const n = Number((params as any).n ?? 6) || 6

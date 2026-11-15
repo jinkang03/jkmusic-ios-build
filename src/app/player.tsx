@@ -12,6 +12,7 @@ import { macPalette } from '@/constants/macTokens'
 import { bufferingStore } from '@/player/PlayerStore'
 import { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { fetchLyric } from '@/jk/lyric'
+import { resolveArtwork } from '@/jk/artwork'
 import { logError, logInfo } from '@/helpers/logger'
 import { useSetting } from '@/jk/settingsStore'
 import { ThemeColors, fontSize, screenPadding } from '@/constants/tokens'
@@ -165,7 +166,14 @@ const PlayerScreenContent = () => {
 	const trackToDisplay = currentActiveTrack ?? prevTrackRef.current
 
 	const mac = macPalette(!!useAppTheme().isDark)
-	const artworkUri = trackToDisplay?.artwork || unknownTrackImageUri
+	const [fallbackArt, setFallbackArt] = React.useState('')
+	React.useEffect(() => {
+		let cancelled = false
+		if (!currentActiveTrack) { setFallbackArt(''); return }
+		void resolveArtwork(currentActiveTrack).then(url => { if (!cancelled) setFallbackArt(url) })
+		return () => { cancelled = true }
+	}, [currentActiveTrack?.id, currentActiveTrack?.platform])
+	const artworkUri = trackToDisplay?.artwork || fallbackArt || unknownTrackImageUri
 	// 试听检测：音频实际时长明显短于曲目声明时长 → 判定试听并尝试换源
 	const buffering = bufferingStore.useValue()
 	// 统一歌词抓取：只要当前曲目变化就尝试，覆盖 playnow / 缓存命中 / 详情页点歌所有路径

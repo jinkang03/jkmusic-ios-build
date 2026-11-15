@@ -147,6 +147,23 @@ const SearchlistsScreen = () => {
 		debouncedFetchSearchResults.cancel()
 	}, [search])
 
+	// dev 命令通道：深链设置源胶囊/触发提交（不依赖点击）
+	React.useEffect(() => {
+		const g: any = globalThis
+		const timer = setInterval(() => {
+			const cmd = g.__jkSearchCmd
+			if (!cmd) return
+			g.__jkSearchCmd = null
+			if (cmd.pill) setActiveSourcePill(cmd.pill)
+			if (cmd.q) {
+				setSearch(cmd.q)
+				if (cmd.kind === 'searchSubmit') rememberHistory(cmd.q)
+			}
+		}, 400)
+		return () => clearInterval(timer)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [])
+
 	// 切换音源：清空结果、重置分页、作废在途请求，然后重查
 	useEffect(() => {
 		searchRequestRef.current++
