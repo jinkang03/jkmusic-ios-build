@@ -81,7 +81,17 @@ const DownloadsScreen = () => {
 		}
 	}, [cacheDir])
 
-	useEffect(() => { void load() }, [load])
+	useEffect(() => {
+		void (async() => {
+			await load()
+			// 老文件回填：只补 kw_<songmid>.mp3，失败不影响列表
+			try {
+				const { backfillCacheIndex } = await import('@/jk/cacheBackfill')
+				const r = await backfillCacheIndex()
+				if (r.filled > 0) await load()
+			} catch { /* ignore */ }
+		})()
+	}, [load])
 
 	const playLocal = async(item: CacheItem) => {
 		try {
