@@ -62,6 +62,18 @@ codesign -dv               = not signed at all
 下载页（真实歌名/试听/删除/清空/音质）· 备份与恢复（setting_v2 / playList_v2 / allData_v2）·
 设置 14 分区（桌面专属项只读）· 应用图标
 
+## 补充验收（2026-11-16 实测）
+
+| # | 项 | 结果 | 证据 |
+|---|---|---|---|
+| 1 | 预取下载（缓存 0→2） | ✅ | `[prefetch] resolve ok` / `limit start active=3` / `done path=118990` |
+| 2 | 预取 latency 数值 | ❌ 无打点 | 代码里没有 `dev-latency.log` 写入，未实现 |
+| 3 | 预取 cancelled | ❌ 未复现 | 切歌时预取已完成，世代未变化 |
+| 4 | odc 关闭分支 | ✅ | `[search] blur autoclear input=false list=false` |
+| 5 | 重复导入幂等 | ✅ | `[jk/backup] import ok lists=0 merged=2 songs=0` |
+
+说明：#1/#4/#5 有日志证据；#2 是功能缺口（无 latency 打点代码）；#3 是时序问题（需要慢速解析才能触发）。
+
 ## 已知问题
 
 1. **随机点播需 2-4 秒**（本环境 AVPlayer 不加载网络流，改为先下载后播放）
