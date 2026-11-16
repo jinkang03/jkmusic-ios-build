@@ -1068,6 +1068,8 @@ const playWithReplacePlayList = async (
 	musicItem: IMusic.IMusicItem,
 	newPlayList: IMusic.IMusicItem[],
 ) => {
+	// 切歌/手动点歌 → 作废进行中的预取（世代递增）
+	void import('@/player/prefetch').then(m => m.bumpPrefetchGeneration?.()).catch(() => undefined)
 	// 用户主动点歌 = 一次新的尝试，清零连续失败计数
 	notePlaybackSuccess()
 	if (newPlayList.length !== 0) {
