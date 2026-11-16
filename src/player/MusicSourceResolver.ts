@@ -216,6 +216,7 @@ export const resolveSource = async (
 						logInfo(`${logPrefix} ${currentQuality}音质无可用链接(catch),尝试下一个音质`)
 					}
 					const errMsg = error instanceof Error ? error.message : String(error)
+					if (isCurrentSourceRequest(requestType)) logError('[play] getMusicUrl threw', errMsg)
 					if (isCurrentSourceRequest(requestType)) {
 						logError(`${logPrefix} (catch error): ${errMsg}`)
 					}
