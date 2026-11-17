@@ -60,3 +60,18 @@ ios/Pods/
 # Ruby bundle
 vendor/bundle/
 .build/
+
+# 构建/工具残留
+.bundle/
+ios/build-sim/
+ios/build/
+.build/
+
+# 反编译参考资料（用 scripts/extract-mac-ui.mjs 可重新生成）
+references/
+
+# Metro source map 残留
+*.js.map
+
+# 验收截图（体积大：231 张 / 111MB），只提交索引
+docs/screenshots/

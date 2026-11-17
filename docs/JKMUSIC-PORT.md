@@ -54,6 +54,11 @@ Ruby 2.6 环境已通过 `ios/ruby_compat.rb` 兼容（补 `filter_map`）。
 
 推送到 GitHub 后运行 `Build JKMUSIC iOS IPA` 工作流，产物为 `JKMUSIC-ios-unsigned-ipa`。
 
+## 首次使用
+
+正式包里打开「设置 → 音源管理」，用 URL、文件或粘贴文本导入脚本并点「使用」。
+没有选中音源时不能播放。入口不依赖 `EXPO_PUBLIC_JK_DEV_IMPORT`。
+
 ## 已知差异
 
 - 桌面版的**主题编辑系统**、**桌面歌词悬浮窗**、**托盘/全局快捷键**在 iOS 无对应，沿用 CyMusic 的主题与播放页。

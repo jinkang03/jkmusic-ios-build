@@ -201,6 +201,10 @@ const RootNavigation = () => {
 				options={{ headerShown: false }}
 			/>
 			<Stack.Screen
+				name="sourceManage"
+				options={{ headerShown: false }}
+			/>
+			<Stack.Screen
 				name="logScreen"
 				options={{
 					presentation: 'card',
