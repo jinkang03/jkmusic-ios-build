@@ -184,7 +184,7 @@ const MiniLyric = () => {
 									opacity,
 								}}
 							>
-								{karaokeSegs.length > 0 ? karaokeSegs.map(x => x.text).join('') : (item?.lrc ?? item?.content ?? '')}
+								{item?.lrc ?? item?.content ?? ''}
 							</Text>
 						)}
 						{isCurrent && transLyrics[absoluteIndex] ? (

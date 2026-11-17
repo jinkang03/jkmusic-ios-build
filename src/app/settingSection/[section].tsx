@@ -505,6 +505,16 @@ const SettingsSectionScreen = () => {
 					const obj = await backup.exportPlayList()
 					const uri = await backup.writeBackupFile('lx_list_v2', obj)
 					logInfo('[jk/backup] dev exportPlayList', uri, obj.data.length)
+				} else if (action === 'seek') {
+					const pos = Number((params as any).pos ?? 0)
+					if (!Number.isFinite(pos) || pos <= 0) throw new Error('bad pos')
+					const { default: tp } = await import('@/helpers/trackPlayerIndex')
+					await (tp as any).seekTo(pos)
+					// seek 后等一小会儿再暂停，确保 position 已写入（立即暂停可能读到旧值）
+					await new Promise(r => setTimeout(r, 300))
+					if (String((params as any).pause ?? '1') === '1') await (tp as any).pause()
+					const prog: any = (tp as any).getProgress?.() ?? {}
+					logInfo('[dev] seek ok pos=', pos, 'paused=', String((params as any).pause ?? '1'), 'now=', Number(prog?.position ?? 0).toFixed(2))
 				} else if (action === 'importSource') {
 					const url = String((params as any).url ?? '')
 					if (!url) throw new Error('缺少 url')
