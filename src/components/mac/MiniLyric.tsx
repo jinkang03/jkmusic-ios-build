@@ -48,16 +48,21 @@ const MiniLyric = () => {
 	const lyrics: any[] = state?.lyrics ?? []
 	const transLyrics: any[] = (showTrans && state?.translationLyrics) ? state.translationLyrics : []
 
+	const { position: karaokePos } = myTrackPlayer.useProgress(0.1)
+	const karaokeMs = Math.max(0, Math.round(Number(karaokePos ?? 0) * 1000))
+	// 当前行改由「播放位置」计算：LyricManager 的 index 依赖 progress 事件，
+	// 暂停/seek 后会冻结在旧值（P127 实测：seek 到 14s 仍停在 line=0）。
 	const currentIndex = useMemo(() => {
-		if (typeof current?.index === 'number' && current.index >= 0) return current.index
-		// 没有 index 时按时间找最近的一行
-		const time = Number(current?.time ?? 0)
+		let lo = 0
+		let hi = lyrics.length - 1
 		let idx = 0
-		for (let i = 0; i < lyrics.length; i++) {
-			if (Number(lyrics[i]?.time ?? 0) <= time) idx = i
+		while (lo <= hi) {
+			const mid = (lo + hi) >> 1
+			if (Number(lyrics[mid]?.time ?? 0) * 1000 <= karaokeMs) { idx = mid; lo = mid + 1 }
+			else hi = mid - 1
 		}
 		return idx
-	}, [current, lyrics])
+	}, [lyrics, karaokeMs])
 
 	React.useEffect(() => {
 		if (raw) LyricManager.requestRefresh()
@@ -75,9 +80,7 @@ const MiniLyric = () => {
 	}, [currentIndex, delayScroll])
 
 	const effectiveIndex = delayScroll ? followIndex : currentIndex
-	// 逐字：只有当前行订阅 position（0.1s），其它行由 memo 组件隔离
-	const { position: karaokePos } = myTrackPlayer.useProgress(0.1)
-	const karaokeMs = Math.max(0, Number(karaokePos ?? 0) * 1000)
+
 
 	// 平滑滚动：index 变化时先让内容偏移 +ROW_HEIGHT，再缓动回 0（视觉上是"上滑一格"）
 	const shiftY = React.useRef(new Animated.Value(0)).current
@@ -111,7 +114,7 @@ const MiniLyric = () => {
 		const firstStart = segs[0]?.start ?? -1
 		const lastStart = segs[segs.length - 1]?.start ?? -1
 		const litCount = segs.filter(x => karaokeMs >= x.start).length
-		logInfo(`[lyric] karaoke line=${effectiveIndex} segs=${segs.length} lxLen=${String(lxRaw ?? '').length} pos=${Math.round(karaokeMs)} first=${Math.round(firstStart)} last=${Math.round(lastStart)} lit=${litCount}`)
+		logInfo(`[lyric] active idx=${effectiveIndex} pos=${Math.round(karaokeMs)} segs=${segs.length} lit=${litCount} lxLen=${String(lxRaw ?? '').length} first=${Math.round(firstStart)} last=${Math.round(lastStart)}`)
 	}, [effectiveIndex, curLine, karaokeMs, karaokeMap, lxRaw])
 
 
