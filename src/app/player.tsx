@@ -13,6 +13,7 @@ import { bufferingStore } from '@/player/PlayerStore'
 import { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { fetchLyric } from '@/jk/lyric'
 import { resolveArtwork } from '@/jk/artwork'
+import { currentArtworkStore } from '@/jk/artworkStore'
 import { logError, logInfo } from '@/helpers/logger'
 import { useSetting } from '@/jk/settingsStore'
 import { ThemeColors, fontSize, screenPadding } from '@/constants/tokens'
@@ -171,8 +172,14 @@ const PlayerScreenContent = () => {
 	const [fallbackArt, setFallbackArt] = React.useState('')
 	React.useEffect(() => {
 		let cancelled = false
+		// 切歌先清空，避免迷你条短暂显示上一首的封面
+		currentArtworkStore.setValue('')
 		if (!currentActiveTrack) { setFallbackArt(''); return }
-		void resolveArtwork(currentActiveTrack).then(url => { if (!cancelled) setFallbackArt(url) })
+		void resolveArtwork(currentActiveTrack).then(url => {
+			if (cancelled) return
+			setFallbackArt(url)
+			if (url) currentArtworkStore.setValue(url)
+		})
 		return () => { cancelled = true }
 	}, [currentActiveTrack?.id, currentActiveTrack?.platform])
 	const artworkUri = trackToDisplay?.artwork || fallbackArt || unknownTrackImageUri

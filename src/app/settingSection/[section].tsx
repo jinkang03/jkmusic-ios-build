@@ -556,6 +556,13 @@ const SettingsSectionScreen = () => {
 					const parsed = rawV === 'true' ? true : rawV === 'false' ? false
 						: (/^-?\d+(\.\d+)?$/.test(rawV) ? Number(rawV) : rawV)
 					setSetting(k, parsed)
+					// music.quality 是播放链路的真源，必须同步进 qualityStore，否则只写 PersistStatus 不生效
+					if (k === 'music.quality') {
+						try {
+							const tp: any = (await import('@/helpers/trackPlayerIndex')).default
+							tp.setQuality?.(String(parsed))
+						} catch { /* ignore */ }
+					}
 					logInfo(`[jk/dev] set ${k}=${rawV}`)
 				} else if (action === 'cleardev') {
 					setSetting('_dev.forceBadUrl', false)

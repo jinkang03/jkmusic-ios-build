@@ -4,6 +4,7 @@ import { unknownTrackImageUri } from '@/constants/images'
 import { ThemeColors } from '@/constants/tokens'
 import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
 import { useLastActiveTrack } from '@/hooks/useLastActiveTrack'
+import { currentArtworkStore } from '@/jk/artworkStore'
 import { useDefaultStyles } from '@/styles'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
@@ -31,6 +32,7 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 	const styles = useMemo(() => createStyles(colors, defaultStyles), [colors, defaultStyles])
 	const router = useRouter()
 	const currentMusic = myTrackPlayer.useCurrentMusic()
+	const sharedArt = currentArtworkStore.useValue()
 	const { position, duration } = myTrackPlayer.useProgress(1)
 	const progress = duration > 0 ? Math.min(1, position / duration) : 0
 	const lastActiveTrack = useLastActiveTrack()
@@ -65,12 +67,12 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 				{/* 左段：封面 + 标题/歌手 */}
 				<View style={styles.leftSection}>
 					<View style={styles.artworkBox}>
-						{displayedTrack.artwork ? (
+						{(sharedArt || displayedTrack.artwork) ? (
 							<Image
 								contentFit="cover"
 								cachePolicy="memory-disk"
-								recyclingKey={displayedTrack.artwork}
-								source={{ uri: displayedTrack.artwork }}
+								recyclingKey={sharedArt || displayedTrack.artwork}
+								source={{ uri: (sharedArt || displayedTrack.artwork) as string }}
 								style={StyleSheet.absoluteFill}
 							/>
 						) : (

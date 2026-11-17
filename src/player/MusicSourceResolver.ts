@@ -239,6 +239,19 @@ export const resolveSource = async (
 			}
 			logInfo(`${logPrefix} 最终的音乐 URL:`, resp_url)
 
+			// 音质「请求值 vs 实际值」诊断：从 url 的 bitrate$ 参数或脚本返回的 type 推断
+			const requested = String(qualityStore.getValue() ?? '')
+			const bm = /bitrate\$(\d+)/.exec(String(resp_url))
+			const actual = bm ? `${bm[1]}k` : (typeof resp_url === 'object' ? String((resp_url as any)?.type ?? 'unknown') : 'unknown')
+			logInfo('[quality] requested=', requested, 'actual=', actual, 'url=', String(resp_url).slice(0, 90))
+			;(globalThis as any).__jkActualQuality = actual
+			const RANK: Record<string, number> = { '128k': 1, '320k': 2, flac: 3 }
+			if (RANK[actual] && RANK[requested] && RANK[actual] < RANK[requested]) {
+				if (isCurrentSourceRequest(requestType)) {
+					showToast('提示', `该音源仅提供 ${actual}，已按此播放`, 'info')
+				}
+			}
+
 			const { getSetting: getStreamSetting } = await import('@/jk/settingsStore')
 			const streamMode = Boolean(getStreamSetting<boolean>('_dev.streamMode', false))
 			if (streamMode) {

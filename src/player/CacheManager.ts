@@ -112,7 +112,7 @@ export const downloadToCache = async (musicItem: IMusic.IMusicItem, onProgress?:
 				title: (musicItem as any).title,
 				artist: (musicItem as any).artist,
 				album: (musicItem as any).album,
-				quality: String((globalThis as any).__jkQuality ?? '') || undefined,
+				quality: String((globalThis as any).__jkActualQuality ?? '') || undefined,
 				size: Number(st?.size ?? 0),
 				mtime: Date.now(),
 				songmid: String((musicItem as any).id ?? ''),
