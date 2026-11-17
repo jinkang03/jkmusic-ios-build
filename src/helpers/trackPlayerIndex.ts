@@ -57,6 +57,7 @@ import {
 	songsNumsToLoadStore,
 	importedLocalMusicStore,
 	nowLyricState,
+	nowLxLyricState,
 	trackSkipLoadingStore,
 	trackSourceLoadingStore,
 	playbackIntentStore,
@@ -970,6 +971,7 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 				// 会因为队列 token 变化而永远不写入，导致播放页一直「暂无歌词」。
 				if (isCurrentMusic(musicItem)) {
 					nowLyricState.setValue(lyc.lyric)
+					nowLxLyricState.setValue(String((lyc as any).lxlyric ?? ''))
 					// 写入后主动请求一次重建（链路 B），避免只等 progress 事件
 					void LyricManager.requestRefresh?.()
 				}

@@ -3,6 +3,8 @@ import { GlobalState } from '@/utils/stateMapper'
 
 /** 当前播放 */
 export const currentMusicStore = new GlobalState<IMusic.IMusicItem | null>(null)
+/** 逐字歌词原文（与 nowLyricState 并列） */
+export const nowLxLyricState = new GlobalState<string>('')
 /** 歌单 */
 export const playListsStore = new GlobalState<IMusic.PlayList[] | []>(null)
 /** 播放模式 */

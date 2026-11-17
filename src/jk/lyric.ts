@@ -9,6 +9,7 @@ import type { Track } from '@/player/types'
 export interface LyricResult {
 	lyric: string
 	tlyric?: string | null
+	lxlyric?: string | null
 }
 
 const normalize = (raw: any): LyricResult => {
@@ -17,6 +18,8 @@ const normalize = (raw: any): LyricResult => {
 	return {
 		lyric: raw.lyric ?? raw.lrc ?? '[00:00.00]暂无歌词',
 		tlyric: raw.tlyric ?? raw.tlrc ?? null,
+		// 逐字歌词（lx-music 的 lxlyric），链路上曾被丢弃
+		lxlyric: raw.lxlyric ?? null,
 	}
 }
 

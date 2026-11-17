@@ -15,7 +15,8 @@ import myTrackPlayer, { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { macFont, macPalette } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { useSetting } from '@/jk/settingsStore'
-import { parseKaraokeLine } from '@/jk/karaoke'
+import { nowLxLyricState } from '@/player/PlayerStore'
+import { parseKaraokeLine, buildKaraokeMap, findKaraokeSegs } from '@/jk/karaoke'
 import { logInfo } from '@/helpers/logger'
 
 const ROW_HEIGHT = 28
@@ -42,6 +43,7 @@ const MiniLyric = () => {
 		if (!key || key === lastTrackRef.current) return
 		lastTrackRef.current = key
 		nowLyricState.setValue('')
+		nowLxLyricState.setValue('')
 	}, [currentTrack?.platform, currentTrack?.id])
 	const lyrics: any[] = state?.lyrics ?? []
 	const transLyrics: any[] = (showTrans && state?.translationLyrics) ? state.translationLyrics : []
@@ -92,20 +94,26 @@ const MiniLyric = () => {
 		logInfo(`[minilyric] animate from=${from} to=${effectiveIndex} dur=280`)
 	}, [effectiveIndex, shiftY])
 
+	// 逐字：从 lxlyric 原文建「行时间 → 分段」映射，再按当前行时间取（±30ms 容错）
+	const lxRaw = nowLxLyricState.useValue()
+	const karaokeMap = React.useMemo(() => buildKaraokeMap(lxRaw), [lxRaw])
+	const karaokeSegs = React.useMemo(
+		() => findKaraokeSegs(karaokeMap, Number(lyrics[effectiveIndex]?.time ?? 0) * 1000),
+		[karaokeMap, lyrics, effectiveIndex],
+	)
+
 	// 逐字诊断：仅在当前行变化时打一行（pos 变化不打）
 	const curLine: any = lyrics[effectiveIndex]
 	React.useEffect(() => {
 		if (karaokeLogRef.current === effectiveIndex) return
 		karaokeLogRef.current = effectiveIndex
-		const segs = parseKaraokeLine(String(curLine?.lxlyric ?? curLine?.lrc ?? ''), Number(curLine?.time ?? 0) * 1000)
-		logInfo(`[lyric] karaoke line=${effectiveIndex} segs=${segs.length} pos=${Math.round(karaokeMs)}`)
-	}, [effectiveIndex, curLine, karaokeMs])
+		const segs = findKaraokeSegs(karaokeMap, Number(curLine?.time ?? 0) * 1000)
+		const firstStart = segs[0]?.start ?? -1
+		const lastStart = segs[segs.length - 1]?.start ?? -1
+		const litCount = segs.filter(x => karaokeMs >= x.start).length
+		logInfo(`[lyric] karaoke line=${effectiveIndex} segs=${segs.length} lxLen=${String(lxRaw ?? '').length} pos=${Math.round(karaokeMs)} first=${Math.round(firstStart)} last=${Math.round(lastStart)} lit=${litCount}`)
+	}, [effectiveIndex, curLine, karaokeMs, karaokeMap, lxRaw])
 
-	// 当前行的逐字分段（无标记 → 空数组，渲染走整行高亮）
-	const karaokeSegs = React.useMemo(
-		() => parseKaraokeLine(String(lyrics[effectiveIndex]?.lxlyric ?? lyrics[effectiveIndex]?.lrc ?? ''), Number(lyrics[effectiveIndex]?.time ?? 0) * 1000),
-		[lyrics, effectiveIndex],
-	)
 
 	if (!lyrics.length) {
 		return (

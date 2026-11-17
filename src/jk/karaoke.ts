@@ -31,3 +31,40 @@ export const parseKaraokeLine = (line: string, lineTimeMs: number): KaraokeSeg[]
 export const hasKaraokeMarkup = (line: string) => /<\d+,\d+>/.test(String(line ?? ''))
 
 export default { parseKaraokeLine, hasKaraokeMarkup }
+
+/**
+ * 逐行解析 lxlyric：`[mm:ss.mmm]<s,d>字<s,d>字…` → Map<行时间ms, 分段[]>
+ * 段的 start 已加行时间（绝对毫秒）。
+ */
+export const buildKaraokeMap = (lxlyric: string): Map<number, KaraokeSeg[]> => {
+	const map = new Map<number, KaraokeSeg[]>()
+	try {
+		const raw = String(lxlyric ?? '')
+		if (!raw) return map
+		const lines = raw.split('\n')
+		const timeRe = /^\[(\d+):(\d+)\.(\d+)\]/
+		for (const line of lines) {
+			const m = timeRe.exec(line)
+			if (!m) continue
+			const lineMs = Number(m[1]) * 60000 + Number(m[2]) * 1000 + Number(m[3].padEnd(3, '0').slice(0, 3))
+			const body = line.slice(m[0].length)
+			const segs = parseKaraokeLine(body, lineMs)
+			if (segs.length) map.set(lineMs, segs)
+		}
+	} catch { /* 解析失败返回已解析部分 */ }
+	return map
+}
+
+/** 允许 ±tolerance 的时间匹配（行时间可能有毫秒级误差） */
+export const findKaraokeSegs = (map: Map<number, KaraokeSeg[]>, lineMs: number, tolerance = 30): KaraokeSeg[] => {
+	if (!map.size) return []
+	const direct = map.get(Math.round(lineMs))
+	if (direct) return direct
+	let bestKey = -1
+	let bestDiff = Number.POSITIVE_INFINITY
+	for (const key of map.keys()) {
+		const diff = Math.abs(key - lineMs)
+		if (diff < bestDiff) { bestDiff = diff; bestKey = key }
+	}
+	return bestDiff <= tolerance && bestKey >= 0 ? (map.get(bestKey) ?? []) : []
+}
