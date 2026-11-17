@@ -3,10 +3,10 @@
 - 产物：artifacts/ipa/JKMUSIC-1.0.0-unsigned-20261116.ipa
 - 大小：17 MB ／ 架构：arm64 ／ 最低系统：16.4 ／ 未签名
 - sha256：5a5eac900d067a5190b3d5e6c7b05b9dea5780c6d6336f18cc054edb55bddefe
-- commit：**721f969**（含 sourceManage 路由注册，与 IPA 内容一致）
-- tag：`v1.0.0` → 721f969
+- commit：**c4e67af**（含 sourceManage 路由注册，与 IPA 内容一致）
+- tag：`v1.0.0` → c4e67af
 - 说明：tag 已修正为包含 sourceManage 路由注册的 commit，与 IPA 内容一致
-- 截图证据：见 `docs/screenshots/INDEX.md`（图片不入库，本地保留）
+- 截图证据：见 `docs/screenshots/INDEX.md`（231 张图片不入库，本地保留；索引已入库）
 
 已验（有截图或日志）：
 导入音源（URL/文件/粘贴）、播放（先下载后播）、歌词高亮滚动、封面（含 kw 兜底）、
