@@ -166,6 +166,8 @@ const PlayerScreenContent = () => {
 	const trackToDisplay = currentActiveTrack ?? prevTrackRef.current
 
 	const mac = macPalette(!!useAppTheme().isDark)
+	// 封面固定正方形：屏宽 62% 与可用高度 50% 取小，避免被 flex 拉伸或裁切
+	const coverSize = Math.min(width * 0.62, Math.max(160, (height - 320) * 0.5))
 	const [fallbackArt, setFallbackArt] = React.useState('')
 	React.useEffect(() => {
 		let cancelled = false
@@ -214,8 +216,7 @@ const PlayerScreenContent = () => {
 		}, 300)
 		return () => clearTimeout(timer)
 	}, [currentActiveTrack?.id, currentActiveTrack?.platform])
-	const [bgBlur] = useSetting('playDetail.bgBlur', 0.6)
-	const [bgOpacity] = useSetting('playDetail.bgOpacity', 0.5)
+	const [bgBlur] = useSetting('playDetail.bgBlur', 1)
 	const [zoomActive] = useSetting('playDetail.isZoomActiveLrc', true)
 	const { duration: audioDuration } = myTrackPlayer.useProgress(0.5)
 	const [trialDetected, setTrialDetected] = React.useState(false)
@@ -481,7 +482,6 @@ const PlayerScreenContent = () => {
 						<View style={[StyleSheet.absoluteFill, { backgroundColor: mac.bg }]} />
 					)}
 					<BlurView intensity={Math.round(Number(bgBlur) * 100)} tint="dark" style={StyleSheet.absoluteFill} />
-					<View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${Number(bgOpacity)})` }]} />
 				</View>
 				{/* 顶部栏：收起 / 收藏 / 更多（更多沿用右侧原菜单，此处只放收起与收藏） */}
 				<View style={[styles.topBar, { paddingTop: top, height: top + 48 }]} pointerEvents="box-none">
@@ -603,7 +603,7 @@ const PlayerScreenContent = () => {
 						<View style={styles.artworkRegion}>
 							<View style={styles.artworkCanvas}>
 								<GestureDetector gesture={swipeGesture}>
-									<Animated.View style={[styles.artworkSquare, artworkAnimatedStyle]}>
+									<Animated.View style={[styles.artworkSquare, { width: coverSize, height: coverSize }, artworkAnimatedStyle]}>
 										<TouchableOpacity
 											style={styles.artworkTouchable}
 											activeOpacity={1}
@@ -627,12 +627,6 @@ const PlayerScreenContent = () => {
 								</GestureDetector>
 								{/* artworkFade：原来用于封面铺满时的淡出，改成方块封面后它只会盖住背景，已删除 */}
 
-								<LinearGradient
-									pointerEvents="none"
-									style={[styles.topScrim, { height: top + 100 }]}
-									colors={['#00000099', '#00000066', '#00000000']}
-									locations={[0, 0.55, 1]}
-								/>
 							</View>
 						</View>
 						{buffering ? (
@@ -850,7 +844,6 @@ const createStyles = (colors: ThemeColors, defaultStyles: ReturnType<typeof useD
 			marginTop: 8,
 		},
 		artworkSquare: {
-			width: '62%',
 			aspectRatio: 1,
 			borderRadius: 12,
 			overflow: 'hidden',

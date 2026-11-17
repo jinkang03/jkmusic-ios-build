@@ -38,7 +38,7 @@ const DownloadsScreen = () => {
 	const [items, setItems] = useState<CacheItem[]>([])
 	const [total, setTotal] = useState(0)
 	const [loading, setLoading] = useState(true)
-	const [quality, setQuality] = useSetting('player.playQuality', '320k')
+	const [quality, setQuality] = useSetting('music.quality', '128k')
 
 	const cacheDir = `${FS.documentDirectory}musicCache/`
 	const limitMb = Number(getSetting('download.cacheLimitMb', 500)) || 500

@@ -1,4 +1,4 @@
-import { PlayPauseButton, SkipToNextButton } from '@/components/PlayerControls'
+import { PlayPauseButton, SkipToNextButton, SkipToPreviousButton } from '@/components/PlayerControls'
 import myTrackPlayer, { trackSourceLoadingStore } from '@/helpers/trackPlayerIndex'
 import { unknownTrackImageUri } from '@/constants/images'
 import { ThemeColors } from '@/constants/tokens'
@@ -96,6 +96,7 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 
 				{/* 右段：播放暂停 + 下一首 */}
 				<View style={styles.rightSection}>
+					<SkipToPreviousButton iconSize={20} />
 					{isTrackSourceLoading ? (
 						<ActivityIndicator size="small" color={colors.text} />
 					) : (
@@ -114,12 +115,12 @@ const createStyles = (
 ) =>
 	StyleSheet.create({
 
-	leftSection: { flex: 1.6, flexDirection: 'row', alignItems: 'center', gap: 8, overflow: 'hidden' },
+	leftSection: { flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 8, overflow: 'hidden' },
 	artworkBox: { width: 48, height: 48, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1C1C1C' },
 	artworkPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-	midSection: { flex: 1.6, flexDirection: 'row', alignItems: 'center', gap: 8 },
-	rightSection: { width: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-	progressTime: { color: colors.textMuted, fontSize: 10, width: 34, textAlign: 'center' },
+	midSection: { flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 8 },
+	rightSection: { width: 108, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+	progressTime: { color: colors.textMuted, fontSize: 13, width: 40, textAlign: 'center' },
 	trackArtist: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
 	container: {
 		borderRadius: 14,
@@ -169,13 +170,13 @@ const createStyles = (
 		bottom: 0,
 		left: 8,
 		right: 8,
-		height: 2,
+		height: 4,
 		backgroundColor: colors.overlaySoft,
-		borderRadius: 1,
+		borderRadius: 2,
 	},
 	progressBar: {
 		height: '100%',
 		backgroundColor: colors.minimumTrackTintColor,
-		borderRadius: 1,
+		borderRadius: 2,
 	},
 	})

@@ -65,7 +65,16 @@ const BasicSection = () => {
 }
 
 const PlayerSection = () => {
-	const [quality, setQuality] = useSetting('player.playQuality', '320k')
+	// 以 music.quality 为唯一真源（播放链路读 qualityStore）；player.playQuality 仅桌面兼容
+	const [quality, setQualityRaw] = useSetting('music.quality', '128k')
+	const setQuality = React.useCallback(async(v: string) => {
+		setQualityRaw(v)
+		setSetting('player.playQuality', v)
+		try {
+			const { default: tp } = await import('@/helpers/trackPlayerIndex')
+			;(tp as any).setQuality?.(v)
+		} catch { /* ignore */ }
+	}, [setQualityRaw])
 	const [volume, setVolume] = useSetting('player.volume', 1)
 	const [rate, setRate] = useSetting('player.playbackRate', 1)
 	const [saveTime, setSaveTime] = useSetting('player.isSavePlayTime', true)
@@ -240,16 +249,12 @@ const OdcSection = () => {
 
 const PlayDetailSection = () => {
 	const [blur, setBlur] = useSetting('playDetail.bgBlur', 0.6)
-	const [opacity, setOpacity] = useSetting('playDetail.bgOpacity', 0.5)
 	const [zoom, setZoom] = useSetting('playDetail.isZoomActiveLrc', true)
 	const [delay, setDelay] = useSetting('playDetail.isDelayScroll', false)
 	return (
 		<>
 			<SettingRow label="背景模糊" hint="0 = 无模糊，1 = 最强">
 				<SettingSlider value={Number(blur)} min={0} max={1} step={0.05} onChange={setBlur} format={v => `${Math.round(v * 100)}%`} />
-			</SettingRow>
-			<SettingRow label="背景遮罩" hint="0 = 透明，1 = 全黑">
-				<SettingSlider value={Number(opacity)} min={0} max={1} step={0.05} onChange={setOpacity} format={v => `${Math.round(v * 100)}%`} />
 			</SettingRow>
 			<SettingRow label="歌词当前行放大"><SettingSwitch value={zoom} onChange={setZoom} /></SettingRow>
 			<SettingRow label="歌词滚动延迟"><SettingSwitch value={delay} onChange={setDelay} /></SettingRow>
