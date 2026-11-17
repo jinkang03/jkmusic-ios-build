@@ -28,6 +28,11 @@ const MiniLyric = () => {
 	const raw: string = nowLyricState.useValue() as any
 	const [zoomActive] = useSetting('playDetail.isZoomActiveLrc', true)
 	const [delayScroll] = useSetting('playDetail.isDelayScroll', false)
+	const [fontSizeKey] = useSetting('lyric.detailFontSize', 1)
+	const [showTrans] = useSetting('player.isShowLyricTranslation', false)
+	// 字号档位：当前行 [16,18,20,22]，其它行 [13,15,16,18]
+	const curSize = [16, 18, 20, 22][Number(fontSizeKey)] ?? 16
+	const otherSize = [13, 15, 16, 18][Number(fontSizeKey)] ?? 13
 	// 切歌时清掉上一首的歌词：否则新曲还在加载中会显示「上一首」的歌词（实测出现过串台）
 	const currentTrack: any = myTrackPlayer.useCurrentMusic()
 	const lastTrackRef = React.useRef<string>('')
@@ -38,6 +43,7 @@ const MiniLyric = () => {
 		nowLyricState.setValue('')
 	}, [currentTrack?.platform, currentTrack?.id])
 	const lyrics: any[] = state?.lyrics ?? []
+	const transLyrics: any[] = (showTrans && state?.translationLyrics) ? state.translationLyrics : []
 
 	const currentIndex = useMemo(() => {
 		if (typeof current?.index === 'number' && current.index >= 0) return current.index
@@ -113,13 +119,18 @@ const MiniLyric = () => {
 							style={{
 								textAlign: 'center',
 								color: isCurrent ? c.primary : c.textMuted,
-								fontSize: (isCurrent && zoomActive) ? 16 : macFont.body,
+								fontSize: (isCurrent && zoomActive) ? curSize : otherSize,
 								fontWeight: (isCurrent && zoomActive) ? '700' : '400',
 								opacity,
 							}}
 						>
 							{item?.lrc ?? item?.content ?? ''}
 						</Text>
+						{isCurrent && transLyrics[absoluteIndex] ? (
+							<Text numberOfLines={1} style={{ textAlign: 'center', color: c.textMuted, fontSize: Math.max(11, curSize - 4), marginTop: 2 }}>
+								{transLyrics[absoluteIndex]?.lrc ?? ''}
+							</Text>
+						) : null}
 					</Pressable>
 				)
 			})}

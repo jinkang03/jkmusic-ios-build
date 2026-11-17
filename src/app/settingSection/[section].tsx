@@ -250,11 +250,19 @@ const OdcSection = () => {
 const PlayDetailSection = () => {
 	const [blur, setBlur] = useSetting('playDetail.bgBlur', 0.6)
 	const [zoom, setZoom] = useSetting('playDetail.isZoomActiveLrc', true)
+	const [fontSizeKey, setFontSizeKey] = useSetting('lyric.detailFontSize', 1)
 	const [delay, setDelay] = useSetting('playDetail.isDelayScroll', false)
 	return (
 		<>
 			<SettingRow label="背景模糊" hint="0 = 无模糊，1 = 最强">
 				<SettingSlider value={Number(blur)} min={0} max={1} step={0.05} onChange={setBlur} format={v => `${Math.round(v * 100)}%`} />
+			</SettingRow>
+			<SettingRow label="歌词字号" hint="影响紧凑歌词与全屏歌词">
+				<SettingSelect
+					value={String(fontSizeKey)}
+					onChange={(v) => setFontSizeKey(Number(v))}
+					options={[{ value: '0', label: '小' }, { value: '1', label: '标准' }, { value: '2', label: '大' }, { value: '3', label: '特大' }]}
+				/>
 			</SettingRow>
 			<SettingRow label="歌词当前行放大"><SettingSwitch value={zoom} onChange={setZoom} /></SettingRow>
 			<SettingRow label="歌词滚动延迟"><SettingSwitch value={delay} onChange={setDelay} /></SettingRow>
