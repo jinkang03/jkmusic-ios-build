@@ -195,6 +195,28 @@ const PlayerScreenContent = () => {
 		return () => clearTimeout(timer)
 	}, [currentActiveTrack?.id, currentActiveTrack?.platform])
 
+	// 全屏歌词 → 返回紧凑视图时，若歌词被清空则重新拉一次（P122 现象：返回后歌词区变空）
+	const prevShowLyrics = React.useRef(showLyrics)
+	React.useEffect(() => {
+		const was = prevShowLyrics.current
+		prevShowLyrics.current = showLyrics
+		if (!(was && !showLyrics)) return
+		const st: any = LyricManager.getLyricState?.() ?? {}
+		const len = (st?.lyrics ?? []).length
+		if (len > 0) return
+		const t: any = trackToDisplay
+		if (!t) return
+		void fetchLyric(t)
+			.then((res: any) => {
+				const lyric = String(res?.lyric ?? '')
+				if (!lyric) return
+				nowLyricState.setValue(lyric)
+				LyricManager.requestRefresh?.()
+				logInfo('[lyric] refetch on back len=' + lyric.length)
+			})
+			.catch((err: any) => logError('[lyric] refetch failed', String(err?.message ?? err)))
+	}, [showLyrics])
+
 	React.useEffect(() => {
 		const t: any = currentActiveTrack
 		if (!t) return

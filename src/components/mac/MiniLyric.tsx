@@ -9,7 +9,7 @@
  */
 import React, { useMemo } from 'react'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Pressable, Text, View } from 'react-native'
+import { Animated, Easing, Pressable, Text, View } from 'react-native'
 import LyricManager from '@/helpers/lyricManager'
 import myTrackPlayer, { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { macFont, macPalette } from '@/constants/macTokens'
@@ -71,6 +71,22 @@ const MiniLyric = () => {
 		return () => clearTimeout(timer)
 	}, [currentIndex, delayScroll])
 
+	const effectiveIndex = delayScroll ? followIndex : currentIndex
+
+	// 平滑滚动：index 变化时先让内容偏移 +ROW_HEIGHT，再缓动回 0（视觉上是"上滑一格"）
+	const shiftY = React.useRef(new Animated.Value(0)).current
+	const prevIdxRef = React.useRef(effectiveIndex)
+	React.useEffect(() => {
+		const from = prevIdxRef.current
+		if (from === effectiveIndex) return
+		prevIdxRef.current = effectiveIndex
+		shiftY.setValue(ROW_HEIGHT)
+		Animated.timing(shiftY, {
+			toValue: 0, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true,
+		}).start()
+		logInfo(`[minilyric] animate from=${from} to=${effectiveIndex} dur=280`)
+	}, [effectiveIndex, shiftY])
+
 	if (!lyrics.length) {
 		return (
 			<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -79,13 +95,13 @@ const MiniLyric = () => {
 		)
 	}
 
-	const effectiveIndex = delayScroll ? followIndex : currentIndex
 	const start = Math.max(0, effectiveIndex - WINDOW)
 	const end = Math.min(lyrics.length, effectiveIndex + WINDOW + 1)
 	const rows = lyrics.slice(start, end)
 
 	return (
 		<View style={{ flex: 1, justifyContent: 'center', overflow: 'hidden' }}>
+			<Animated.View style={{ transform: [{ translateY: shiftY }] }}>
 
 			{/* 上下渐隐 */}
 			<LinearGradient
@@ -134,6 +150,7 @@ const MiniLyric = () => {
 					</Pressable>
 				)
 			})}
+			</Animated.View>
 		</View>
 	)
 }

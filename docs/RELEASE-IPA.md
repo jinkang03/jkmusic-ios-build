@@ -104,6 +104,13 @@ codesign -dv               = not signed at all
 
 说明：#1/#4/#5 有日志证据；#2 是功能缺口（无 latency 打点代码）；#3 是时序问题（需要慢速解析才能触发）。
 
+## 音质说明（2026-11-17 实测）
+
+- **kw 的 flac 标识是 `bitrate$2000`**（不是 `bitrate$999`）
+- 同一曲目不同次请求可能被**上游随机降级**：实测「发如雪」一次 `actual=2000k`、一次 `actual=128k`
+- 判断实际音质以 URL 里的 `bitrate$NNNN` 为准，**不看文件大小**
+- 日志位置：`[quality] requested= flac actual= 2000k`
+
 ## 已知问题
 
 1. **随机点播需 2-4 秒**（本环境 AVPlayer 不加载网络流，改为先下载后播放）
