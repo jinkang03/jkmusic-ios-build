@@ -111,6 +111,19 @@ codesign -dv               = not signed at all
 - 判断实际音质以 URL 里的 `bitrate$NNNN` 为准，**不看文件大小**
 - 日志位置：`[quality] requested= flac actual= 2000k`
 
+## 逐字歌词（卡拉OK）现状
+
+解析器与渲染已实现（`src/jk/karaoke.ts` + `MiniLyric` 分段渲染），但**当前音源不提供逐字数据**：
+
+```
+[lyric] karaoke line=10 segs=0 pos=52396
+[lyric] karaoke line=11 segs=0 pos=57424
+[lyric] karaoke line=12 segs=0 pos=61394
+```
+
+`segs=0` 说明歌词里没有 `<start,dur>` 标记（lxlyric 字段为空），此时自动回退**整行高亮**。
+若将来换成提供 lxlyric 的音源，逐字会直接生效，无需改代码。
+
 ## 已知问题
 
 1. **随机点播需 2-4 秒**（本环境 AVPlayer 不加载网络流，改为先下载后播放）

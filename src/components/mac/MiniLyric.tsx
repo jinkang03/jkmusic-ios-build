@@ -15,6 +15,7 @@ import myTrackPlayer, { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { macFont, macPalette } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { useSetting } from '@/jk/settingsStore'
+import { parseKaraokeLine } from '@/jk/karaoke'
 import { logInfo } from '@/helpers/logger'
 
 const ROW_HEIGHT = 28
@@ -72,10 +73,14 @@ const MiniLyric = () => {
 	}, [currentIndex, delayScroll])
 
 	const effectiveIndex = delayScroll ? followIndex : currentIndex
+	// 逐字：只有当前行订阅 position（0.1s），其它行由 memo 组件隔离
+	const { position: karaokePos } = myTrackPlayer.useProgress(0.1)
+	const karaokeMs = Math.max(0, Number(karaokePos ?? 0) * 1000)
 
 	// 平滑滚动：index 变化时先让内容偏移 +ROW_HEIGHT，再缓动回 0（视觉上是"上滑一格"）
 	const shiftY = React.useRef(new Animated.Value(0)).current
 	const prevIdxRef = React.useRef(effectiveIndex)
+	const karaokeLogRef = React.useRef(-1)
 	React.useEffect(() => {
 		const from = prevIdxRef.current
 		if (from === effectiveIndex) return
@@ -86,6 +91,21 @@ const MiniLyric = () => {
 		}).start()
 		logInfo(`[minilyric] animate from=${from} to=${effectiveIndex} dur=280`)
 	}, [effectiveIndex, shiftY])
+
+	// 逐字诊断：仅在当前行变化时打一行（pos 变化不打）
+	const curLine: any = lyrics[effectiveIndex]
+	React.useEffect(() => {
+		if (karaokeLogRef.current === effectiveIndex) return
+		karaokeLogRef.current = effectiveIndex
+		const segs = parseKaraokeLine(String(curLine?.lxlyric ?? curLine?.lrc ?? ''), Number(curLine?.time ?? 0) * 1000)
+		logInfo(`[lyric] karaoke line=${effectiveIndex} segs=${segs.length} pos=${Math.round(karaokeMs)}`)
+	}, [effectiveIndex, curLine, karaokeMs])
+
+	// 当前行的逐字分段（无标记 → 空数组，渲染走整行高亮）
+	const karaokeSegs = React.useMemo(
+		() => parseKaraokeLine(String(lyrics[effectiveIndex]?.lxlyric ?? lyrics[effectiveIndex]?.lrc ?? ''), Number(lyrics[effectiveIndex]?.time ?? 0) * 1000),
+		[lyrics, effectiveIndex],
+	)
 
 	if (!lyrics.length) {
 		return (
@@ -130,18 +150,35 @@ const MiniLyric = () => {
 						}}
 						style={{ height: ROW_HEIGHT, justifyContent: 'center' }}
 					>
-						<Text
-							numberOfLines={1}
-							style={{
-								textAlign: 'center',
-								color: isCurrent ? c.primary : c.textMuted,
-								fontSize: (isCurrent && zoomActive) ? curSize : otherSize,
-								fontWeight: (isCurrent && zoomActive) ? '700' : '400',
-								opacity,
-							}}
-						>
-							{item?.lrc ?? item?.content ?? ''}
-						</Text>
+						{isCurrent && karaokeSegs.length > 0 ? (
+							<View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+								{karaokeSegs.map((seg, si) => (
+									<Text
+										key={`k${si}`}
+										style={{
+											color: karaokeMs >= seg.start ? c.primary : c.textMuted,
+											fontSize: zoomActive ? curSize : otherSize,
+											fontWeight: zoomActive ? '700' : '400',
+										}}
+									>
+										{seg.text}
+									</Text>
+								))}
+							</View>
+						) : (
+							<Text
+								numberOfLines={1}
+								style={{
+									textAlign: 'center',
+									color: isCurrent ? c.primary : c.textMuted,
+									fontSize: (isCurrent && zoomActive) ? curSize : otherSize,
+									fontWeight: (isCurrent && zoomActive) ? '700' : '400',
+									opacity,
+								}}
+							>
+								{karaokeSegs.length > 0 ? karaokeSegs.map(x => x.text).join('') : (item?.lrc ?? item?.content ?? '')}
+							</Text>
+						)}
 						{isCurrent && transLyrics[absoluteIndex] ? (
 							<Text numberOfLines={1} style={{ textAlign: 'center', color: c.textMuted, fontSize: Math.max(11, curSize - 4), marginTop: 2 }}>
 								{transLyrics[absoluteIndex]?.lrc ?? ''}
