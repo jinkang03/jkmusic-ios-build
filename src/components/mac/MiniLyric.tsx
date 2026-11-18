@@ -17,10 +17,14 @@ import { useAppTheme } from '@/hooks/useAppTheme'
 import { useSetting } from '@/jk/settingsStore'
 import { nowLxLyricState } from '@/player/PlayerStore'
 import { parseKaraokeLine, buildKaraokeMap, findKaraokeSegs } from '@/jk/karaoke'
+import { fetchLyric } from '@/jk/lyric'
 import { logInfo } from '@/helpers/logger'
 
 const ROW_HEIGHT = 28
 const WINDOW = 2
+// 模块级：跨挂载保持，避免导航回来的重挂载被误判成「切歌」
+let lastLyricKey = ''
+let lastLxRefetchAt = 0
 
 const MiniLyric = () => {
 	const { isDark } = useAppTheme()
@@ -40,8 +44,8 @@ const MiniLyric = () => {
 	const lastTrackRef = React.useRef<string>('')
 	React.useEffect(() => {
 		const key = `${currentTrack?.platform ?? ''}:${currentTrack?.id ?? ''}`
-		if (!key || key === lastTrackRef.current) return
-		lastTrackRef.current = key
+		if (!key || key === lastLyricKey) return
+		lastLyricKey = key
 		nowLyricState.setValue('')
 		nowLxLyricState.setValue('')
 	}, [currentTrack?.platform, currentTrack?.id])
@@ -99,6 +103,25 @@ const MiniLyric = () => {
 
 	// 逐字：从 lxlyric 原文建「行时间 → 分段」映射，再按当前行时间取（±30ms 容错）
 	const lxRaw = nowLxLyricState.useValue()
+	// 自愈：lxlyric 被清空时补拉一次（30 秒节流，避免失败循环）
+	const lyricWatch = nowLyricState.useValue()
+	React.useEffect(() => {
+		if (!currentTrack) return
+		if (lxRaw && lxRaw.length > 100) return
+		if (!lyricWatch || String(lyricWatch).length < 20) return
+		const now = Date.now()
+		if (now - lastLxRefetchAt < 30000) return
+		lastLxRefetchAt = now
+		logInfo('[lyric] lx missing, refetch')
+		void fetchLyric(currentTrack as any)
+			.then((res: any) => {
+				if (res?.lxlyric) {
+					nowLxLyricState.setValue(res.lxlyric)
+					logInfo('[lyric] lx refilled len=' + String(res.lxlyric).length)
+				}
+			})
+			.catch(() => {})
+	}, [lxRaw, lyricWatch, currentTrack?.id])
 	const karaokeMap = React.useMemo(() => buildKaraokeMap(lxRaw), [lxRaw])
 	const karaokeSegs = React.useMemo(
 		() => findKaraokeSegs(karaokeMap, Number(lyrics[effectiveIndex]?.time ?? 0) * 1000),
