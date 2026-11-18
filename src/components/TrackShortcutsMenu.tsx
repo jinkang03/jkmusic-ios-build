@@ -126,6 +126,9 @@ export const TrackShortcutsMenu = ({
 					handleViewArtist(artist)
 				},
 			)
+			.with('download-track', async () => {
+				void import('@/jk/downloader').then(m => m.downloadTrack(track)).catch(() => undefined)
+			})
 			.with('add-to-storedPlayList', async () => {
 				handleAddToStoredPlayList(track as IMusic.IMusicItem)
 			})
@@ -153,6 +156,11 @@ export const TrackShortcutsMenu = ({
 					id: isFavorite ? 'remove-from-favorites' : 'add-to-favorites',
 					title: isFavorite ? i18n.t('menu.removeFromFavorites') : i18n.t('menu.addToFavorites'),
 					image: isFavorite ? 'heart.fill' : 'heart',
+				},
+				{
+					id: 'download-track',
+					title: '下载',
+					image: 'arrow.down.circle',
 				},
 				{
 					id: 'add-to-storedPlayList',

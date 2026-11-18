@@ -50,6 +50,7 @@ const DownloadsScreen = () => {
 				.filter((n: string) => n !== 'index.json' && !n.endsWith('.part'))
 			const index = await readCacheIndex()
 			const list: CacheItem[] = []
+			let legacyCount = 0
 			let sum = 0
 			for (const name of names) {
 				const uri = `${cacheDir}${name}`
@@ -60,19 +61,28 @@ const DownloadsScreen = () => {
 					sum += size
 					const mt = Number(st.modificationTime ?? 0)
 					// RN 返回秒级时间戳，new Date() 需要毫秒
-					const meta = index[name] ?? {}
+					const meta: any = index[name] ?? {}
+					// 只显示「用户手动下载」的条目；播放产生的缓存不进下载页
+					if (meta.manual !== true) {
+						if (meta.manual === undefined) legacyCount++
+						continue
+					}
 					list.push({
 						name, uri, size,
 						mtime: mt > 1e12 ? mt : mt * 1000,
 						title: meta.title,
 						artist: meta.artist,
-					})
+						quality: String(meta.quality ?? 'unknown'),
+					} as any)
 				} catch { /* 单个文件失败忽略 */ }
 			}
+			if (legacyCount > 0) logInfo('[cache] 迁移老条目（视为缓存）count=', legacyCount)
 			list.sort((a, b) => b.mtime - a.mtime)
 			setItems(list)
 			setTotal(sum)
-			logInfo('[downloads] 刷新', `files=${list.length}`, `total=${(sum / 1024 / 1024).toFixed(1)}MB`)
+			const manualN = list.length
+			const autoN = Object.values(index).filter((x: any) => x?.manual !== true).length
+			logInfo('[downloads] 刷新', `manual=${manualN}`, `auto=${autoN}`, `total=${(sum / 1024 / 1024).toFixed(1)}MB`)
 		} catch (err) {
 			logError('[downloads] 读取缓存目录失败', String((err as any)?.message ?? err))
 			setItems([])
@@ -175,7 +185,7 @@ const DownloadsScreen = () => {
 			{loading ? (
 				<StateView mode="loading" />
 			) : shown.length === 0 ? (
-				<StateView mode="empty" title="暂无已下载歌曲" hint="播放过的歌曲会自动缓存到这里" />
+				<StateView mode="empty" title="暂无已下载歌曲" hint="在歌曲行右侧「⋯」菜单里选「下载」" />
 			) : (
 				<FlatList
 					data={shown}
@@ -193,7 +203,7 @@ const DownloadsScreen = () => {
 									</Text>
 								) : null}
 								<Text style={{ color: c.textMuted, fontSize: macFont.badge, marginTop: 2 }}>
-									{(item.size / 1024 / 1024).toFixed(1)}MB · {quality} · {new Date(item.mtime).toLocaleDateString()}
+									{(item.size / 1024 / 1024).toFixed(1)}MB · {(item as any).quality ?? 'unknown'} · {new Date(item.mtime).toLocaleDateString()}
 								</Text>
 							</View>
 							<Pressable onPress={() => playLocal(item)} hitSlop={8} style={{ paddingHorizontal: 8 }}>

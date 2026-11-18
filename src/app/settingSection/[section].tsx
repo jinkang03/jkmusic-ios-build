@@ -515,6 +515,18 @@ const SettingsSectionScreen = () => {
 					if (String((params as any).pause ?? '1') === '1') await (tp as any).pause()
 					const prog: any = (tp as any).getProgress?.() ?? {}
 					logInfo('[dev] seek ok pos=', pos, 'paused=', String((params as any).pause ?? '1'), 'now=', Number(prog?.position ?? 0).toFixed(2))
+				} else if (action === 'download') {
+					const { downloadTrack } = await import('@/jk/downloader')
+					const track: any = {
+						id: String((params as any).id ?? ''),
+						title: String((params as any).name ?? '测试下载'),
+						artist: String((params as any).singer ?? ''),
+						platform: String((params as any).source ?? 'kw'),
+						album: '',
+					}
+					if (!track.id) throw new Error('缺少 id')
+					await downloadTrack(track)
+					logInfo('[dev] download ok', track.title)
 				} else if (action === 'addToList') {
 					const listId = String((params as any).listId ?? '')
 					const songId = String((params as any).id ?? '')

@@ -52,7 +52,9 @@ export const isCached = async (musicItem: IMusic.IMusicItem): Promise<boolean> =
 const INDEX_PATH = `${cacheDir}index.json`
 type CacheIndexEntry = {
 	title?: string, artist?: string, album?: string, quality?: string,
-	size?: number, mtime?: number, songmid?: string, source?: string
+	size?: number, mtime?: number, songmid?: string, source?: string,
+	/** true = 用户手动下载；false/undefined = 播放产生的缓存 */
+	manual?: boolean
 }
 type CacheIndex = Record<string, CacheIndexEntry>
 
@@ -89,7 +91,11 @@ export const removeCacheIndexEntry = (basename: string) => {
 	return indexQueue
 }
 
-export const downloadToCache = async (musicItem: IMusic.IMusicItem, onProgress?: (percent: number) => void): Promise<string> => {
+export const downloadToCache = async (
+	musicItem: IMusic.IMusicItem,
+	onProgress?: (percent: number) => void,
+	opts?: { manual?: boolean, quality?: string },
+): Promise<string> => {
 	try {
 		await ensureCacheDirExists()
 		const localPath = getLocalFilePath(musicItem)
@@ -112,7 +118,9 @@ export const downloadToCache = async (musicItem: IMusic.IMusicItem, onProgress?:
 				title: (musicItem as any).title,
 				artist: (musicItem as any).artist,
 				album: (musicItem as any).album,
-				quality: String((globalThis as any).__jkActualQuality ?? '') || undefined,
+				// manual=true 表示用户主动下载；播放产生的缓存是 false
+				manual: opts?.manual === true,
+				quality: String(opts?.quality ?? (globalThis as any).__jkActualQuality ?? '') || 'unknown',
 				size: Number(st?.size ?? 0),
 				mtime: Date.now(),
 				songmid: String((musicItem as any).id ?? ''),
