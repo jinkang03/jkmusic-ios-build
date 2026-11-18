@@ -111,18 +111,21 @@ codesign -dv               = not signed at all
 - 判断实际音质以 URL 里的 `bitrate$NNNN` 为准，**不看文件大小**
 - 日志位置：`[quality] requested= flac actual= 2000k`
 
-## 逐字歌词（卡拉OK）现状
+## 逐字歌词（卡拉OK）✅ 已实现
 
-解析器与渲染已实现（`src/jk/karaoke.ts` + `MiniLyric` 分段渲染），但**当前音源不提供逐字数据**：
+数据链路：`kw.getLyric(music, true).lxlyric`（6937 字符）→ `nowLxLyricState` → `buildKaraokeMap`（行时间→逐字段）→ 二分定位当前行 → 嵌套 Text 逐字着色。
 
+关键日志：
 ```
-[lyric] karaoke line=10 segs=0 pos=52396
-[lyric] karaoke line=11 segs=0 pos=57424
-[lyric] karaoke line=12 segs=0 pos=61394
+[lyric] render row 3 isCurrent= true segs= 6 lit= 2 color0= primary
+[lyric] render row 3 isCurrent= true segs= 6 lit= 3 color0= primary
 ```
+`lit` 随播放位置从 2 递增到 3，屏幕上「编曲」洋红、「：林迈可」灰。
 
-`segs=0` 说明歌词里没有 `<start,dur>` 标记（lxlyric 字段为空），此时自动回退**整行高亮**。
-若将来换成提供 lxlyric 的音源，逐字会直接生效，无需改代码。
+踩过的两个坑：
+1. **渲染必须用「单个 Text 嵌套多个 Text」**，不能用 `View flexDirection:row` 包多个 Text —— 后者颜色不生效
+2. **当前行必须由 position 二分计算**，不能用 LyricManager 的 index（暂停/seek 后冻结）
+
 
 ## 已知问题
 

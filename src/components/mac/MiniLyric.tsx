@@ -89,6 +89,7 @@ const MiniLyric = () => {
 	// 平滑滚动：index 变化时先让内容偏移 +ROW_HEIGHT，再缓动回 0（视觉上是"上滑一格"）
 	const shiftY = React.useRef(new Animated.Value(0)).current
 	const prevIdxRef = React.useRef(effectiveIndex)
+	const renderLogRef = React.useRef('')
 	const karaokeLogRef = React.useRef(-1)
 	React.useEffect(() => {
 		const from = prevIdxRef.current
@@ -174,6 +175,13 @@ const MiniLyric = () => {
 				const distance = Math.abs(absoluteIndex - effectiveIndex)
 				const isCurrent = distance === 0
 				const opacity = isCurrent ? 1 : distance === 1 ? 0.75 : 0.5
+				if (isCurrent && renderLogRef.current !== `${absoluteIndex}:${karaokeSegs.filter(x => karaokeMs >= x.start).length}`) {
+					renderLogRef.current = `${absoluteIndex}:${karaokeSegs.filter(x => karaokeMs >= x.start).length}`
+					logInfo('[lyric] render row', absoluteIndex, 'isCurrent=', isCurrent,
+						'segs=', karaokeSegs.length,
+						'lit=', karaokeSegs.filter(x => karaokeMs >= x.start).length,
+						'color0=', karaokeSegs[0] ? (karaokeMs >= karaokeSegs[0].start ? 'primary' : 'muted') : 'none')
+				}
 				return (
 					<Pressable
 						key={`${absoluteIndex}-${item?.time ?? idx}`}
@@ -185,20 +193,19 @@ const MiniLyric = () => {
 						style={{ height: ROW_HEIGHT, justifyContent: 'center' }}
 					>
 						{isCurrent && karaokeSegs.length > 0 ? (
-							<View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
+							<Text
+								style={{
+									textAlign: 'center',
+									fontSize: zoomActive ? curSize : otherSize,
+									fontWeight: zoomActive ? '700' : '400',
+								}}
+							>
 								{karaokeSegs.map((seg, si) => (
-									<Text
-										key={`k${si}`}
-										style={{
-											color: karaokeMs >= seg.start ? c.primary : c.textMuted,
-											fontSize: zoomActive ? curSize : otherSize,
-											fontWeight: zoomActive ? '700' : '400',
-										}}
-									>
+									<Text key={`k${si}`} style={{ color: karaokeMs >= seg.start ? c.primary : c.textMuted }}>
 										{seg.text}
 									</Text>
 								))}
-							</View>
+							</Text>
 						) : (
 							<Text
 								numberOfLines={1}
