@@ -8,6 +8,7 @@ import { withLimit } from '@/jk/limiter'
 import { getSetting } from '@/jk/settingsStore'
 import { logError, logInfo } from '@/helpers/logger'
 import { showToast } from '@/utils/utils'
+import { upsertTask, removeTask } from '@/jk/downloadTasksStore'
 
 /** 音质归一：把 2000k / hires / flac24bit 等统一成 128k|320k|flac */
 export const normalizeQuality = (raw: string, sizeBytes?: number): string => {
@@ -23,6 +24,7 @@ export const downloadTrack = async(track: any) => {
 	const requested = String(getSetting('music.quality', '128k'))
 	try {
 		logInfo('[download] start', String(track?.title ?? ''), 'q=' + requested)
+		upsertTask({ id: String(track.id), title: String(track.title ?? ''), percent: 0, status: 'downloading' })
 		const resolved: any = await resolveSource(track, {
 			requestType: 'download',
 			requestKey: `dl_${Date.now()}`,
@@ -31,12 +33,21 @@ export const downloadTrack = async(track: any) => {
 		if (!url) throw new Error('解析未返回可下载地址')
 		const actual = normalizeQuality(String((globalThis as any).__jkActualQuality ?? requested))
 		const limit = Math.max(1, Number(getSetting('download.maxDownloadNum', 3)) || 3)
-		await withLimit(limit, () => downloadToCache({ ...track, url } as any, undefined, { manual: true, quality: actual }))
+		logInfo('[limit] start limit=', limit, 'active=', (await import('@/jk/limiter')).getActive())
+		await withLimit(limit, () => downloadToCache({ ...track, url } as any, (pct: number) => {
+			upsertTask({ id: String(track.id), percent: pct, status: 'downloading' })
+			if (pct % 20 === 0) logInfo('[download] progress', String(track.title ?? ''), pct + '%')
+		}, { manual: true, quality: actual }))
+		logInfo('[limit] done active=', (await import('@/jk/limiter')).getActive())
 		logInfo('[download] done', String(track?.title ?? ''), 'q=' + actual)
+		upsertTask({ id: String(track.id), percent: 100, status: 'done' })
+		setTimeout(() => removeTask(String(track.id)), 1500)
 		showToast('提示', `已下载 ${String(track?.title ?? '')}（${actual}）`, 'success')
 	} catch (err) {
 		logError('[download] failed', String((err as any)?.message ?? err))
-		showToast('错误', '下载失败，请稍后重试', 'error')
+		const prev = (await import('@/jk/downloadTasksStore')).downloadTasksStore.getValue()[String(track?.id)]?.attempts ?? 0
+		upsertTask({ id: String(track.id), percent: 0, status: 'failed', error: String((err as any)?.message ?? err), attempts: prev + 1 })
+		showToast('错误', '下载失败，可在下载页重试', 'error')
 	}
 }
 

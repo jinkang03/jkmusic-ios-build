@@ -14,6 +14,7 @@ import { getSetting, setSetting, useSetting } from '@/jk/settingsStore'
 import { logError, logInfo } from '@/helpers/logger'
 import { readCacheIndex, removeCacheIndexEntry } from '@/player/CacheManager'
 import { normalizeQuality } from '@/jk/downloader'
+import { downloadTasksStore } from '@/jk/downloadTasksStore'
 
 const FILTERS = ['全部', '已完成', '正在下载'] as const
 const QUALITIES = [
@@ -40,6 +41,9 @@ const DownloadsScreen = () => {
 	const [total, setTotal] = useState(0)
 	const [loading, setLoading] = useState(true)
 	const [quality, setQuality] = useSetting('music.quality', '128k')
+	const tasks = downloadTasksStore.useValue()
+	const downloading = Object.values(tasks ?? {}).filter((t: any) => t.status === 'downloading')
+	const failed = Object.values(tasks ?? {}).filter((t: any) => t.status === 'failed')
 
 	const cacheDir = `${FS.documentDirectory}musicCache/`
 	const limitMb = Number(getSetting('download.cacheLimitMb', 500)) || 500
@@ -161,7 +165,7 @@ const DownloadsScreen = () => {
 			<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0, marginTop: 12 }} contentContainerStyle={{ paddingHorizontal: macSpace.pageX, gap: 8 }}>
 				{FILTERS.map(item => {
 					const active = item === filter
-					const count = item === '正在下载' ? 0 : items.length
+					const count = item === '正在下载' ? downloading.length : items.length
 					return (
 						<Pressable key={item} onPress={() => setFilter(item)} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: macRadius.pill, backgroundColor: active ? c.primary : c.fillSubtle }}>
 							<Text style={{ color: active ? '#fff' : c.text, fontSize: macFont.caption }}>{item} {count}</Text>
@@ -182,6 +186,33 @@ const DownloadsScreen = () => {
 					)
 				})}
 			</View>
+
+			{(downloading.length > 0 || failed.length > 0) ? (
+				<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 10, gap: 8 }}>
+					{downloading.map((t: any) => (
+						<View key={`dl-${t.id}`} style={{ backgroundColor: c.fillSubtle, borderRadius: 10, padding: 12 }}>
+							<View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+								<Text style={{ color: c.text, fontSize: macFont.body }} numberOfLines={1}>{t.title || t.id}</Text>
+								<Text style={{ color: c.primary, fontSize: macFont.caption }}>{t.percent}%</Text>
+							</View>
+							<View style={{ height: 4, borderRadius: 2, backgroundColor: c.divider, marginTop: 6 }}>
+								<View style={{ width: `${Math.min(100, t.percent)}%`, height: 4, borderRadius: 2, backgroundColor: c.primary }} />
+							</View>
+						</View>
+					))}
+					{failed.map((t: any) => (
+						<View key={`fl-${t.id}`} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.fillSubtle, borderRadius: 10, padding: 12 }}>
+							<View style={{ flex: 1 }}>
+								<Text style={{ color: c.text, fontSize: macFont.body }} numberOfLines={1}>{t.title || t.id}</Text>
+								<Text style={{ color: c.danger, fontSize: macFont.caption }}>失败：{String(t.error ?? '').slice(0, 40)}</Text>
+							</View>
+							<Pressable onPress={() => { void import('@/jk/downloader').then(m => m.downloadTrack({ id: t.id, title: t.title, artist: '', platform: 'kw', album: '' })) }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+								<Text style={{ color: c.primary, fontSize: macFont.caption }}>重试</Text>
+							</Pressable>
+						</View>
+					))}
+				</View>
+			) : null}
 
 			{loading ? (
 				<StateView mode="loading" />

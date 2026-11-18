@@ -533,6 +533,19 @@ const SettingsSectionScreen = () => {
 					if (String((params as any).pause ?? '1') === '1') await (tp as any).pause()
 					const prog: any = (tp as any).getProgress?.() ?? {}
 					logInfo('[dev] seek ok pos=', pos, 'paused=', String((params as any).pause ?? '1'), 'now=', Number(prog?.position ?? 0).toFixed(2))
+				} else if (action === 'downloadAll') {
+					const { downloadTrack } = await import('@/jk/downloader')
+					const src = String((params as any).source ?? 'kw')
+					const ids = String((params as any).ids ?? '').split(',').map(x => x.trim()).filter(Boolean)
+					const bad = String((params as any).bad ?? '0') === '1'
+					for (const id of ids) {
+						const track: any = {
+							id, title: id, artist: '', platform: src, album: '',
+							url: bad ? 'https://invalid.invalid/x.mp3' : undefined,
+						}
+						void downloadTrack(track)
+					}
+					logInfo('[dev] downloadAll', ids.length, 'bad=', bad)
 				} else if (action === 'download') {
 					const { downloadTrack } = await import('@/jk/downloader')
 					const track: any = {
