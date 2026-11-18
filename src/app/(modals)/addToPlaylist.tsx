@@ -1,73 +1,75 @@
-import { PlaylistsListModal } from '@/components/PlaylistsListModal'
-import { screenPadding } from '@/constants/tokens'
-import myTrackPlayer from '@/helpers/trackPlayerIndex'
-import { useFavorites } from '@/store/library'
-import { useDefaultStyles } from '@/styles'
-import { useHeaderHeight } from 'expo-router/react-navigation'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo } from 'react'
-import { Alert, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import type { Track } from '@/player/types'
+/**
+ * 添加到歌单（libraryStore 版）。
+ * 歌曲来自模块级 pending（保留 meta.songmid/source/albumName），不用 URL 参数。
+ */
+import React from 'react'
+import { Pressable, ScrollView, Text, View } from 'react-native'
+import { useRouter } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { macFont, macPalette, macSpace } from '@/constants/macTokens'
+import { useAppTheme } from '@/hooks/useAppTheme'
+import { logInfo } from '@/helpers/logger'
+import { showToast } from '@/utils/utils'
+import { LIST_IDS, addToList, getUserLists } from '@/jk/libraryStore'
+import { takePendingMusic } from '@/jk/pendingMusic'
+import { addToList as addToLibList } from '@/jk/libraryStore'
 
-const AddToPlaylistModal = () => {
-	const defaultStyles = useDefaultStyles()
-	const styles = useMemo(() => createStyles(defaultStyles), [defaultStyles])
+const AddToPlaylistScreen = () => {
+	const { isDark } = useAppTheme()
+	const c = macPalette(!!isDark)
+	const insets = useSafeAreaInsets()
 	const router = useRouter()
-	const params = useLocalSearchParams()
 
-	const track: IMusic.IMusicItem = {
-		title: params.title as string,
-		album: params.album as string,
-		artwork: params.artwork as string,
-		artist: params.artist as string,
-		id: params.id as string,
-		url: (params.url as string) || 'Unknown',
-		platform: (params.platform as string) || 'tx',
-		duration: typeof params.duration === 'string' ? parseInt(params.duration, 10) : 0,
-	}
-	const headerHeight = useHeaderHeight()
+	const rows = React.useMemo(() => {
+		const userLists = getUserLists().map(item => ({ id: item.id, name: item.name, count: item.list.length }))
+		return [
+			{ id: 'love', name: '我的收藏', count: 0 },
+			{ id: LIST_IDS.DEFAULT, name: '试听列表', count: 0 },
+			...userLists,
+		]
+	}, [])
 
-	const { favorites, toggleTrackFavorite } = useFavorites()
-	// track was not found
-	if (!track) {
-		return null
-	}
-
-	const handlePlaylistPress = async (playlist: IMusic.PlayList) => {
-		// console.log('playlist', playlist)
-		if (playlist.id === 'favorites') {
-			if (favorites.find((item) => item.id === track.id)) {
-				console.log('已收藏')
-			} else {
-				toggleTrackFavorite(track as Track)
-			}
-		} else {
-			myTrackPlayer.addSongToStoredPlayList(playlist, track)
+	const choose = (id: string, name: string) => {
+		const m = takePendingMusic()
+		if (!m) {
+			showToast('提示', '没有待添加的歌曲', 'info')
+			router.back()
+			return
 		}
-		// should close the modal
-		router.dismiss()
-		Alert.alert('成功', '添加成功')
-
-		// if the current queue is the playlist we're adding to, add the track at the end of the queue
-		// if (activeQueueId?.startsWith(playlist.name)) {
-		// 	await TrackPlayer.add(track)
-		// }
+		if (id === 'love') addToLibList(LIST_IDS.LOVE, [m], 'bottom')
+		else addToList(id, [m], 'bottom')
+		logInfo('[addToPlaylist] added', m.id, 'source=', (m as any).source, 'to', id, name)
+		showToast('提示', `已添加到 ${name}`, 'success')
+		router.back()
 	}
 
 	return (
-		<SafeAreaView style={[styles.modalContainer, { paddingTop: headerHeight }]}>
-			<PlaylistsListModal onPlaylistPress={handlePlaylistPress} />
-		</SafeAreaView>
+		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
+			<View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: macSpace.pageX, height: 52 }}>
+				<Pressable onPress={() => router.back()}>
+					<Text style={{ color: c.primary, fontSize: macFont.body }}>返回</Text>
+				</Pressable>
+				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700', marginLeft: 12 }}>添加到歌单</Text>
+			</View>
+			<ScrollView>
+				{rows.map(item => (
+					<Pressable
+						key={item.id}
+						onPress={() => choose(item.id, item.name)}
+						style={({ pressed }) => ({
+							flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+							paddingHorizontal: macSpace.pageX, height: 52,
+							backgroundColor: pressed ? c.fillSubtle : 'transparent',
+							borderBottomWidth: 0.5, borderBottomColor: c.divider,
+						})}
+					>
+						<Text style={{ color: c.text, fontSize: macFont.body }}>{item.name}</Text>
+						<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>›</Text>
+					</Pressable>
+				))}
+			</ScrollView>
+		</View>
 	)
 }
 
-const createStyles = (defaultStyles: ReturnType<typeof useDefaultStyles>) =>
-	StyleSheet.create({
-	modalContainer: {
-		...defaultStyles.container,
-		paddingHorizontal: screenPadding.horizontal,
-	},
-	})
-
-export default AddToPlaylistModal
+export default AddToPlaylistScreen

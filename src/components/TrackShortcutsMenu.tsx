@@ -1,3 +1,5 @@
+import { setPendingMusic } from '@/jk/pendingMusic'
+import { trackToJk } from '@/jk/adapt'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { getSingerMidBySingerName } from '@/helpers/userApi/getMusicSource'
 import { useFavorites } from '@/store/library'
@@ -47,9 +49,9 @@ export const TrackShortcutsMenu = ({
 		})
 	}
 	const handleAddToStoredPlayList = (track: IMusic.IMusicItem) => {
-		router.push(
-			`/(modals)/addToPlaylist?title=${track.title}&album=${track.album}&artwork=${track.artwork}&artist=${track.artist}&id=${track.id}&url=${track.url}&platform=${track.platform}&duration=${track.duration}`,
-		)
+		// 用模块级变量传完整对象：URL 参数会丢掉 meta.songmid，导致加进歌单后无法取流
+		setPendingMusic(trackToJk(track as any) as any)
+		router.push('/(modals)/addToPlaylist' as any)
 	}
 	const artists = useMemo(() => {
 		if (typeof track.artist === 'string') {

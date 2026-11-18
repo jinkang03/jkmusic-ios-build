@@ -6,7 +6,7 @@ import SongListView from '@/components/mac/SongListView'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { jkToTrack } from '@/jk/adapt'
 import { getListById } from '@/jk/libraryStore'
-import { useLocalSearchParams } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useMemo } from 'react'
 import { Text, View } from 'react-native'
 
@@ -20,7 +20,8 @@ const ListDetailScreen = () => {
 		: undefined
 
 	const [focusVer, setFocusVer] = React.useState(0)
-	React.useEffect(() => { setFocusVer(v => v + 1) }, [listId])
+	// 必须用 useFocusEffect：深链重进同一 listId 时页面不卸载，useEffect 不会重跑
+	useFocusEffect(React.useCallback(() => { setFocusVer(v => v + 1) }, [listId]))
 	const tracks = useMemo(() => {
 		const list = getListById(listId)
 		logInfo('[fav] listId=', listId, 'count=', list.length)
