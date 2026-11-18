@@ -32,10 +32,14 @@ export const downloadTrack = async(track: any) => {
 	try {
 		logInfo('[download] start', String(track?.title ?? ''), 'q=' + requested)
 		upsertTask({ id: String(track.id), title: String(track.title ?? ''), percent: 0, status: 'downloading' })
-		const resolved: any = await resolveSource(track, {
-			requestType: 'download',
-			requestKey: `dl_${Date.now()}`,
-		} as any)
+		const forceBad = track?.__forceBad === true || track?.bad === true
+		const resolved: any = forceBad
+			? { url: 'https://invalid.invalid/x.mp3' }
+			: await resolveSource(track, {
+				requestType: 'download',
+				requestKey: `dl_${Date.now()}`,
+			} as any)
+		if (forceBad) logInfo('[download] forceBad url=', String(resolved?.url ?? ''))
 		const url = String(resolved?.url ?? '')
 		if (!url) throw new Error('解析未返回可下载地址')
 		const actual = normalizeQuality(String((globalThis as any).__jkActualQuality ?? requested))

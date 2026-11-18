@@ -541,7 +541,7 @@ const SettingsSectionScreen = () => {
 					for (const id of ids) {
 						const track: any = {
 							id, title: id, artist: '', platform: src, album: '',
-							url: bad ? 'https://invalid.invalid/x.mp3' : undefined,
+							__forceBad: bad,
 						}
 						void downloadTrack(track)
 					}
