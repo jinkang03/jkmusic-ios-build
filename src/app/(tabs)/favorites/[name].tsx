@@ -1,3 +1,4 @@
+import { logInfo } from '@/helpers/logger'
 /**
  * 列表详情：展示某个 JKMUSIC 列表内的歌曲。
  */
@@ -12,10 +13,16 @@ import { Text, View } from 'react-native'
 const ListDetailScreen = () => {
 	const { colors } = useAppTheme()
 	const params = useLocalSearchParams<{ name: string }>()
-	const listId = params.name
+	const listId = decodeURIComponent(String(params.name ?? '')).trim()
 
 	const tracks = useMemo(() => {
 		const list = getListById(listId)
+		logInfo('[fav] listId=', listId, 'count=', list.length)
+		if (list.length) {
+			const f: any = list[0]
+			logInfo('[fav] first id=', String(f?.id ?? ''), 'source=', String(f?.source ?? ''),
+				'songmid=', String(f?.meta?.songmid ?? ''), 'metaKeys=', Object.keys(f?.meta ?? {}).join(','))
+		}
 		return list.map(jkToTrack)
 		// 依赖 listId 即可，列表变更通过重新进入页面刷新
 	}, [listId])

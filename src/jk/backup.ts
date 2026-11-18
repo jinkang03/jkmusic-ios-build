@@ -5,6 +5,7 @@
  *   歌单：  { type: 'playList_v2', data: [...] }          → lx_list_v2.lxmc（下一批）
  * 文件内容 = gzip(JSON)，扩展名 .lxmc。
  */
+import { logInfo } from '@/helpers/logger'
 import pako from 'pako'
 import * as FileSystem from 'expo-file-system/legacy'
 import { getAllSettings, getSettingsForExport, setSetting } from './settingsStore'
@@ -108,14 +109,25 @@ export const importSetting = (data: Record<string, any>) => {
 	return { applied, skipped }
 }
 
-const toJkMusic = (song: any) => ({
-	id: String(song?.id ?? song?.meta?.songmid ?? ''),
-	name: String(song?.name ?? ''),
-	singer: String(song?.singer ?? ''),
-	source: song?.source ?? 'kw',
-	interval: song?.interval ?? null,
-	meta: { ...(song?.meta ?? {}) },
-})
+const toJkMusic = (song: any) => {
+	// 导入要保留播放所需的全部字段：songmid 是取流的关键，albumName/picUrl 影响封面与专辑列
+	const meta: Record<string, any> = { ...(song?.meta ?? {}) }
+	const id = String(song?.id ?? meta.songmid ?? meta.hash ?? meta.copyrightId ?? '')
+	meta.songmid = String(meta.songmid ?? id)
+	meta.source = String(song?.source ?? meta.source ?? 'kw')
+	if (song?.albumName && !meta.albumName) meta.albumName = String(song.albumName)
+	if (song?.album && !meta.albumName) meta.albumName = String(song.album)
+	if (song?.picUrl && !meta.picUrl) meta.picUrl = String(song.picUrl)
+	if (song?.albumId && !meta.albumId) meta.albumId = String(song.albumId)
+	return {
+		id,
+		name: String(song?.name ?? ''),
+		singer: String(song?.singer ?? ''),
+		source: meta.source,
+		interval: song?.interval ?? null,
+		meta,
+	}
+}
 
 /** 导入歌单：按 id 去重，已存在的合并歌曲（按 id 去重），不存在的新建 */
 export const importPlayList = (data: any[]) => {
@@ -166,6 +178,7 @@ export const importPlayList = (data: any[]) => {
 	setLoveList(love)
 	setDefaultList(defaultList)
 	setUserLists(userLists)
+	logInfo('[backup] imported lists=', lists, 'merged=', merged, 'songs=', songs)
 	return { lists, merged, songs }
 }
 
