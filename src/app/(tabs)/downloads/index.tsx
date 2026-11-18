@@ -13,6 +13,7 @@ import { useAppTheme } from '@/hooks/useAppTheme'
 import { getSetting, setSetting, useSetting } from '@/jk/settingsStore'
 import { logError, logInfo } from '@/helpers/logger'
 import { readCacheIndex, removeCacheIndexEntry } from '@/player/CacheManager'
+import { normalizeQuality } from '@/jk/downloader'
 
 const FILTERS = ['全部', '已完成', '正在下载'] as const
 const QUALITIES = [
@@ -72,7 +73,7 @@ const DownloadsScreen = () => {
 						mtime: mt > 1e12 ? mt : mt * 1000,
 						title: meta.title,
 						artist: meta.artist,
-						quality: String(meta.quality ?? 'unknown'),
+						quality: normalizeQuality(String(meta.quality ?? ''), size),
 					} as any)
 				} catch { /* 单个文件失败忽略 */ }
 			}

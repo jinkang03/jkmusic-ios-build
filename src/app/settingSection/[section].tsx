@@ -287,9 +287,32 @@ const DownloadSection = () => {
 		try {
 			const FS = await import('expo-file-system/legacy')
 			const names: string[] = await FS.readDirectoryAsync(cm.cacheDir)
-			setCount(names.filter((n: string) => !n.endsWith('.part')).length)
+			const idx = await cm.readCacheIndex()
+			// 缓存管理只统计「播放产生的缓存」（manual !== true），手动下载单独保留
+			const autoNames = names.filter((n: string) => !n.endsWith('.part') && (idx as any)[n]?.manual !== true)
+			setCount(autoNames.length)
 		} catch { setCount(0) }
 	}, [])
+
+	const clearAuto = async() => {
+		try {
+			const cm = await import('@/player/CacheManager')
+			const FS = await import('expo-file-system/legacy')
+			const idx: any = await cm.readCacheIndex()
+			const names: string[] = await FS.readDirectoryAsync(cm.cacheDir)
+			let removed = 0
+			for (const n of names) {
+				if (n.endsWith('.part')) continue
+				if (idx[n]?.manual === true) continue
+				try { await FS.deleteAsync(`${cm.cacheDir}${n}`, { idempotent: true }); await cm.removeCacheIndexEntry(n); removed++ } catch { /* ignore */ }
+			}
+			await refresh()
+			setStatus(`已清理缓存 ${removed} 个（保留手动下载）`)
+			logInfo('[cache] cleared auto count=', removed)
+		} catch (err: any) {
+			setStatus(`清理失败：${err?.message ?? err}`)
+		}
+	}
 
 	React.useEffect(() => { void refresh() }, [refresh])
 
@@ -325,18 +348,13 @@ const DownloadSection = () => {
 				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>—</Text>
 			</SettingRow>
 			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 12 }}>
-				<Pressable onPress={clearAll} style={({ pressed }) => ({ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-					<Text style={{ color: c.text, fontSize: macFont.body }}>清理缓存</Text>
+				<Pressable onPress={clearAuto} style={({ pressed }) => ({ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+					<Text style={{ color: c.text, fontSize: macFont.body }}>清理缓存（保留下载）</Text>
+				</Pressable>
+				<Pressable onPress={clearAll} style={({ pressed }) => ({ marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+					<Text style={{ color: c.danger, fontSize: macFont.body }}>全部清理（含手动下载）</Text>
 				</Pressable>
 				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
-				{showGoFavorites ? (
-					<Pressable
-						onPress={() => router.push('/(tabs)/favorites' as any)}
-						style={({ pressed }) => ({ marginTop: 10, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}
-					>
-						<Text style={{ color: c.text, fontSize: macFont.body }}>查看我的列表</Text>
-					</Pressable>
-				) : null}
 			</View>
 		</>
 	)
