@@ -41,16 +41,20 @@ const stripBoardId = (source: JKSource, id: string, board?: any) => {
 
 const normalizeMusic = (raw: any, source: JKSource): JKMusic => {
 	const meta = { ...(raw?.meta ?? {}), ...raw }
-	const id = String(
-		raw?.id ?? raw?.songmid ?? raw?.songId ?? raw?.copyrightId ?? raw?.hash ?? ''
-	)
+	// kg 的取流 id 是 hash（FileHash），songmid 是 Audioid —— 脚本只吃 songmid，必须换成 hash
+	const pickId = () => {
+		if (source === 'kg') return raw?.hash ?? raw?.songmid ?? raw?.id ?? ''
+		return raw?.id ?? raw?.songmid ?? raw?.songId ?? raw?.copyrightId ?? raw?.hash ?? ''
+	}
+	const id = String(pickId())
+	if (source === 'kg') logInfo('[source] kg id=', String(id).slice(0, 12), 'hash=', String(raw?.hash ?? '').slice(0, 12), 'songmid=', String(raw?.songmid ?? '').slice(0, 12))
 	return {
 		id,
 		name: raw?.name ?? raw?.title ?? '',
 		singer: raw?.singer ?? raw?.artist ?? '',
 		source: (raw?.source ?? source) as JKSource,
 		interval: raw?.interval ?? null,
-		meta: { ...meta, songmid: raw?.songmid ?? id, source },
+		meta: { ...meta, songmid: source === 'kg' ? id : (raw?.songmid ?? id), hash: raw?.hash ?? meta.hash, source },
 	}
 }
 
@@ -95,7 +99,28 @@ export const searchBySource = async(source: JKSource, name: string, page = 1, li
 		return (res?.list ?? []).map((music: any) => normalizeMusic(music, source))
 	}
 	if (!mod?.musicSearch?.search) throw new Error(`${source} 不支持搜索`)
-	const res = await mod.musicSearch.search(name, page, limit)
+	// tx 搜索间歇失败（脚本/上游限流），重试 2 次（400ms / 800ms）
+	const attempt = async(n: number): Promise<any> => {
+		try {
+			return await mod.musicSearch.search(name, page, limit)
+		} catch (err) {
+			if (source !== 'tx' || n >= 2) throw err
+			const wait = n === 0 ? 400 : 800
+			logError('[search] tx retry', 'attempt=' + (n + 1), 'wait=' + wait, String((err as any)?.message ?? err))
+			await new Promise(r => setTimeout(r, wait))
+			return attempt(n + 1)
+		}
+	}
+	let res: any
+	try {
+		res = await attempt(0)
+	} catch (err) {
+		if (source === 'tx') {
+			logError('[search] tx failed after retry', String((err as any)?.message ?? err))
+			return []
+		}
+		throw err
+	}
 	return (res?.list ?? []).map((music: any) => normalizeMusic(music, source))
 }
 

@@ -533,6 +533,41 @@ const SettingsSectionScreen = () => {
 					if (String((params as any).pause ?? '1') === '1') await (tp as any).pause()
 					const prog: any = (tp as any).getProgress?.() ?? {}
 					logInfo('[dev] seek ok pos=', pos, 'paused=', String((params as any).pause ?? '1'), 'now=', Number(prog?.position ?? 0).toFixed(2))
+				} else if (action === 'smoke') {
+					const q = String((params as any).q ?? '周杰伦')
+					const { searchBySource, resolveMusicSource } = await import('@/jk/musicSdk').then(async(m) => {
+						const { resolveSource } = await import('@/player/MusicSourceResolver')
+						return { searchBySource: m.searchBySource, resolveMusicSource: resolveSource }
+					})
+					const { default: FS } = await import('expo-file-system/legacy')
+					const lines: string[] = []
+					for (const src of ['kw', 'kg', 'tx', 'wy', 'mg']) {
+						let n = 0
+						let verdict = 'empty'
+						let quality = '-'
+						try {
+							const list: any[] = await searchBySource(src as any, q, 1, 5)
+							n = list.length
+							if (list[0]) {
+								const { jkToTrack } = await import('@/jk/adapt')
+								const track: any = jkToTrack(list[0] as any)
+								const r: any = await resolveMusicSource(track, { requestType: 'prefetch', requestKey: `smoke_${src}_${Date.now()}` } as any)
+								const url = String(r?.url ?? '')
+								verdict = !url ? 'empty' : url.includes('fake-audio') ? 'fake' : 'ok'
+								quality = String((globalThis as any).__jkActualQuality ?? '-')
+							}
+						} catch (err) {
+							verdict = 'error:' + String((err as any)?.message ?? err).slice(0, 30)
+						}
+						lines.push(`[smoke] ${src} results=${n} url=${verdict} q=${quality}`)
+						logInfo(`[smoke] ${src} results=${n} url=${verdict} q=${quality}`)
+					}
+					try {
+						const path = `${FS.documentDirectory}dev-smoke.log`
+						await FS.writeAsStringAsync(path, lines.join('\n') + '\n', { encoding: 'utf8' as any })
+						logInfo('[smoke] written', path)
+					} catch { /* ignore */ }
+					logInfo('[dev] smoke done', 'q=' + q)
 				} else if (action === 'downloadAll') {
 					const { downloadTrack } = await import('@/jk/downloader')
 					const src = String((params as any).source ?? 'kw')
