@@ -382,6 +382,7 @@ const SearchlistsScreen = () => {
 
 				{/* 结果：五列 SongRow，点行播放（当前结果集作为队列） */}
 				<SongListView
+					showActions
 					onTrackPress={() => rememberHistory(search)}
 					tracks={searchResults as any}
 					queueId={`search_${searchType}`}

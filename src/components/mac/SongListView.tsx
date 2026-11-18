@@ -5,11 +5,14 @@
  * 这里只负责渲染与把点击事件转成 playWithReplacePlayList，不自己维护队列。
  */
 import React, { useEffect, useRef } from 'react'
-import { FlatList } from 'react-native'
+import { FlatList, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { logInfo } from '@/helpers/logger'
+import { macPalette } from '@/constants/macTokens'
+import { useAppTheme } from '@/hooks/useAppTheme'
 import SongRow, { SongRowHeader } from './SongRow'
+import { TrackShortcutsMenu } from '@/components/TrackShortcutsMenu'
 import StateView from './StateView'
 import type { Track } from '@/player/types'
 
@@ -28,9 +31,12 @@ export interface SongListViewProps {
 	emptyText?: string
 	/** 用户点击某行（无论播放与否）时回调，用于记录历史等 */
 	onTrackPress?: () => void
+	/** 行右侧显示「⋯」操作菜单（收藏 / 添加到歌单 / 播放列表） */
+	showActions?: boolean
 }
 
-const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress }: SongListViewProps) => {
+const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress, showActions }: SongListViewProps) => {
+	const c = macPalette(!!useAppTheme().isDark)
 	const router = useRouter()
 	const params = useLocalSearchParams<{ t?: string }>()
 	const currentMusic: any = myTrackPlayer.useCurrentMusic()
@@ -69,7 +75,7 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress 
 			keyExtractor={(item: any, index) => `${item?.id ?? index}-${item?.platform ?? ''}`}
 			renderItem={({ item, index }) => {
 				const active = isCurrent(item)
-				return (
+				const row = (
 					<SongRow
 						index={index + 1}
 						title={item?.title ?? item?.name ?? ''}
@@ -88,6 +94,17 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress 
 							void myTrackPlayer.playWithReplacePlayList(item, tracks as any)
 						}}
 					/>
+				)
+				if (!showActions) return row
+				return (
+					<View style={{ flexDirection: 'row', alignItems: 'center' }}>
+						<View style={{ flex: 1 }}>{row}</View>
+						<TrackShortcutsMenu track={item as any}>
+							<View style={{ width: 32, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 }}>
+								<Text style={{ color: c.textMuted, fontSize: 18 }}>⋯</Text>
+							</View>
+						</TrackShortcutsMenu>
+					</View>
 				)
 			}}
 			removeClippedSubviews

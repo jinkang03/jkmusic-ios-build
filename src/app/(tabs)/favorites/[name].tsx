@@ -43,7 +43,7 @@ const ListDetailScreen = () => {
 
 	return (
 		<View style={{ flex: 1, backgroundColor: colors.background }}>
-			<SongListView tracks={tracks} queueId={`mylist_${listId}`} autoPlayIndex={autoPlayIndex} emptyText="列表还是空的" />
+			<SongListView tracks={tracks} queueId={`mylist_${listId}`} autoPlayIndex={autoPlayIndex} showActions emptyText="列表还是空的" />
 		</View>
 	)
 }
