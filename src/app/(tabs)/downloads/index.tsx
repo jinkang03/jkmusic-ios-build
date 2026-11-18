@@ -206,9 +206,14 @@ const DownloadsScreen = () => {
 								<Text style={{ color: c.text, fontSize: macFont.body }} numberOfLines={1}>{t.title || t.id}</Text>
 								<Text style={{ color: c.danger, fontSize: macFont.caption }}>失败：{String(t.error ?? '').slice(0, 40)}</Text>
 							</View>
-							<Pressable onPress={() => { void import('@/jk/downloader').then(m => m.downloadTrack({ id: t.id, title: t.title, artist: '', platform: 'kw', album: '' })) }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-								<Text style={{ color: c.primary, fontSize: macFont.caption }}>重试</Text>
-							</Pressable>
+							<View style={{ flexDirection: 'row', gap: 8 }}>
+								<Pressable onPress={() => { void import('@/jk/downloader').then(m => m.downloadTrack({ id: t.id, title: t.title, artist: '', platform: 'kw', album: '' })) }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+									<Text style={{ color: c.primary, fontSize: macFont.caption }}>重试</Text>
+								</Pressable>
+								<Pressable onPress={() => { void import('@/jk/downloadTasksStore').then(m => m.removeTask(t.id)) }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
+									<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>清除</Text>
+								</Pressable>
+							</View>
 						</View>
 					))}
 				</View>

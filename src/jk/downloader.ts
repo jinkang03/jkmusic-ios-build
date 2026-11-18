@@ -22,6 +22,13 @@ export const normalizeQuality = (raw: string, sizeBytes?: number): string => {
 
 export const downloadTrack = async(track: any) => {
 	const requested = String(getSetting('music.quality', '128k'))
+	// 连续失败 3 次后停止，避免无限重试
+	const prevTask = (await import('@/jk/downloadTasksStore')).downloadTasksStore.getValue()[String(track?.id)]
+	if ((prevTask?.attempts ?? 0) >= 3) {
+		showToast('提示', '已连续失败 3 次，请稍后再试', 'error')
+		logError('[download] stop after 3 failures', String(track?.id))
+		return
+	}
 	try {
 		logInfo('[download] start', String(track?.title ?? ''), 'q=' + requested)
 		upsertTask({ id: String(track.id), title: String(track.title ?? ''), percent: 0, status: 'downloading' })
@@ -33,7 +40,7 @@ export const downloadTrack = async(track: any) => {
 		if (!url) throw new Error('解析未返回可下载地址')
 		const actual = normalizeQuality(String((globalThis as any).__jkActualQuality ?? requested))
 		const limit = Math.max(1, Number(getSetting('download.maxDownloadNum', 3)) || 3)
-		logInfo('[limit] start limit=', limit, 'active=', (await import('@/jk/limiter')).getActive())
+		logInfo('[limit] queued limit=', limit, 'activeBefore=', (await import('@/jk/limiter')).getActive())
 		await withLimit(limit, () => downloadToCache({ ...track, url } as any, (pct: number) => {
 			upsertTask({ id: String(track.id), percent: pct, status: 'downloading' })
 			if (pct % 20 === 0) logInfo('[download] progress', String(track.title ?? ''), pct + '%')
