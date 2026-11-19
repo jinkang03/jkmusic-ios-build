@@ -23,10 +23,14 @@ interface ILyricItemComponentProps {
 	karaokeNowMs?: number
 	/** 翻译行（设置里开启「歌词翻译」时传入） */
 	translation?: string
+	/** 与当前行的距离（0=当前行），用于做上下渐隐 */
+	distance?: number
 }
 
 function _LyricItemComponent(props: ILyricItemComponentProps) {
-	const { highlight, text, onLayout, index, fontSize, onPress, karaokeSegs, karaokeNowMs, translation } = props
+	const { highlight, text, onLayout, index, fontSize, onPress, karaokeSegs, karaokeNowMs, translation, distance } = props
+	// 离当前行越远越淡：纯透明度渐隐（不叠黑色遮罩，背景是壁纸/封面）
+	const fadeOpacity = distance === undefined || distance === 0 ? 1 : distance === 1 ? 0.66 : distance === 2 ? 0.4 : 0.24
 	const hasKaraoke = !!(highlight && karaokeSegs && karaokeSegs.length)
 	const colors = useThemeColors()
 	const lyricStyles = useMemo(() => createStyles(colors), [colors])
@@ -93,6 +97,7 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 							lyricStyles.item,
 							{
 								fontSize: fontSize || rpx(28),
+								opacity: highlight ? 1 : fadeOpacity,
 							},
 							highlight
 								? [
@@ -109,7 +114,7 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 					</Text>
 				)}
 				{translation ? (
-					<Text style={[lyricStyles.translation, { fontSize: Math.max(12, (fontSize || rpx(28)) - 6) }]}>
+					<Text style={[lyricStyles.translation, { fontSize: Math.max(12, (fontSize || rpx(28)) - 6), opacity: highlight ? 0.7 : fadeOpacity * 0.7 }]}>
 						{translation}
 					</Text>
 				) : null}
@@ -127,7 +132,9 @@ const LyricItemComponent = memo(
 		prev.index === curr.index &&
 		prev.fontSize === curr.fontSize &&
 		prev.karaokeNowMs === curr.karaokeNowMs &&
-		prev.karaokeSegs === curr.karaokeSegs,
+		prev.karaokeSegs === curr.karaokeSegs &&
+		prev.translation === curr.translation &&
+		prev.distance === curr.distance,
 )
 
 export default LyricItemComponent

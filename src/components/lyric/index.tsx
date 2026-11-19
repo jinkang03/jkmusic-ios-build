@@ -14,7 +14,6 @@ import { useSetting } from '@/jk/settingsStore'
 import { tr } from '@/utils/i18n'
 import { logInfo } from '@/helpers/logger'
 import delay from '@/utils/delay'
-import { musicIsPaused } from '@/utils/trackUtils'
 import { useIsPlaying } from '@rntp/player'
 import { FlatList } from 'react-native-gesture-handler'
 import rpx from '../../utils/rpx'
@@ -36,8 +35,6 @@ const LyricFlatList = FlatList as React.ForwardRefExoticComponent<
 	FlatListProps<ILyric.IParsedLrcItem> & React.RefAttributes<NativeFlatList<ILyric.IParsedLrcItem>>
 >
 const ITEM_HEIGHT = rpx(92)
-const AUTO_SCROLL_THROTTLE_MS = 900
-const AUTO_SCROLL_MIN_INDEX_DELTA = 2
 
 interface IItemHeights {
 	blankHeight?: number
@@ -79,8 +76,22 @@ export default function Lyric(_props: IProps) {
 	// 逐字歌词：全屏视图复用 MiniLyric 的 lxlyric 解析（之前只有紧凑视图支持）
 	const lxRaw = nowLxLyricState.useValue()
 	const karaokeMap = useMemo(() => buildKaraokeMap(lxRaw), [lxRaw])
-	const { position } = myTrackPlayer.useProgress(1)
+	const { position } = myTrackPlayer.useProgress(0.1)
 	const karaokeMs = Math.max(0, Number(position ?? 0)) * 1000
+	// 当前行按播放位置二分查找：LyricManager 的 index 依赖 progress 事件，
+	// 暂停/seek 后会滞后，表现为「歌词不滚动 / 逐字不亮」。
+	const activeIndex = useMemo(() => {
+		if (!lyrics.length) return -1
+		let lo = 0
+		let hi = lyrics.length - 1
+		let idx = 0
+		while (lo <= hi) {
+			const mid = (lo + hi) >> 1
+			if (Number((lyrics[mid] as any)?.time ?? 0) * 1000 <= karaokeMs) { idx = mid; lo = mid + 1 }
+			else hi = mid - 1
+		}
+		return idx
+	}, [lyrics, karaokeMs])
 	// const showTranslation = PersistStatus.useValue('lyric.showTranslation', false)
 	const fontSizeKey = PersistStatus.useValue('lyric.detailFontSize', 1)
 	const fontSizeStyle = useMemo(
@@ -133,18 +144,18 @@ export default function Lyric(_props: IProps) {
 			}
 			const targetIndex = clampLyricIndex(index, listLength)
 			const now = Date.now()
-			const indexDelta = Math.abs(targetIndex - lastAutoScrollIndexRef.current)
-			const shouldSkip =
-				!force &&
-				now - lastAutoScrollAtRef.current < AUTO_SCROLL_THROTTLE_MS &&
-				indexDelta < AUTO_SCROLL_MIN_INDEX_DELTA
-			if (shouldSkip) {
+			// 只挡「同一行重复调用」，其余一律滚动：mac 端的连贯感来自逐行平滑滚动
+			if (!force && targetIndex === lastAutoScrollIndexRef.current) {
+				return
+			}
+			if (!force && now - lastAutoScrollAtRef.current < 120) {
 				return
 			}
 
 			listRef.current.scrollToIndex({
 				index: targetIndex,
 				viewPosition: 0.5,
+				animated: true,
 			})
 			lastAutoScrollAtRef.current = now
 			lastAutoScrollIndexRef.current = targetIndex
@@ -152,17 +163,16 @@ export default function Lyric(_props: IProps) {
 		[clampLyricIndex],
 	)
 
-	// 滚到当前item
+	// 滚到当前行（按播放位置算出来的行，而不是滞后的 progress 事件）
 	const scrollToCurrentLrcItem = useCallback(() => {
 		const lyricState = LyricManager.getLyricState()
 		const lyricItems = lyricState.lyrics
 		if (lyricItems.length === 0) {
 			return
 		}
-		const currentLrcItem = LyricManager.getCurrentLyric()
-		const targetIndex = currentLrcItem?.index === -1 || !currentLrcItem ? 0 : currentLrcItem.index ?? 0
+		const targetIndex = activeIndex < 0 ? 0 : activeIndex
 		scrollToLyricIndex(targetIndex, lyricItems.length, true)
-	}, [scrollToLyricIndex])
+	}, [scrollToLyricIndex, activeIndex])
 
 	// const delayedScrollToCurrentLrcItem = useMemo(() => {
 	// 	let sto: number
@@ -184,14 +194,13 @@ export default function Lyric(_props: IProps) {
 		if (
 			lyrics.length === 0 ||
 			draggingIndex !== undefined ||
-			(draggingIndex === undefined && musicIsPaused(playing)) ||
 			lyrics[lyrics.length - 1].time < 1
 		) {
 			return
 		}
-		const targetIndex = currentLrcItem?.index === -1 || !currentLrcItem ? 0 : currentLrcItem.index ?? 0
+		const targetIndex = activeIndex < 0 ? 0 : activeIndex
 		scrollToLyricIndex(targetIndex, lyrics.length)
-	}, [currentLrcItem?.index, lyrics.length, draggingIndex, playing, scrollToLyricIndex])
+	}, [activeIndex, lyrics.length, draggingIndex, playing, scrollToLyricIndex])
 
 	useEffect(() => {
 		scrollToCurrentLrcItem()
@@ -272,6 +281,7 @@ export default function Lyric(_props: IProps) {
 	), [blankComponent])
 
 	const renderLyricItem = useCallback(({ item, index }: { item: ILyric.IParsedLrcItem; index: number }) => {
+		const isActive = activeIndex === index
 		return (
 			<LyricItemComponent
 				index={index}
@@ -279,16 +289,17 @@ export default function Lyric(_props: IProps) {
 				fontSize={fontSizeStyle.fontSize}
 				onLayout={handleLyricItemLayout}
 				light={draggingIndex === index}
-				highlight={currentLrcItem?.index === index}
-				karaokeSegs={currentLrcItem?.index === index
+				highlight={isActive}
+				distance={activeIndex < 0 ? 0 : Math.abs(index - activeIndex)}
+				karaokeSegs={isActive
 					? findKaraokeSegs(karaokeMap, Number(item?.time ?? 0) * 1000)
 					: undefined}
-				karaokeNowMs={currentLrcItem?.index === index ? karaokeMs : undefined}
+				karaokeNowMs={isActive ? karaokeMs : undefined}
 				translation={showTrans ? findTranslation(translationLyrics, item?.time) : undefined}
 				onPress={() => handleLyricItemPress(index)}
 			/>
 		)
-	}, [fontSizeStyle.fontSize, handleLyricItemLayout, draggingIndex, currentLrcItem?.index, handleLyricItemPress, karaokeMap, karaokeMs])
+	}, [fontSizeStyle.fontSize, handleLyricItemLayout, draggingIndex, activeIndex, handleLyricItemPress, karaokeMap, karaokeMs, showTrans, translationLyrics])
 
 	return (
 		<>
@@ -321,7 +332,7 @@ export default function Lyric(_props: IProps) {
 					data={lyrics}
 					initialNumToRender={30}
 					overScrollMode="never"
-					extraData={currentLrcItem?.index ?? -1}
+					extraData={activeIndex}
 					getItemLayout={getItemLayout}
 					renderItem={renderLyricItem}
 					/>

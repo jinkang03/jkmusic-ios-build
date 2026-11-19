@@ -20,8 +20,7 @@ import { parseKaraokeLine, buildKaraokeMap, findKaraokeSegs } from '@/jk/karaoke
 import { fetchLyric } from '@/jk/lyric'
 import { logInfo } from '@/helpers/logger'
 
-const ROW_HEIGHT = 28
-const WINDOW = 2
+const ROW_HEIGHT = 34
 // 模块级：跨挂载保持，避免导航回来的重挂载被误判成「切歌」
 let lastLyricKey = ''
 let lastLxRefetchAt = 0
@@ -95,6 +94,7 @@ const MiniLyric = () => {
 	}, [currentIndex, delayScroll])
 
 	const effectiveIndex = delayScroll ? followIndex : currentIndex
+	const [boxHeight, setBoxHeight] = React.useState(0)
 
 
 	// 平滑滚动：index 变化时先让内容偏移 +ROW_HEIGHT，再缓动回 0（视觉上是"上滑一格"）
@@ -106,14 +106,21 @@ const MiniLyric = () => {
 		const from = prevIdxRef.current
 		if (from === effectiveIndex) return
 		prevIdxRef.current = effectiveIndex
-		shiftY.setValue(ROW_HEIGHT * 0.6)
+		const delta = effectiveIndex - from
+		// 逐行切换：把内容先整体下移一行（视觉上还停在上一行），再缓动上滑到中心。
+		// 之前只移 0.6 行，会出现「先跳一下再回弹」的顿挫感。
+		if (Math.abs(delta) > 1) {
+			// seek/跳段不播动画，直接归位
+			shiftY.setValue(0)
+			return
+		}
+		shiftY.setValue(delta > 0 ? ROW_HEIGHT : -ROW_HEIGHT)
 		Animated.timing(shiftY, {
 			toValue: 0,
-			duration: 420,
+			duration: 360,
 			easing: Easing.bezier(0.22, 1, 0.36, 1),
 			useNativeDriver: true,
 		}).start()
-		logInfo(`[minilyric] animate from=${from} to=${effectiveIndex} dur=420`)
 	}, [effectiveIndex, shiftY])
 
 	// 逐字：从 lxlyric 原文建「行时间 → 分段」映射，再按当前行时间取（±30ms 容错）
@@ -164,14 +171,21 @@ const MiniLyric = () => {
 		)
 	}
 
-	// 固定 5 行窗口：首尾不足时补空行，避免 justifyContent:center 导致整块上下跳动
-	const start = effectiveIndex - WINDOW
-	const windowSize = WINDOW * 2 + 1
+	// 窗口行数按容器实测高度决定：固定 5 行在小屏上会把首尾行切一半（视觉上是「半截字」）
+	const win = Math.max(1, Math.min(3, Math.floor((boxHeight || ROW_HEIGHT * 5) / 2 / ROW_HEIGHT)))
+	const windowSize = win * 2 + 1
+	const start = effectiveIndex - win
 	const rows: Array<any> = []
 	for (let i = 0; i < windowSize; i++) rows.push(lyrics[start + i] ?? null)
 
 	return (
-		<View style={{ flex: 1, justifyContent: 'center', overflow: 'hidden' }}>
+		<View
+			style={{ flex: 1, justifyContent: 'center', overflow: 'hidden' }}
+			onLayout={({ nativeEvent }) => {
+				const h = Math.round(nativeEvent.layout.height)
+				if (h > 0 && h !== boxHeight) setBoxHeight(h)
+			}}
+		>
 			<Animated.View style={{ transform: [{ translateY: shiftY }] }}>
 
 			{/* 上下渐隐改为纯透明度（原来是一层黑色遮罩，视觉上像一条黑边） */}
@@ -181,7 +195,8 @@ const MiniLyric = () => {
 				const distance = Math.abs(absoluteIndex - effectiveIndex)
 				const isCurrent = distance === 0
 				// 距离分级：越远越淡（Apple Music 那种纵深感）
-				const opacity = isCurrent ? 1 : distance === 1 ? 0.6 : 0.32
+				// 上下渐隐：透明度按距离衰减（纯透明度，不叠黑色遮罩）
+				const opacity = isCurrent ? 1 : distance === 1 ? 0.62 : distance === 2 ? 0.32 : 0.18
 				if (isCurrent && renderLogRef.current !== `${absoluteIndex}:${karaokeSegs.filter(x => karaokeMs >= x.start).length}`) {
 					renderLogRef.current = `${absoluteIndex}:${karaokeSegs.filter(x => karaokeMs >= x.start).length}`
 					logInfo('[lyric] render row', absoluteIndex, 'isCurrent=', isCurrent,
@@ -231,7 +246,15 @@ const MiniLyric = () => {
 							</Text>
 						)}
 						{isCurrent && findTrans(item?.time) ? (
-							<Text numberOfLines={1} style={{ textAlign: 'center', color: c.textMuted, fontSize: Math.max(11, curSize - 4), marginTop: 2 }}>
+							// 翻译用绝对定位：行高固定，滚动动画才不会因翻译行忽高忽低而顿挫
+							<Text
+								numberOfLines={1}
+								style={{
+									position: 'absolute', left: 0, right: 0, top: ROW_HEIGHT - 8,
+									textAlign: 'center', color: c.textMuted,
+									fontSize: Math.max(11, curSize - 5),
+								}}
+							>
 								{findTrans(item?.time)}
 							</Text>
 						) : null}

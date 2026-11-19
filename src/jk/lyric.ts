@@ -122,7 +122,12 @@ export const fetchLyric = async(track: Track): Promise<LyricResult> => {
 		const target = swapped ?? music
 		logInfo('[jk/lyric] source=', String(target.source), 'id=', String(target.id), 'swapped=', String(!!swapped))
 		const res = await getJkLyric(target)
-		if (isUsableLyric(res)) return normalize(res)
+		if (isUsableLyric(res)) {
+			const n = normalize(res)
+			logInfo('[jk/lyric] got lyric=', String(n.lyric?.length ?? 0),
+				'lx=', String(n.lxlyric ?? '').length, 'tl=', String(n.tlyric ?? '').length)
+			return n
+		}
 		// 当前源没词 → 先用原曲目再试（换源场景），再走同曲多源兜底
 		if (swapped) {
 			try {
