@@ -11,6 +11,7 @@ import myTrackPlayer, {
 	useCurrentQuality,
 } from '@/helpers/trackPlayerIndex'
 import { useThemeColors, useThemeMode } from '@/hooks/useAppTheme'
+import { MAC_THEMES, macThemeStore, setMacTheme, type MacThemeId } from '@/jk/themeStore'
 import { createMusicApiFromScript, fetchScriptFromUrl } from '@/helpers/userApi/importMusicSource'
 import PersistStatus from '@/store/PersistStatus'
 import i18n, { changeLanguage, nowLanguage } from '@/utils/i18n'
@@ -380,6 +381,7 @@ const importMusicSourceFromFile = async () => {
 const SettingModal = () => {
 	const colors = useThemeColors()
 	const { themeMode, setThemeMode } = useThemeMode()
+	const macTheme = macThemeStore.useValue()
 	const styles = useMemo(() => createStyles(colors), [colors])
 	const router = useRouter()
 	const [currentQuality, setCurrentQuality] = useCurrentQuality()
@@ -390,16 +392,7 @@ const SettingModal = () => {
 	const isCachedIconVisible = isCachedIconVisibleStore.useValue()
 	const songsNumsToLoad = songsNumsToLoadStore.useValue()
 	const preciseSeeking = PersistStatus.useValue('music.preciseSeeking', false) === true
-	const themeLabel = useMemo(() => {
-		switch (themeMode) {
-			case 'light':
-				return i18n.t('settings.actions.theme.light')
-			case 'dark':
-				return i18n.t('settings.actions.theme.dark')
-			default:
-				return i18n.t('settings.actions.theme.system')
-		}
-	}, [themeMode])
+	const themeLabel = useMemo(() => MAC_THEMES[macTheme.id]?.name ?? MAC_THEMES.jk.name, [macTheme.id])
 	const settingsData: { title: string; data: SettingItem[] }[] = [
 		{
 			title: i18n.t('settings.sections.appInfo'),
@@ -615,27 +608,16 @@ const SettingModal = () => {
 	const themeMenu = (
 		<MenuView
 			onPressAction={({ nativeEvent: { event } }) => {
-				if (event === 'system' || event === 'light' || event === 'dark') {
-					setThemeMode(event)
+				if (Object.prototype.hasOwnProperty.call(MAC_THEMES, event)) {
+					setMacTheme(event as MacThemeId)
+					showToast('主题已切换', MAC_THEMES[event as MacThemeId].name, 'success')
 				}
 			}}
-			actions={[
-				{
-					id: 'system',
-					title: i18n.t('settings.actions.theme.system'),
-					state: themeMode === 'system' ? 'on' : 'off',
-				},
-				{
-					id: 'light',
-					title: i18n.t('settings.actions.theme.light'),
-					state: themeMode === 'light' ? 'on' : 'off',
-				},
-				{
-					id: 'dark',
-					title: i18n.t('settings.actions.theme.dark'),
-					state: themeMode === 'dark' ? 'on' : 'off',
-				},
-			]}
+			actions={(Object.keys(MAC_THEMES) as MacThemeId[]).map(id => ({
+				id,
+				title: MAC_THEMES[id].name,
+				state: macTheme.id === id ? 'on' : 'off',
+			}))}
 		>
 			<TouchableOpacity style={styles.menuTrigger}>
 				<Text style={styles.menuTriggerText}>{themeLabel}</Text>

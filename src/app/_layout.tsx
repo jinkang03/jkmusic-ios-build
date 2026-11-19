@@ -6,7 +6,7 @@ import { AppThemeProvider, useAppTheme } from '@/hooks/useAppTheme'
 import LyricManager from '@/helpers/lyricManager'
 import { useLogTrackPlayerState } from '@/hooks/useLogTrackPlayerState'
 import { useSetupTrackPlayer } from '@/hooks/useSetupTrackPlayer'
-import i18n, { setI18nConfig } from '@/utils/i18n'
+import i18n, { nowLanguage, setI18nConfig } from '@/utils/i18n'
 import {
 	DarkTheme,
 	DefaultTheme,
@@ -131,10 +131,12 @@ const ThemedAppShell = () => {
 
 const RootNavigation = () => {
 	const { colors } = useAppTheme()
+	// 语言切换后重建整棵导航树：i18n.t 是同步取值，不重建不会刷新已挂载页面
+	const language = nowLanguage.useValue()
 
 	return (
 		//每个 Stack.Screen 组件定义了一个可导航的屏幕
-		<Stack>
+		<Stack key={language}>
 			<Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 			<Stack.Screen
 				name="player"

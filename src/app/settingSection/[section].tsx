@@ -734,6 +734,16 @@ const SettingsSectionScreen = () => {
 					}
 					lib.addToList(listId, [jk], 'bottom')
 					logInfo('[dev] addToList ok', listId, 'count=', lib.getListById(listId).length)
+				} else if (action === 'theme') {
+					const id = String((params as any).id ?? 'jk')
+					const { setMacTheme } = await import('@/jk/themeStore')
+					setMacTheme(id as any)
+					logInfo('[dev] theme', id)
+				} else if (action === 'lang') {
+					const code = String((params as any).code ?? 'en')
+					const { changeLanguage } = await import('@/utils/i18n')
+					changeLanguage(code)
+					logInfo('[dev] lang', code)
 				} else if (action === 'fullLyric') {
 					const on = String((params as any).on ?? '1') === '1'
 					;(globalThis as any).__JK_FULL_LYRIC__ = on
