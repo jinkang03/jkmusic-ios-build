@@ -3,7 +3,7 @@
  * 与播放缓存共用目录（不新建第二套），靠索引的 manual 字段区分。
  */
 import { resolveSource } from '@/player/MusicSourceResolver'
-import { downloadToCache } from '@/player/CacheManager'
+import { downloadToCache, readCacheIndex, upsertCacheIndex } from '@/player/CacheManager'
 import { withLimit } from '@/jk/limiter'
 import { getSetting } from '@/jk/settingsStore'
 import { logError, logInfo } from '@/helpers/logger'
@@ -20,8 +20,8 @@ export const normalizeQuality = (raw: string, sizeBytes?: number): string => {
 	return 'unknown'
 }
 
-export const downloadTrack = async(track: any) => {
-	const requested = String(getSetting('music.quality', '128k'))
+export const downloadTrack = async(track: any, opts?: { quality?: string }) => {
+	const requested = String(opts?.quality ?? getSetting('music.quality', '128k'))
 	// 连续失败 3 次后停止，避免无限重试
 	const prevTask = (await import('@/jk/downloadTasksStore')).downloadTasksStore.getValue()[String(track?.id)]
 	if ((prevTask?.attempts ?? 0) >= 3) {
@@ -38,6 +38,7 @@ export const downloadTrack = async(track: any) => {
 			: await resolveSource(track, {
 				requestType: 'download',
 				requestKey: `dl_${Date.now()}`,
+				quality: requested as any,
 			} as any)
 		if (forceBad) logInfo('[download] forceBad url=', String(resolved?.url ?? ''))
 		const url = String(resolved?.url ?? '')
@@ -45,10 +46,28 @@ export const downloadTrack = async(track: any) => {
 		const actual = normalizeQuality(String((globalThis as any).__jkActualQuality ?? requested))
 		const limit = Math.max(1, Number(getSetting('download.maxDownloadNum', 3)) || 3)
 		logInfo('[limit] queued limit=', limit, 'activeBefore=', (await import('@/jk/limiter')).getActive())
-		await withLimit(limit, () => downloadToCache({ ...track, url } as any, (pct: number) => {
+		const localPath = await withLimit(limit, () => downloadToCache({ ...track, url } as any, (pct: number) => {
 			upsertTask({ id: String(track.id), percent: pct, status: 'downloading' })
 			if (pct % 20 === 0) logInfo('[download] progress', String(track.title ?? ''), pct + '%')
 		}, { manual: true, quality: actual }))
+		// 兜底校正：无论 downloadToCache 内部如何写，手动下载最终必须是 manual=true
+		try {
+			const base = String(localPath).split('/').pop() ?? ''
+			const idx: any = await readCacheIndex()
+			if (base && idx?.[base]?.manual !== true) {
+				await upsertCacheIndex(base, {
+					...(idx?.[base] ?? {}),
+					manual: true,
+					quality: actual,
+					source: String((track as any).platform ?? ''),
+					songmid: String((track as any).id ?? ''),
+					mtime: Date.now(),
+				})
+				logInfo('[download] index fixed manual=true', base, 'q=', actual)
+			}
+		} catch (e) {
+			logError('[download] index fix failed', String((e as any)?.message ?? e))
+		}
 		logInfo('[limit] done active=', (await import('@/jk/limiter')).getActive())
 		logInfo('[download] done', String(track?.title ?? ''), 'q=' + actual)
 		upsertTask({ id: String(track.id), percent: 100, status: 'done' })

@@ -40,7 +40,8 @@ let primaryApi: any = null
  * 主脚本永远排第一，不受此表影响。
  */
 const SOURCE_PREFERENCE: Record<string, string[]> = {
-	kw: ['HelloWorld', '回避', '墨澜', '安妮', '裤佬', '星海'],
+	// 安妮的 kw 是直连（nmobi.kuwo.cn），实测最稳；回避的代理对 128k 会返回 400
+	kw: ['安妮', 'HelloWorld', '回避', '墨澜', '裤佬', '星海'],
 	tx: ['回避', '墨澜', 'HelloWorld', '裤佬', '安妮', '星海'],
 	wy: ['安妮', '回避', '墨澜', 'HelloWorld', '裤佬', '星海'],
 	mg: ['HelloWorld', '星海', '裤佬', '墨澜', '回避'],
@@ -76,6 +77,22 @@ export const clearSources = () => {
 	ensureGlobal()
 }
 
+/**
+ * 轻量校验：拿到 URL 后先发一个 Range 请求（0-0），避免把 4xx 的坏链当成功。
+ * 有些 CDN 不支持 Range，返回 200 也放行；只有明确的 4xx/5xx 才判失败。
+ */
+const verifyMediaUrl = async(url: string): Promise<boolean> => {
+	try {
+		const ctrl = new AbortController()
+		const timer = setTimeout(() => ctrl.abort(), 3000)
+		const res = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal })
+		clearTimeout(timer)
+		return res.status < 400
+	} catch {
+		return false
+	}
+}
+
 const withScriptTimeout = <T>(work: Promise<T>, ms: number, label: string): Promise<T> =>
 	Promise.race([
 		work,
@@ -85,11 +102,14 @@ const withScriptTimeout = <T>(work: Promise<T>, ms: number, label: string): Prom
 	])
 
 const sourceScore = (source: string, entry: PoolEntry) => {
-	if (entry.api === primaryApi) return -1000
 	const names = SOURCE_PREFERENCE[source] ?? []
 	const name = String(entry.api?.name ?? '')
 	const hit = names.findIndex(n => name.includes(n))
-	return hit >= 0 ? hit : 100 + entry.order
+	// 命中偏好表的按表排序；主脚本只有在同样未命中时才靠前，
+	// 否则「主脚本永远第一」会压过实测更稳的脚本（例如 kw 128k）
+	if (hit >= 0) return hit
+	if (entry.api === primaryApi) return 50
+	return 100 + entry.order
 }
 
 /** 为某平台生成候选链（主脚本优先，其次按优先级表） */
@@ -208,6 +228,8 @@ export const getPooledMusicUrl = async (
 					String(api?.name ?? '脚本'),
 				)
 				if (typeof url === 'string' && /^https?:/.test(url)) {
+					const ok = await verifyMediaUrl(url)
+					if (!ok) throw new Error(`${String(api?.name ?? '')} 返回的地址不可下载(4xx)`)
 					if (entry !== candidates[0]) {
 						logInfo(`[jk/source] 取流兜底 ${source}: ${String(candidates[0]?.api?.name ?? '')} -> ${String(api?.name ?? '')}`)
 					}

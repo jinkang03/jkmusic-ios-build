@@ -15,6 +15,8 @@ export type ResolveSourceRequestType = 'current' | 'preload'
 
 type ResolveSourceOptions = {
 	requestType?: ResolveSourceRequestType
+	/** 指定请求音质（下载时可覆盖设置里的默认值），不传则用当前播放音质 */
+	quality?: IMusic.IQualityKey
 }
 
 type MusicUrlRequestContext = {
@@ -304,7 +306,8 @@ export const resolveSource = async (
 
 		try {
 			const qualityOrder: IMusic.IQualityKey[] = ['flac', '320k', '128k']
-			let currentQualityIndex = qualityOrder.indexOf(qualityStore.getValue())
+			const requestedQuality = options.quality ?? qualityStore.getValue()
+			let currentQualityIndex = qualityOrder.indexOf(requestedQuality)
 			let resp_url: string | null = null
 
 			logInfo(`${logPrefix} 开始请求音源: ${musicItem.title} - ${musicItem.artist}`)

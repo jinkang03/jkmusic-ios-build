@@ -1,4 +1,5 @@
 import { setPendingMusic } from '@/jk/pendingMusic'
+import { logInfo } from '@/helpers/logger'
 import { trackToJk } from '@/jk/adapt'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { getSingerMidBySingerName } from '@/helpers/userApi/getMusicSource'
@@ -129,6 +130,17 @@ export const TrackShortcutsMenu = ({
 			.with('download-track', async () => {
 				void import('@/jk/downloader').then(m => m.downloadTrack(track)).catch(() => undefined)
 			})
+			.with(
+				P.when((id) => id.startsWith('download-') && id !== 'download-track'),
+				async (id) => {
+					const quality = id.replace('download-', '')
+					if (!['128k', '320k', 'flac'].includes(quality)) return
+					logInfo('[menu] download quality=', quality, 'track=', String((track as any)?.title ?? ''))
+					void import('@/jk/downloader')
+						.then(m => m.downloadTrack(track, { quality }))
+						.catch(() => undefined)
+				},
+			)
 			.with('add-to-storedPlayList', async () => {
 				handleAddToStoredPlayList(track as IMusic.IMusicItem)
 			})
@@ -161,7 +173,13 @@ export const TrackShortcutsMenu = ({
 					id: 'download-track',
 					title: '下载',
 					image: 'arrow.down.circle',
-				},
+					// 二级菜单：手动下载可选音质（不选则用设置里的默认值）
+					subactions: [
+						{ id: 'download-128k', title: '128k' },
+						{ id: 'download-320k', title: '320k' },
+						{ id: 'download-flac', title: 'flac' },
+					],
+				} as any,
 				{
 					id: 'add-to-storedPlayList',
 					title: i18n.t('menu.addToPlaylist'),

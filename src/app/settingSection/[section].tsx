@@ -715,8 +715,9 @@ const SettingsSectionScreen = () => {
 						album: '',
 					}
 					if (!track.id) throw new Error('缺少 id')
-					await downloadTrack(track)
-					logInfo('[dev] download ok', track.title)
+					const q = String((params as any).quality ?? '')
+					await downloadTrack(track, q ? { quality: q } : undefined)
+					logInfo('[dev] download ok', track.title, 'q=', q || '(default)')
 				} else if (action === 'addToList') {
 					const listId = String((params as any).listId ?? '')
 					const songId = String((params as any).id ?? '')
