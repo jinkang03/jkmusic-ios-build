@@ -98,7 +98,7 @@ const findPlayableAlt = async (
 				]) as string
 				if (typeof url !== 'string' || !/^https?:/.test(url)) throw new Error(`${e.source} 无地址`)
 				logInfo('[resolve] cross-source index-hit', e.source, title)
-				return { url, source: e.source as any, label: String(e.source), title, at: Date.now() }
+				return { url, source: e.source as any, id: String(e.id ?? ''), label: String(e.source), title, at: Date.now() }
 			})().catch(() => { throw new Error('miss') }))
 			try {
 				const found = await Promise.any(tries)
@@ -137,7 +137,7 @@ const findPlayableAlt = async (
 				createTimeoutPromise(8000),
 			]) as string
 			if (typeof url !== 'string' || !/^https?:/.test(url)) throw new Error(`${alt.id} 无地址`)
-			return { url, source: alt.id, label: alt.label, title: String(hit.name ?? ''), at: Date.now() }
+			return { url, source: alt.id, id: String(track.id ?? ''), label: alt.label, title: String(hit.name ?? ''), at: Date.now() }
 		})().catch((err) => {
 			logInfo('[resolve] cross-source miss', alt.id, String((err as any)?.message ?? err).slice(0, 80))
 			throw err
@@ -254,9 +254,10 @@ export const resolveSource = async (
 					const idx: any = await readCacheIndex()
 					const base = String(localPath).split('/').pop() ?? ''
 					const actualSource = idx?.[base]?.actualSource
+					const actualId = idx?.[base]?.actualId
 					if (actualSource && actualSource !== musicItem.platform) {
-						logInfo('[resolve] cached-source', String(musicItem.platform ?? ''), '->', String(actualSource))
-						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: String(musicItem.platform ?? ''), to: String(actualSource), title: String(musicItem.title ?? '') })).catch(() => undefined)
+						logInfo('[resolve] cached-source', String(musicItem.platform ?? ''), '->', String(actualSource), 'id=', String(actualId ?? '-'))
+						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: String(musicItem.platform ?? ''), to: String(actualSource), toId: actualId ? String(actualId) : undefined, title: String(musicItem.title ?? '') })).catch(() => undefined)
 					} else if (isCurrentSourceRequest(requestType)) {
 						// 缓存来自原源（或老条目无字段）：清掉上一首残留的换源提示
 						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue(null)).catch(() => undefined)
@@ -352,13 +353,13 @@ export const resolveSource = async (
 				}
 			}
 
-			let switchedTo: string | null = null
+			let switchedAlt: { source: string, id: string } | null = null
 			if (!resp_url) {
 				// 主源整条链路失败：换其它源播同一首（跨源兜底），避免点了没声音
 				const alt = await findPlayableAlt(musicItem, String(qualityStore.getValue() ?? '128k'), requestType)
 				if (alt?.url) {
 					resp_url = alt.url
-					switchedTo = String(alt.source)
+					switchedAlt = { source: String(alt.source), id: String((alt as any).id ?? '') }
 					if (isCurrentSourceRequest(requestType)) {
 						showToast('提示', `该源暂不可用，已用${alt.label}播放`, 'info')
 						nowApiState.setValue('正常')
@@ -370,8 +371,13 @@ export const resolveSource = async (
 			if (isCurrentSourceRequest(requestType)) {
 				void import('@/player/PlayerStore')
 					.then(m => m.resolvedFromStore.setValue(
-						switchedTo
-							? { from: String(musicItem.platform ?? ''), to: switchedTo, title: String(musicItem.title ?? '') }
+						switchedAlt
+							? {
+								from: String(musicItem.platform ?? ''),
+								to: switchedAlt.source,
+								toId: switchedAlt.id,
+								title: String(musicItem.title ?? ''),
+							}
 							: null,
 					))
 					.catch(() => undefined)
@@ -436,12 +442,13 @@ export const resolveSource = async (
 					bufferingStore.setValue({ title: String(musicItem.title ?? ''), percent: 0 })
 				}
 				// 换源下载时记录实际提供方（缓存命中时据此显示「音源：A → B」）；
-				// switchedTo 是本函数内的局部真值，比全局 __jkActualSource 可靠
-				const actualSource = String(switchedTo ?? (globalThis as any).__jkActualSource ?? musicItem.platform ?? '')
+				// switchedAlt 是本函数内的局部真值，比全局 __jkActualSource 可靠
+				const actualSource = String(switchedAlt?.source ?? (globalThis as any).__jkActualSource ?? musicItem.platform ?? '')
+				const actualId = String(switchedAlt?.id ?? musicItem.id ?? '')
 				const localPath = await downloadToCache(
 					{ ...(musicItem as any), url: resp_url } as any,
 					recordProgress,
-					{ actualSource } as any,
+					{ actualSource, actualId } as any,
 				)
 				if (slowMs > 0) {
 					// dev 专用：人为拉长缓冲窗口，便于截图与边界验收

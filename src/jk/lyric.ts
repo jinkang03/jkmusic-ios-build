@@ -4,6 +4,8 @@
 import { getLyric as getJkLyric } from './musicSdk'
 import type { JKMusic } from './musicSdk'
 import { trackToJk } from './adapt'
+import { resolvedFromStore } from '@/player/PlayerStore'
+import { logInfo } from '@/helpers/logger'
 import type { Track } from '@/player/types'
 
 export interface LyricResult {
@@ -23,13 +25,44 @@ const normalize = (raw: any): LyricResult => {
 	}
 }
 
+/**
+ * 换源后歌词要跟着换源：
+ * 酷狗曲目换到酷我播放时，酷狗歌词接口对这歌往往没有词；
+ * 用 resolvedFromStore 记录的实际源 + 实际曲目 id 去请求，命中率更高。
+ */
+const buildSwappedMusic = (music: JKMusic): JKMusic | null => {
+	try {
+		const swapped = resolvedFromStore.getValue()
+		if (!swapped?.toId || swapped.to === music.source) return null
+		if (swapped.title && music.name && swapped.title !== music.name) return null
+		const meta: any = {
+			...(music.meta ?? {}),
+			songmid: swapped.toId,
+			hash: swapped.toId,
+			source: swapped.to,
+		}
+		return { ...music, id: swapped.toId, source: swapped.to as any, meta }
+	} catch {
+		return null
+	}
+}
+
 export const fetchLyric = async(track: Track): Promise<LyricResult> => {
 	const music: JKMusic = trackToJk(track)
+	const swapped = buildSwappedMusic(music)
 	try {
-		const res = await getJkLyric(music)
+		const target = swapped ?? music
+		logInfo('[jk/lyric] source=', String(target.source), 'id=', String(target.id), 'swapped=', String(!!swapped))
+		const res = await getJkLyric(target)
 		return normalize(res)
 	} catch (err) {
 		console.log('[jk/lyric] sdk failed, fallback', err)
+		// 换源歌词失败时退回原曲目再试一次，避免比不换源还差
+		if (swapped) {
+			try {
+				return normalize(await getJkLyric(music))
+			} catch { /* fallthrough */ }
+		}
 		try {
 			const { myGetLyric } = await import('@/helpers/userApi/getMusicSource')
 			return normalize(await myGetLyric(track))

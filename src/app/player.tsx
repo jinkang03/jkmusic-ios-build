@@ -168,6 +168,7 @@ const PlayerScreenContent = () => {
 	}, [currentActiveTrack])
 
 	const lastLyricKeyRef = React.useRef<string>('')
+	const swappedLyricKeyRef = React.useRef<string>('')
 	const trackToDisplay = currentActiveTrack ?? prevTrackRef.current
 
 	const mac = macPalette(!!useAppTheme().isDark)
@@ -247,6 +248,33 @@ const PlayerScreenContent = () => {
 		}, 300)
 		return () => clearTimeout(timer)
 	}, [currentActiveTrack?.id, currentActiveTrack?.platform])
+
+	// 换源完成后（resolvedFromStore 出现 toId）再抓一次歌词：
+	// 首次抓取发生在 resolveSource 之前，那时还没换源，酷狗歌会拿到「暂无歌词」。
+	React.useEffect(() => {
+		const t: any = currentActiveTrack
+		if (!t || !resolvedFrom?.toId) return
+		const key = `${t.platform ?? ''}:${t.id ?? ''}:${resolvedFrom.to}`
+		if (key === swappedLyricKeyRef.current) return
+		swappedLyricKeyRef.current = key
+		const raw = String(nowLyricState.getValue() ?? '')
+		if (raw && raw.length > 20 && !raw.includes('暂无歌词')) {
+			logInfo('[lyric] swapped skip（已有真实歌词）')
+			return
+		}
+		logInfo('[lyric] swapped refetch', String(resolvedFrom.from ?? ''), '->', String(resolvedFrom.to ?? ''))
+		lastLyricKeyRef.current = ''
+		void fetchLyric(t as any)
+			.then((res: any) => {
+				const lyric = String(res?.lyric ?? '')
+				if (lyric) {
+					nowLyricState.setValue(lyric)
+					LyricManager.requestRefresh?.()
+					logInfo('[lyric] swapped ok len=' + lyric.length)
+				}
+			})
+			.catch((err: any) => logError('[lyric] swapped failed', String(err?.message ?? err)))
+	}, [resolvedFrom?.toId, resolvedFrom?.to, currentActiveTrack?.id])
 	const [bgBlur] = useSetting('playDetail.bgBlur', 1)
 	const [zoomActive] = useSetting('playDetail.isZoomActiveLrc', true)
 	const { duration: audioDuration } = myTrackPlayer.useProgress(0.5)

@@ -5,8 +5,8 @@ import { GlobalState } from '@/utils/stateMapper'
 export const currentMusicStore = new GlobalState<IMusic.IMusicItem | null>(null)
 /** 逐字歌词原文（与 nowLyricState 并列） */
 export const nowLxLyricState = new GlobalState<string>('')
-/** 换源信息：实际播放的源与曲目源不同时用于 UI 提示 */
-export const resolvedFromStore = new GlobalState<{ from: string, to: string, title: string } | null>(null)
+/** 换源信息：实际播放的源与曲目源不同时用于 UI 提示 / 歌词按实际源请求 */
+export const resolvedFromStore = new GlobalState<{ from: string, to: string, title: string, toId?: string } | null>(null)
 /** 歌单 */
 export const playListsStore = new GlobalState<IMusic.PlayList[] | []>(null)
 /** 播放模式 */
