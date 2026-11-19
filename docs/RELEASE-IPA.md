@@ -1,3 +1,58 @@
+## v1.2.5（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.5-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `4eb0b9d578f4f5207dc858bb6d6ec153e77a889da7097e5ba9bc06dd811ae897` |
+| 版本 / build | 1.2.5 / 9 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.5` |
+
+### 功能页面壁纸（对齐 mac 端）
+
+mac 端的做法（references/mac-ui）：
+
+- `#root { background: var(--background-image) }` —— 整窗壁纸，内容区卡片叠在上面；
+- 卡片底色 `--glass-tint`（浅色 0.08 白）/ `--glass-tint-dark`（深色 0.31 黑）；
+- `common.glassBlur` 通过 IPC 设置窗口 vibrancy（整窗磨砂）；
+- `playDetail.bgBlur/bgOpacity` 只作用于播放详情页。
+
+iOS 端等价实现：
+
+1. **壁纸层**：`src/components/WallpaperBackground.tsx`，挂在根布局最底层，
+   `expo-image` 铺满 + `BlurView` 磨砂（强度 = 壁纸磨砂）。
+2. **玻璃卡片**：壁纸开启时 `macPalette().bg` 与 `getThemeColors().background`
+   返回 `rgba(255,255,255,α)` / `rgba(18,18,20,α)`，40 处页面根容器自动透出壁纸，
+   不用逐页改背景。α 由「玻璃不透明度」映射：`0.12 + 0.78 × 百分比`。
+3. **导航层**：只有壁纸开启时才把 Stack/Tabs 场景背景设为透明，未开启保持原实色，
+   避免页面漏出底层黑底。
+4. **设置项**（设置 → 基本设置）：
+   - 主题壁纸：选择图片 / 清除 / 缩略图预览（只存文件名，重装后仍有效）；
+   - 壁纸磨砂：0（清晰）– 40（最模糊）；
+   - 玻璃不透明度：10%（壁纸最明显）– 100%（页面最实）。
+5. **作用范围**：我的列表、歌单、排行榜、搜索、下载、设置等所有功能页面；
+   **播放页仍用封面背景，不受壁纸影响**（无封面时用实色兜底）。
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.2.5 / build 9 / minos 16.4 / arm64
+jsbundle 6.0M / dev 残留 0 / size 17.x MB
+sha256 4eb0b9d578f4f5207dc858bb6d6ec153e77a889da7097e5ba9bc06dd811ae897
+widget PlugIns/JKMUSICWidget.appex present / NSSupportsLiveActivities true
+PlugIns/ShareExtension.appex present
+```
+
+### 验证方式（模拟器 iPhone 17 Pro / iOS 26.3）
+
+- 浅色 + 壁纸：我的列表 / 设置 / 搜索 / 下载 四页均透出壁纸，卡片为半透明玻璃；
+- 深色 + 壁纸：整页偏暗，壁纸隐约可见（文字对比度正常）；
+- 磨砂 0 + 不透明度 25%：壁纸清晰且明显；不透明度 70% 时壁纸明显变淡；
+- 清除壁纸后立即恢复原实色（深色纯黑、浅色纯白），与 1.2.4 一致；
+- 播放页在壁纸开启状态下仍显示封面模糊背景；
+- 无壁纸时打开 modal（导入歌单 / 添加到歌单）背景正常，不漏黑底。
+
 ## v1.2.4（2026-11-20）
 
 | 项 | 值 |
