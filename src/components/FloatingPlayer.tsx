@@ -3,6 +3,7 @@ import myTrackPlayer, { trackSourceLoadingStore } from '@/helpers/trackPlayerInd
 import { unknownTrackImageUri } from '@/constants/images'
 import { ThemeColors } from '@/constants/tokens'
 import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
+import { macPalette } from '@/constants/macTokens'
 import { useLastActiveTrack } from '@/hooks/useLastActiveTrack'
 import { currentArtworkStore } from '@/jk/artworkStore'
 import { syncCurrentArtwork } from '@/jk/artworkSync'
@@ -30,10 +31,11 @@ const fmt = (sec?: number) => {
 const SRC_LABEL: Record<string, string> = { kw: '酷我', kg: '酷狗', tx: '企鹅', wy: '网易', mg: '咪咕' }
 
 export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
-	const { blurTint } = useAppTheme()
+	const { blurTint, isDark } = useAppTheme()
+	const mac = macPalette(!!isDark)
 	const colors = useThemeColors()
 	const defaultStyles = useDefaultStyles()
-	const styles = useMemo(() => createStyles(colors, defaultStyles), [colors, defaultStyles])
+	const styles = useMemo(() => createStyles(colors, defaultStyles, mac.primary), [colors, defaultStyles, mac.primary])
 	const router = useRouter()
 	const currentMusic = myTrackPlayer.useCurrentMusic()
 	const sharedArt = currentArtworkStore.useValue()
@@ -130,6 +132,7 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 const createStyles = (
 	colors: ThemeColors,
 	defaultStyles?: ReturnType<typeof useDefaultStyles>,
+	primary?: string,
 ) =>
 	StyleSheet.create({
 
@@ -194,7 +197,7 @@ const createStyles = (
 	},
 	progressBar: {
 		height: '100%',
-		backgroundColor: colors.minimumTrackTintColor,
+		backgroundColor: primary,
 		borderRadius: 2,
 	},
 	})

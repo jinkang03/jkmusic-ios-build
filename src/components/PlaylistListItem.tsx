@@ -1,11 +1,11 @@
 import { ThemeColors } from '@/constants/tokens'
 import { Playlist } from '@/helpers/types'
-import { useThemeColors } from '@/hooks/useAppTheme'
+import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
+import { macPalette, macRadius } from '@/constants/macTokens'
 import { useDefaultStyles } from '@/styles'
-import { AntDesign } from '@expo/vector-icons'
+import { Ionicons } from '@expo/vector-icons'
 import { useMemo } from 'react'
 import { StyleSheet, Text, TouchableHighlight, TouchableHighlightProps, View } from 'react-native'
-import { Image } from 'expo-image'
 
 type PlaylistListItemProps = {
 	playlist: Playlist
@@ -14,38 +14,28 @@ type PlaylistListItemProps = {
 export const PlaylistListItem = ({ playlist, ...props }: PlaylistListItemProps) => {
 	const colors = useThemeColors()
 	const defaultStyles = useDefaultStyles()
+	const mac = macPalette(!!useAppTheme().isDark)
 	const styles = useMemo(() => createStyles(colors, defaultStyles), [colors, defaultStyles])
 
+	// 歌单图标跟随主题色（mac 风格）：主题色淡底 + 主题色心形，不再用远程粉色图
+	const tint = mac.primary
 	return (
 		<TouchableHighlight activeOpacity={0.8} underlayColor={colors.surfaceMuted} {...props}>
 			<View style={styles.playlistItemContainer}>
-				<View>
-					<Image
-						contentFit="cover"
-						cachePolicy="memory-disk"
-						priority="normal"
-						recyclingKey={(playlist.coverImg ? playlist.coverImg : playlist.artwork) ?? 'missing-artwork'}
-						source={{
-							uri: playlist.coverImg?playlist.coverImg:playlist.artwork,
-						}}
-						style={styles.playlistArtworkImage}
-					/>
+				<View style={[styles.cover, { backgroundColor: `${tint}22` }]}>
+					<Ionicons name="heart" size={24} color={tint} />
 				</View>
 
-				<View
-					style={{
-						flexDirection: 'row',
-						justifyContent: 'space-between',
-						alignItems: 'center',
-						width: '100%',
-					}}
-				>
+				<View style={styles.right}>
 					<Text numberOfLines={1} style={styles.playlistNameText}>
 						{playlist.title}
 					</Text>
-
-					<AntDesign name="right" size={16} color={colors.icon} style={{ opacity: 0.5 }} />
+					<Text numberOfLines={1} style={styles.playlistMetaText}>
+						{playlist.description ?? ''}
+					</Text>
 				</View>
+
+				<Ionicons name="chevron-forward" size={18} color={colors.icon} style={{ opacity: 0.4 }} />
 			</View>
 		</TouchableHighlight>
 	)
@@ -60,17 +50,28 @@ const createStyles = (
 		flexDirection: 'row',
 		columnGap: 14,
 		alignItems: 'center',
-		paddingRight: 90,
+		paddingRight: 4,
+		paddingVertical: 10,
 	},
-	playlistArtworkImage: {
-		borderRadius: 8,
-		width: 70,
-		height: 70,
+	cover: {
+		width: 56,
+		height: 56,
+		borderRadius: macRadius.card,
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	right: {
+		flex: 1,
+		justifyContent: 'center',
 	},
 	playlistNameText: {
 		...defaultStyles.text,
 		fontSize: 17,
 		fontWeight: '600',
-		maxWidth: '80%',
+	},
+	playlistMetaText: {
+		color: colors.textMuted,
+		fontSize: 12,
+		marginTop: 3,
 	},
 	})

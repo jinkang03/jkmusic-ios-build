@@ -1,6 +1,7 @@
 import { ThemeColors, fontSize } from '@/constants/tokens'
 import { formatSecondsToMinutes } from '@/helpers/miscellaneous'
-import { useThemeColors } from '@/hooks/useAppTheme'
+import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
+import { macPalette } from '@/constants/macTokens'
 import { useDefaultStyles, useUtilsStyles } from '@/styles'
 import React, { useCallback, useEffect, useMemo } from 'react'
 import { StyleSheet, Text, View, ViewProps } from 'react-native'
@@ -8,15 +9,14 @@ import { Slider } from 'react-native-awesome-slider'
 import Animated, { Reanimated3DefaultSpringConfig, SharedValue, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 
-const AnimatedThumb = React.memo(({ isSliding }: { isSliding: SharedValue<boolean> }) => {
-	const colors = useThemeColors()
+const AnimatedThumb = React.memo(({ isSliding, tint }: { isSliding: SharedValue<boolean>, tint: string }) => {
 
 	const animatedStyle = useAnimatedStyle(() => {
 		return {
 			width: withSpring(isSliding.value ? 24 : 12, Reanimated3DefaultSpringConfig),
 			height: withSpring(isSliding.value ? 24 : 12, Reanimated3DefaultSpringConfig),
 			borderRadius: withSpring(isSliding.value ? 12 : 6, Reanimated3DefaultSpringConfig),
-			backgroundColor: colors.text,
+			backgroundColor: tint,
 			left: 2,
 		}
 	})
@@ -29,6 +29,7 @@ export const PlayerProgressBar = React.memo(({
 	onSeek,
 }: ViewProps & { onSeek?: (position: number) => void }) => {
 	const colors = useThemeColors()
+	const mac = macPalette(!!useAppTheme().isDark)
 	const defaultStyles = useDefaultStyles()
 	const utilsStyles = useUtilsStyles()
 	const { position, duration } = myTrackPlayer.useProgress(0.25)
@@ -66,7 +67,7 @@ export const PlayerProgressBar = React.memo(({
 		progress.value = value
 	}, [progress])
 
-	const renderThumb = useCallback(() => <AnimatedThumb isSliding={isSliding} />, [isSliding])
+	const renderThumb = useCallback(() => <AnimatedThumb isSliding={isSliding} tint={mac.primary} />, [isSliding, mac.primary])
 	const renderBubble = useCallback(() => null, [])
 
 	return (
@@ -80,7 +81,7 @@ export const PlayerProgressBar = React.memo(({
 				renderThumb={renderThumb}
 				renderBubble={renderBubble}
 				theme={{
-					minimumTrackTintColor: colors.minimumTrackTintColor,
+					minimumTrackTintColor: mac.primary,
 					maximumTrackTintColor: colors.maximumTrackTintColor,
 				}}
 				onSlidingStart={handleSlidingStart}

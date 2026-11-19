@@ -180,8 +180,18 @@ const DownloadsScreen = () => {
 				{QUALITIES.map(q => {
 					const active = q.value === quality
 					return (
-						<Pressable key={q.value} onPress={() => setQuality(q.value)} style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: macRadius.pill, borderWidth: active ? 1 : 0.5, borderColor: active ? c.primary : c.divider }}>
-							<Text style={{ color: active ? c.primary : c.textMuted, fontSize: macFont.caption }}>{q.label}</Text>
+						<Pressable
+							key={q.value}
+							onPress={() => setQuality(q.value)}
+							style={{
+								paddingHorizontal: 12, paddingVertical: 5, borderRadius: macRadius.pill,
+								borderWidth: active ? 1 : 0.5,
+								borderColor: active ? c.primary : c.divider,
+								// 与筛选胶囊保持一致：选中实心主题色
+								backgroundColor: active ? c.primary : 'transparent',
+							}}
+						>
+							<Text style={{ color: active ? '#fff' : c.textMuted, fontSize: macFont.caption, fontWeight: active ? '600' : '400' }}>{q.label}</Text>
 						</Pressable>
 					)
 				})}

@@ -295,10 +295,11 @@ const SearchlistsScreen = () => {
 								borderRadius: macRadius.pill,
 								borderWidth: active ? 1 : 0.5,
 								borderColor: active ? mac.primary : mac.divider,
-								backgroundColor: active ? 'transparent' : mac.fillSubtle,
+								// mac 风格：选中是实心品牌色 + 白字
+								backgroundColor: active ? mac.primary : mac.fillSubtle,
 							}}
 						>
-							<Text style={{ color: active ? mac.primary : mac.text, fontSize: macFont.caption }}>{pill.label}</Text>
+							<Text style={{ color: active ? '#FFFFFF' : mac.text, fontSize: macFont.caption, fontWeight: active ? '600' : '400' }}>{pill.label}</Text>
 						</Pressable>
 					)
 				})}
@@ -317,7 +318,7 @@ const SearchlistsScreen = () => {
 							style={[styles.segment, { borderTopLeftRadius: 8, borderBottomLeftRadius: 8 }]}
 							onPress={() => handleSearchTypeChange('songs')}
 						>
-							<Text style={[styles.segmentText, searchType === 'songs' && styles.activeSegmentText]}>
+							<Text style={[styles.segmentText, searchType === 'songs' && styles.activeSegmentText, searchType === 'songs' && { color: mac.primary }]}>
 								{i18n.t('find.songs')}
 							</Text>
 						</Pressable>
@@ -325,7 +326,7 @@ const SearchlistsScreen = () => {
 							style={[styles.segment, { borderTopRightRadius: 8, borderBottomRightRadius: 8 }]}
 							onPress={() => handleSearchTypeChange('artists')}
 						>
-							<Text style={[styles.segmentText, searchType === 'artists' && styles.activeSegmentText]}>
+							<Text style={[styles.segmentText, searchType === 'artists' && styles.activeSegmentText, searchType === 'artists' && { color: mac.primary }]}>
 								{i18n.t('find.artists')}
 							</Text>
 						</Pressable>
