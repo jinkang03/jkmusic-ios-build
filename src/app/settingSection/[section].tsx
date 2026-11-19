@@ -595,6 +595,9 @@ const SettingsSectionScreen = () => {
 				} else if (action === 'clearxsource') {
 					const idx = await import('@/jk/crossSourceIndex')
 					idx.clear()
+					const { clearAltCache } = await import('@/player/MusicSourceResolver')
+					clearAltCache()
+					logInfo('[dev] clearxsource: index + altCache cleared')
 					logInfo('[dev] clearxsource ok')
 				} else if (action === 'smoke') {
 					const q = String((params as any).q ?? '周杰伦')

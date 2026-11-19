@@ -63,6 +63,8 @@ const altCache = new Map<string, { url: string, source: string, label: string, t
 const normalizeMatchKey = (value: any) =>
 	String(value ?? '').toLowerCase().replace(/[\s\-_·・,，.。()（）]/g, '')
 
+export const clearAltCache = () => { altCache.clear() }
+
 const findPlayableAlt = async (
 	musicItem: IMusic.IMusicItem,
 	quality: string,

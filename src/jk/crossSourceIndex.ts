@@ -60,7 +60,7 @@ export const remember = (list: any[]) => {
 		map[k] = next.slice(-MAX_PER_KEY)
 		added++
 	}
-	if (added) persistSoon()
+	if (added) { persistSoon(); logInfo('[xsource] remember n=', added, 'keys=', Object.keys(map).length) }
 	return added
 }
 
