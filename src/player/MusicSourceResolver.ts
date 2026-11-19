@@ -486,11 +486,35 @@ export const resolveSource = async (
 				}
 			} catch (err) {
 				if (bufferingTimer) clearTimeout(bufferingTimer)
-				logError('[jk/play] 缓冲下载失败，回退远程流式', String((err as any)?.message ?? err))
+				logError('[jk/play] 缓冲下载失败，尝试换源重下', String((err as any)?.message ?? err))
 				try {
 					const { bufferingStore } = await import('@/player/PlayerStore')
 					bufferingStore.setValue(null)
-				} catch { /* ignore */ }
+					// 取流成功但下载失败（vkey 过期 / 403 / CDN 拒绝）时换源重下一次，
+					// 不再直接回退远程流式（本环境下 AVPlayer 放不了网络流，等于判死）
+					const alt = await findPlayableAlt(
+						musicItem,
+						String(qualityStore.getValue() ?? '128k'),
+						requestType,
+					)
+					if (alt?.url) {
+						logInfo('[jk/play] 下载失败换源重试:', alt.source, alt.title)
+						const { downloadToCache: retryDownload } = await import('@/player/CacheManager')
+						const retryPath = await retryDownload(
+							{ ...(musicItem as any), url: alt.url } as any,
+							undefined,
+							{ actualSource: alt.source, actualId: (alt as any).id } as any,
+						)
+						if (myGeneration === downloadGeneration) {
+							const retryUri = String(retryPath).startsWith('file://') ? String(retryPath) : `file://${retryPath}`
+							logInfo('[jk/play] 换源重下成功:', retryUri.slice(0, 110))
+							if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
+							return { url: retryUri, wasCached: true }
+						}
+					}
+				} catch (retryErr) {
+					logError('[jk/play] 换源重下仍失败', String((retryErr as any)?.message ?? retryErr))
+				}
 			}
 			// 302 → 解析成最终地址；否则 AVPlayer 可能拿不到音频
 			resp_url = await followRedirect(resp_url as string)

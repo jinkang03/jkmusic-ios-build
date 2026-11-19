@@ -78,8 +78,11 @@ export const clearSources = () => {
 }
 
 /**
- * 轻量校验：拿到 URL 后先发一个 Range 请求（0-0），避免把 4xx 的坏链当成功。
- * 有些 CDN 不支持 Range，返回 200 也放行；只有明确的 4xx/5xx 才判失败。
+ * 轻量校验：只过滤「资源确实不存在」的坏链（400/404/410）。
+ * 403/405/416/429/5xx 一律放行：
+ * - 403 常见于防盗链 / vkey 有时效，但播放器带 Referer 或重定向后可能可用
+ * - 416 是 CDN 不支持 Range
+ * - 之前把 403/416 判失败，导致腾讯源被误杀、连续跳曲（1.2.x 回归）
  */
 const verifyMediaUrl = async(url: string): Promise<boolean> => {
 	try {
@@ -87,9 +90,11 @@ const verifyMediaUrl = async(url: string): Promise<boolean> => {
 		const timer = setTimeout(() => ctrl.abort(), 3000)
 		const res = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal })
 		clearTimeout(timer)
-		return res.status < 400
+		const code = Number(res.status)
+		return !(code === 400 || code === 404 || code === 410)
 	} catch {
-		return false
+		// 超时/网络抖动不判死：交给下载环节的换源重试兜底
+		return true
 	}
 }
 

@@ -358,6 +358,18 @@ async function failToPlay() {
 	if (revision !== controlRevision || !isCurrentMusic(failedMusic) ||
 		sourceToken !== trackSourceLoadingStore.getValue() ||
 		playbackIntentStore.getValue() !== 'play') return
+	// 设置里「自动跳过错误曲目」关闭时：停下来提示，不再连续跳
+	let autoSkip = true
+	try {
+		const { getSetting } = await import('@/jk/settingsStore')
+		autoSkip = getSetting<boolean>('player.autoSkipOnError', true) !== false
+	} catch { /* 默认 true */ }
+	if (!autoSkip) {
+		logInfo('[jk/play] autoSkipOnError=false，停在当前曲目')
+		showToast('播放失败', '已按设置停止自动切歌', 'error')
+		try { await ReactNativeTrackPlayer.pause() } catch { /* ignore */ }
+		return
+	}
 	await skipToNext()
 }
 

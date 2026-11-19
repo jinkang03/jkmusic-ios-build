@@ -105,13 +105,15 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 					</View>
 				</View>
 
-				{/* 中段：时间 + 进度 + 时长 */}
+				{/* 中段：进度条在上，时间在下（左右分开放，不贴进度条） */}
 				<View style={styles.midSection}>
-					<Text style={styles.progressTime}>{fmt(position)}</Text>
 					<View style={styles.progressBarContainer}>
 						<View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
 					</View>
-					<Text style={[styles.progressTime, { textAlign: 'right' }]}>{fmt(duration)}</Text>
+					<View style={styles.timeRow}>
+						<Text style={styles.progressTime}>{fmt(position)}</Text>
+						<Text style={styles.progressTime}>{fmt(duration)}</Text>
+					</View>
 				</View>
 
 				{/* 右段：播放暂停 + 下一首 */}
@@ -139,9 +141,10 @@ const createStyles = (
 	leftSection: { flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 8, overflow: 'hidden' },
 	artworkBox: { width: 48, height: 48, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1C1C1C' },
 	artworkPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-	midSection: { flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 8 },
+	midSection: { flex: 1.5, justifyContent: 'center', paddingHorizontal: 8 },
 	rightSection: { width: 108, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-	progressTime: { color: colors.textMuted, fontSize: 13, width: 40, textAlign: 'center' },
+	progressTime: { color: colors.textMuted, fontSize: 11 },
+	timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 },
 	trackArtist: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
 	container: {
 		borderRadius: 14,
@@ -186,14 +189,10 @@ const createStyles = (
 		justifyContent: 'center',
 	},
 	progressBarContainer: {
-		marginHorizontal: 8,
-		position: 'absolute',
-		bottom: 0,
-		left: 8,
-		right: 8,
 		height: 4,
 		backgroundColor: colors.overlaySoft,
 		borderRadius: 2,
+		overflow: 'hidden',
 	},
 	progressBar: {
 		height: '100%',

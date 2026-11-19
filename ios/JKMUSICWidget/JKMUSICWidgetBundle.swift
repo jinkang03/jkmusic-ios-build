@@ -90,9 +90,16 @@ struct JKMUSICLiveActivityWidget: Widget {
                 Image(systemName: "music.note")
                     .foregroundStyle(Color(jkHex: context.attributes.primaryHex))
             } compactTrailing: {
-                Text("\(Int(context.state.progress * 100))%")
-                    .font(.caption2)
-                    .foregroundStyle(Color(jkHex: context.attributes.primaryHex))
+                // 紧凑态：环形细进度（灵动岛宽度有限，跨岛横线由系统限制无法实现）
+                ZStack {
+                    Circle()
+                        .stroke(Color(jkHex: context.attributes.primaryHex).opacity(0.25), lineWidth: 2)
+                    Circle()
+                        .trim(from: 0, to: max(0.02, min(1, context.state.progress)))
+                        .stroke(Color(jkHex: context.attributes.primaryHex), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 15, height: 15)
             } minimal: {
                 Image(systemName: "music.note")
                     .foregroundStyle(Color(jkHex: context.attributes.primaryHex))

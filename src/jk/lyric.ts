@@ -79,6 +79,39 @@ const fetchLyricFromOtherSources = async(music: JKMusic): Promise<LyricResult | 
 			} catch { /* 试下一个源 */ }
 		}
 	} catch { /* ignore */ }
+
+	// 索引里没有该曲（用户没搜过）→ 实时搜索各源找同曲歌词
+	try {
+		const { searchBySource } = await import('@/jk/musicSdk')
+		const title = String(music.name ?? '')
+		const singer = String(music.singer ?? '')
+		if (!title) return null
+		const norm = (v: any) => String(v ?? '').toLowerCase().replace(/[\s\-_·・,，.。()（）]/g, '')
+		const t = norm(title)
+		const a = norm(singer)
+		for (const src of ['kw', 'wy', 'tx'] as const) {
+			if (src === music.source) continue
+			try {
+				const list = await Promise.race([
+					searchBySource(src, `${title} ${singer}`.trim(), 1, 5),
+					new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 6000)),
+				])
+				const hit = (list ?? []).find((m: any) => {
+					const mt = norm(m?.name)
+					const ma = norm(m?.singer)
+					const titleOk = !!mt && (mt.includes(t) || t.includes(mt))
+					const artistOk = !a || !ma || ma.includes(a) || a.includes(ma)
+					return titleOk && artistOk
+				})
+				if (!hit) continue
+				const res = await getJkLyric(hit as any)
+				if (isUsableLyric(res)) {
+					logInfo('[jk/lyric] search-fallback', src, String(hit?.id ?? ''))
+					return normalize(res)
+				}
+			} catch { /* 试下一个源 */ }
+		}
+	} catch { /* ignore */ }
 	return null
 }
 

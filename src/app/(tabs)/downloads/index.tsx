@@ -109,6 +109,18 @@ const DownloadsScreen = () => {
 
 	useEffect(() => { void load() }, [load])
 
+	// 下载任务状态变化时刷新列表：否则手动下载完成后停在下载页看不到新条目
+	const lastTaskKeyRef = React.useRef('')
+	useEffect(() => {
+		const key = Object.entries(tasks ?? {})
+			.map(([id, t]: [string, any]) => `${id}:${t?.status ?? ''}:${t?.percent ?? 0}`)
+			.join('|')
+		if (key === lastTaskKeyRef.current) return
+		lastTaskKeyRef.current = key
+		const timer = setTimeout(() => { void load() }, 700)
+		return () => clearTimeout(timer)
+	}, [tasks, load])
+
 	// tab 页的 useEffect 只跑一次，回填必须挂在 focus 上（P110 教训）
 	useFocusEffect(React.useCallback(() => {
 		void (async() => {

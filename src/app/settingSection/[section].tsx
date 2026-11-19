@@ -1,3 +1,5 @@
+import { nowLanguage, changeLanguage } from '@/utils/i18n'
+import { MAC_THEMES, macThemeStore, setMacTheme, type MacThemeId } from '@/jk/themeStore'
 /**
  * 设置分区页：键名与桌面版一致（点分格式），值由 settingsStore 持久化。
  * 桌面版专有分区只做说明，控件照常可读写（配置会保存，只是 iOS 不生效）。
@@ -40,19 +42,25 @@ const DESKTOP_ONLY: Record<string, string> = {
 }
 
 const BasicSection = () => {
-	const [lang, setLang] = useSetting('common.langId', 'zh-cn')
-	const [theme, setTheme] = useSetting('theme.id', 'auto')
+	// 语言与主题必须写「真正被消费的键」：
+	// 语言 = app.language（i18n 读取），主题 = app.macTheme（themeStore 读取）
+	const lang = nowLanguage.useValue()
+	const macTheme = macThemeStore.useValue()
 	const [fontSize, setFontSize] = useSetting('common.fontSize', 'normal')
 	const [glass, setGlass] = useSetting('common.glassBlur', true)
 	const [sourceName, setSourceName] = useSetting('common.sourceNameType', 'full')
 	return (
 		<>
-			<SettingRow label="语言"><SettingSelect value={lang} onChange={setLang} options={[
-				{ value: 'zh-cn', label: '中文' }, { value: 'en-us', label: 'English' },
-			]} /></SettingRow>
-			<SettingRow label="主题"><SettingSelect value={theme} onChange={setTheme} options={[
-				{ value: 'auto', label: '跟随系统' }, { value: 'light', label: '浅色' }, { value: 'dark', label: '深色' },
-			]} /></SettingRow>
+			<SettingRow label="语言"><SettingSelect
+				value={lang === 'en' ? 'en' : 'zh'}
+				onChange={(v) => changeLanguage(v)}
+				options={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }]}
+			/></SettingRow>
+			<SettingRow label="主题"><SettingSelect
+				value={macTheme.id}
+				onChange={(v) => setMacTheme(v as MacThemeId)}
+				options={(Object.keys(MAC_THEMES) as MacThemeId[]).map(id => ({ value: id, label: MAC_THEMES[id].name }))}
+			/></SettingRow>
 			<SettingRow label="字号"><SettingSelect value={fontSize} onChange={setFontSize} options={[
 				{ value: 'small', label: '小' }, { value: 'normal', label: '标准' }, { value: 'large', label: '大' },
 			]} /></SettingRow>
