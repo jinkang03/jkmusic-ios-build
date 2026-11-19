@@ -10,6 +10,9 @@ import React, { useMemo } from 'react'
 import { StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+// 首页固定为「我的列表」（不再落到搜索页/歌曲页）
+export const unstable_settings = { initialRouteName: 'favorites' }
+
 const TAB_BAR_HEIGHT = 49
 
 const TabBarBackground = ({ tint }: { tint: BlurTint }) => (
@@ -42,6 +45,7 @@ const TabsNavigation = () => {
 	return (
 		<>
 			<Tabs
+				initialRouteName="favorites"
 				screenOptions={{
 					// 选中色以 macTokens 为准（spec: #E240F7），不再取主题的 colors.primary
 					tabBarActiveTintColor: mac.primary,

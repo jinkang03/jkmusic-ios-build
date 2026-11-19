@@ -14,11 +14,12 @@ import {
 	SplashScreen,
 	Stack,
 	ThemeProvider,
+	usePathname,
 	useRootNavigationState,
 } from 'expo-router'
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent'
 import { StatusBar } from 'expo-status-bar'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message'
@@ -31,6 +32,22 @@ const App = () => {
 	const handleTrackPlayerLoaded = useCallback(() => {
 		void SplashScreen.hideAsync()
 	}, [])
+
+	// 导航就绪后立刻撤启动屏 + 落到「我的列表」。
+	// 不能在第一帧就 hide：JS 内容还没渲染，会变成纯黑屏。
+	const rootState = useRootNavigationState()
+	const pathname = usePathname()
+	const routedHomeRef = useRef(false)
+	useEffect(() => {
+		if (!rootState?.key) return
+		void SplashScreen.hideAsync()
+		if (routedHomeRef.current) return
+		const p = String(pathname ?? '')
+		if (!p || p === '/' || p === '/songs' || p.includes('(songs)')) {
+			routedHomeRef.current = true
+			try { router.replace('/(tabs)/favorites' as any) } catch { /* ignore */ }
+		}
+	}, [rootState?.key, pathname])
 
 	useSetupTrackPlayer({
 		onLoad: handleTrackPlayerLoaded, //播放器初始化后调用这个回调函数。这里先传过去。
