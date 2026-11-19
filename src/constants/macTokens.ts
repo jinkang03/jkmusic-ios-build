@@ -1,4 +1,4 @@
-import { macThemeStore } from '@/jk/themeStore'
+import { getAccentColor } from '@/jk/themeStore'
 
 /**
  * 桌面版视觉令牌（唯一事实来源：docs/mac-ui-spec.md + references/mac-ui/screenshots/）。
@@ -63,7 +63,7 @@ export type MacPalette = typeof macColors
  */
 export const macPalette = (isDark: boolean): MacPalette => {
 	const base = isDark ? macDarkColors : macColors
-	const themed = macThemeStore.getValue()?.primary
+	const themed = getAccentColor()
 	return themed ? { ...base, primary: themed } : base
 }
 

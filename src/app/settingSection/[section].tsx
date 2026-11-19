@@ -1,11 +1,12 @@
 import { nowLanguage, changeLanguage } from '@/utils/i18n'
-import { MAC_THEMES, macThemeStore, setMacTheme, type MacThemeId } from '@/jk/themeStore'
+import { MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore, setMacTheme, setAccentColor, setWallpaper, getWallpaperUri, type MacThemeId } from '@/jk/themeStore'
 /**
  * 设置分区页：键名与桌面版一致（点分格式），值由 settingsStore 持久化。
  * 桌面版专有分区只做说明，控件照常可读写（配置会保存，只是 iOS 不生效）。
  */
 import React from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Image, Pressable, ScrollView, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import SettingRow from '@/components/settings/SettingRow'
@@ -13,8 +14,9 @@ import SettingSelect from '@/components/settings/SettingSelect'
 import SettingSlider from '@/components/settings/SettingSlider'
 import SettingSwitch from '@/components/settings/SettingSwitch'
 import { macFont, macPalette, macSpace } from '@/constants/macTokens'
-import { useAppTheme } from '@/hooks/useAppTheme'
+import { useAppTheme, useThemeMode } from '@/hooks/useAppTheme'
 import { setSetting, useSetting } from '@/jk/settingsStore'
+import { showToast } from '@/utils/utils'
 import { logError, logInfo } from '@/helpers/logger'
 
 const SECTION_TITLES: Record<string, string> = {
@@ -42,13 +44,40 @@ const DESKTOP_ONLY: Record<string, string> = {
 }
 
 const BasicSection = () => {
-	// 语言与主题必须写「真正被消费的键」：
-	// 语言 = app.language（i18n 读取），主题 = app.macTheme（themeStore 读取）
+	// 语言/主题写真正被消费的键；强调色与壁纸独立于主题
 	const lang = nowLanguage.useValue()
 	const macTheme = macThemeStore.useValue()
-	const [fontSize, setFontSize] = useSetting('common.fontSize', 'normal')
-	const [glass, setGlass] = useSetting('common.glassBlur', true)
-	const [sourceName, setSourceName] = useSetting('common.sourceNameType', 'full')
+	const accent = accentStore.useValue()
+	const wallpaper = wallpaperStore.useValue()
+	const { themeMode, setThemeMode } = useThemeMode()
+	const { isDark } = useAppTheme()
+	const c = macPalette(!!isDark)
+	// 键值语义与桌面版一致：fontSize 是 px 数值，glassBlur 是 0..1，sourceNameType 是 alias/real
+	const [fontSize, setFontSize] = useSetting('common.fontSize', 16)
+	const [glass, setGlass] = useSetting('common.glassBlur', 0)
+	const [sourceName, setSourceName] = useSetting('common.sourceNameType', 'alias')
+
+	const pickWallpaper = async() => {
+		try {
+			const ImagePicker = await import('expo-image-picker')
+			const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+			if (!perm.granted) {
+				showToast('提示', '需要相册权限才能选择壁纸', 'error')
+				return
+			}
+			const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as any, quality: 0.9 })
+			if (res.canceled || !res.assets?.[0]?.uri) return
+			const FS = await import('expo-file-system/legacy')
+			const dest = `${(FS as any).documentDirectory}wallpaper.jpg`
+			await (FS as any).copyAsync({ from: res.assets[0].uri, to: dest })
+			// 只存文件名：绝对路径在重装后会指向旧容器
+			setWallpaper({ uri: 'wallpaper.jpg' })
+			showToast('已设置', '主题壁纸已更新', 'success')
+		} catch (err) {
+			showToast('设置失败', String((err as any)?.message ?? err).slice(0, 60), 'error')
+		}
+	}
+
 	return (
 		<>
 			<SettingRow label="语言"><SettingSelect
@@ -56,17 +85,92 @@ const BasicSection = () => {
 				onChange={(v) => changeLanguage(v)}
 				options={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }]}
 			/></SettingRow>
+			<SettingRow label="外观"><SettingSelect
+				value={themeMode}
+				onChange={(v) => setThemeMode(v as any)}
+				options={[
+					{ value: 'system', label: '跟随系统' },
+					{ value: 'light', label: '浅色' },
+					{ value: 'dark', label: '深色' },
+				]}
+			/></SettingRow>
 			<SettingRow label="主题"><SettingSelect
 				value={macTheme.id}
 				onChange={(v) => setMacTheme(v as MacThemeId)}
 				options={(Object.keys(MAC_THEMES) as MacThemeId[]).map(id => ({ value: id, label: MAC_THEMES[id].name }))}
 			/></SettingRow>
-			<SettingRow label="字号"><SettingSelect value={fontSize} onChange={setFontSize} options={[
-				{ value: 'small', label: '小' }, { value: 'normal', label: '标准' }, { value: 'large', label: '大' },
+			{/* 强调色：控制字体/进度条/按钮等「强调」用色；留空则跟随主题预设 */}
+			<SettingRow
+				label="强调色"
+				hint={accent ? '自定义' : `跟随主题 · ${MAC_THEMES[macTheme.id].name}`}
+			>
+				<View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: accent || macTheme.primary, borderWidth: 0.5, borderColor: c.divider }} />
+			</SettingRow>
+			<View style={{
+				paddingHorizontal: macSpace.pageX, paddingVertical: 12,
+				borderBottomWidth: 0.5, borderBottomColor: c.divider,
+			}}>
+				{/* 预设色板：一行 8 个，选中打勾；下面单独给「跟随主题」一个明确入口 */}
+				<View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+					{ACCENT_PRESETS.map(color => {
+						const active = accent === color
+						return (
+							<Pressable
+								key={color}
+								onPress={() => setAccentColor(active ? '' : color)}
+								hitSlop={4}
+								style={{
+									width: 30, height: 30, borderRadius: 15, backgroundColor: color,
+									alignItems: 'center', justifyContent: 'center',
+									borderWidth: active ? 2 : 0, borderColor: c.textStrong,
+								}}
+							>
+								{active ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}
+							</Pressable>
+						)
+					})}
+				</View>
+				<Pressable
+					onPress={() => setAccentColor('')}
+					style={{ marginTop: 12, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5 }}
+				>
+					<Ionicons name={accent ? 'refresh-outline' : 'checkmark-circle'} size={14} color={c.primary} />
+					<Text style={{ color: c.primary, fontSize: macFont.caption }}>
+						{accent ? `恢复跟随主题（${MAC_THEMES[macTheme.id].name}）` : '当前跟随主题'}
+					</Text>
+				</Pressable>
+			</View>
+			<SettingRow label="主题壁纸" hint={wallpaper.uri ? '仅播放页生效' : '选择一张图片作为播放页背景'}>
+				<View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+					{wallpaper.uri ? (
+						<Image source={{ uri: getWallpaperUri(wallpaper.uri) }} style={{ width: 46, height: 28, borderRadius: 6, borderWidth: 0.5, borderColor: c.divider }} />
+					) : null}
+					<Pressable onPress={() => { void pickWallpaper() }}>
+						<Text style={{ color: c.primary, fontSize: macFont.body }}>选择图片</Text>
+					</Pressable>
+					{wallpaper.uri ? (
+						<Pressable onPress={() => setWallpaper({ uri: '' })}>
+							<Text style={{ color: c.danger, fontSize: macFont.body }}>清除</Text>
+						</Pressable>
+					) : null}
+				</View>
+			</SettingRow>
+			{wallpaper.uri ? (
+				<>
+					<SettingRow label="壁纸磨砂">
+						<SettingSlider value={wallpaper.blur} min={0} max={40} step={1} onChange={(v) => setWallpaper({ blur: v })} format={(v) => `${Math.round(v)}`} />
+					</SettingRow>
+					<SettingRow label="壁纸不透明度">
+						<SettingSlider value={wallpaper.opacity} min={10} max={100} step={1} onChange={(v) => setWallpaper({ opacity: v })} format={(v) => `${Math.round(v)}%`} />
+					</SettingRow>
+				</>
+			) : null}
+			<SettingRow label="字号"><SettingSelect value={String(Number(fontSize) || 16)} onChange={(v) => setFontSize(Number(v) as any)} options={[
+				{ value: '14', label: '小' }, { value: '16', label: '标准' }, { value: '18', label: '大' },
 			]} /></SettingRow>
-			<SettingRow label="玻璃模糊"><SettingSwitch value={glass} onChange={setGlass} /></SettingRow>
-			<SettingRow label="显示源名"><SettingSelect value={sourceName} onChange={setSourceName} options={[
-				{ value: 'full', label: '原名' }, { value: 'short', label: '缩写' },
+			<SettingRow label="玻璃模糊"><SettingSwitch value={Number(glass) > 0} onChange={(v) => setGlass((v ? 1 : 0) as any)} /></SettingRow>
+			<SettingRow label="显示源名"><SettingSelect value={sourceName === 'real' ? 'real' : 'alias'} onChange={(v) => setSourceName(v as any)} options={[
+				{ value: 'real', label: '原名' }, { value: 'alias', label: '缩写' },
 			]} /></SettingRow>
 		</>
 	)
@@ -747,6 +851,27 @@ const SettingsSectionScreen = () => {
 					const { setMacTheme } = await import('@/jk/themeStore')
 					setMacTheme(id as any)
 					logInfo('[dev] theme', id)
+				} else if (action === 'accent') {
+					const { setAccentColor } = await import('@/jk/themeStore')
+					setAccentColor(String((params as any).color ?? ''))
+					logInfo('[dev] accent', String((params as any).color ?? '(follow theme)'))
+				} else if (action === 'wallpaper') {
+					const { setWallpaper } = await import('@/jk/themeStore')
+					const next: any = {}
+					if ((params as any).uri !== undefined) next.uri = String((params as any).uri)
+					if ((params as any).blur !== undefined) next.blur = Number((params as any).blur)
+					if ((params as any).opacity !== undefined) next.opacity = Number((params as any).opacity)
+					setWallpaper(next)
+					logInfo('[dev] wallpaper', JSON.stringify(next))
+				} else if (action === 'themeMode') {
+					const mode = String((params as any).mode ?? 'system')
+					const { themeModeStore } = await import('@/hooks/useAppTheme')
+					themeModeStore.setValue(mode as any)
+					try {
+						const PersistStatus = (await import('@/store/PersistStatus')).default
+						PersistStatus.set('app.themeMode' as any, mode)
+					} catch { /* ignore */ }
+					logInfo('[dev] themeMode', mode)
 				} else if (action === 'lang') {
 					const code = String((params as any).code ?? 'en')
 					const { changeLanguage } = await import('@/utils/i18n')

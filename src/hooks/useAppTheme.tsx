@@ -20,10 +20,11 @@ type AppThemeContextValue = {
 	statusBarStyle: 'light' | 'dark'
 	setThemeMode: (mode: ThemeMode) => void
 	macTheme?: { id: string, primary: string }
+	accent?: string
 }
 
 // 主题色变化要触发所有用 macPalette 的页面重渲染
-import { macThemeStore } from '@/jk/themeStore'
+import { macThemeStore, accentStore } from '@/jk/themeStore'
 const storedThemeMode = PersistStatus.get('app.themeMode') ?? 'system'
 
 export const themeModeStore = new GlobalState<ThemeMode>(storedThemeMode)
@@ -70,10 +71,11 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
 	// 订阅主题色：把它放进 context value 的依赖里，
 	// 否则 context 引用不变，消费者不会重渲染（主题切换要等下一次导航才生效）
 	const macTheme = macThemeStore.useValue()
+	const accent = accentStore.useValue()
 	const resolvedTheme = resolveTheme(themeMode, systemColorScheme)
 	const themeValue = useMemo(
-		() => ({ ...createThemeValue(themeMode, resolvedTheme, setThemeMode), macTheme }),
-		[resolvedTheme, themeMode, macTheme],
+		() => ({ ...createThemeValue(themeMode, resolvedTheme, setThemeMode), macTheme, accent }),
+		[resolvedTheme, themeMode, macTheme, accent],
 	)
 
 	if (getRuntimeColors() !== themeValue.colors) {
