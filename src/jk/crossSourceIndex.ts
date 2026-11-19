@@ -77,7 +77,15 @@ export const clear = () => {
 
 export const stats = () => {
 	load()
-	return { keys: Object.keys(map).length }
+	const bySource: Record<string, number> = {}
+	let entries = 0
+	for (const arr of Object.values(map)) {
+		for (const e of arr ?? []) {
+			entries++
+			bySource[e.source] = (bySource[e.source] ?? 0) + 1
+		}
+	}
+	return { keys: Object.keys(map).length, entries, bySource }
 }
 
 export default { remember, lookup, clear, keyOf, stats }

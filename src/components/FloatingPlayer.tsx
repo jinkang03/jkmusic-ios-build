@@ -5,6 +5,7 @@ import { ThemeColors } from '@/constants/tokens'
 import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
 import { useLastActiveTrack } from '@/hooks/useLastActiveTrack'
 import { currentArtworkStore } from '@/jk/artworkStore'
+import { resolvedFromStore } from '@/player/PlayerStore'
 import { useDefaultStyles } from '@/styles'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
@@ -25,6 +26,8 @@ const fmt = (sec?: number) => {
 	return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`
 }
 
+const SRC_LABEL: Record<string, string> = { kw: '酷我', kg: '酷狗', tx: '企鹅', wy: '网易', mg: '咪咕' }
+
 export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 	const { blurTint } = useAppTheme()
 	const colors = useThemeColors()
@@ -38,6 +41,7 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 	const lastActiveTrack = useLastActiveTrack()
 	const isTrackSourceLoading = trackSourceLoadingStore.useValue() !== null
 	const displayedTrack = currentMusic ?? lastActiveTrack
+	const resolvedFrom = resolvedFromStore.useValue()
 
 	const artworkOpacity = useSharedValue(1)
 	const prevArtworkRef = useRef(displayedTrack?.artwork)
@@ -84,6 +88,12 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 					<View style={{ flex: 1, justifyContent: 'center' }}>
 						<MovingText style={styles.trackTitle} text={displayedTrack.title ?? ''} animationThreshold={18} />
 						<Text numberOfLines={1} style={styles.trackArtist}>{displayedTrack.artist ?? ''}</Text>
+						{resolvedFrom && resolvedFrom.from !== resolvedFrom.to
+							&& (!resolvedFrom.title || resolvedFrom.title === displayedTrack.title) ? (
+							<Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 10, marginTop: 1 }}>
+								{SRC_LABEL[resolvedFrom.from] ?? resolvedFrom.from} → {SRC_LABEL[resolvedFrom.to] ?? resolvedFrom.to}
+							</Text>
+						) : null}
 					</View>
 				</View>
 

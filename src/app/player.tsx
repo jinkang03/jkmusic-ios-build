@@ -757,6 +757,12 @@ const PlayerScreenContent = () => {
 											{trackToDisplay.album}
 										</Text>
 									) : null}
+									{resolvedFrom && resolvedFrom.from !== resolvedFrom.to
+										&& (!resolvedFrom.title || resolvedFrom.title === trackToDisplay?.title) ? (
+										<Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
+											音源：{SRC_LABEL[resolvedFrom.from] ?? resolvedFrom.from} → {SRC_LABEL[resolvedFrom.to] ?? resolvedFrom.to}
+										</Text>
+									) : null}
 									{trialDetected ? (
 										<Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
 											{trialHint(Number(trackToDisplay?.duration ?? 0))}

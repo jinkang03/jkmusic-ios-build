@@ -202,7 +202,9 @@ export const getPooledMusicUrl = async (
 			try {
 				const url = await withScriptTimeout(
 					api.getMusicUrl(title, artist, songmid, quality, { requestType: 'current' }, source, meta),
-					6000,
+					// 必须小于 MusicSourceResolver 的外层 5s 超时：否则外层先抛「请求超时」，
+					// 拿不到「所有脚本均失败」这个整源失败信号，会白白降音质重试 3 轮（15 秒）
+					4000,
 					String(api?.name ?? '脚本'),
 				)
 				if (typeof url === 'string' && /^https?:/.test(url)) {
@@ -226,7 +228,9 @@ export const getPooledMusicUrl = async (
 		return await Promise.any(attempts)
 	} catch (err) {
 		const errors = (err as any)?.errors ?? [err]
-		throw errors[0] ?? new Error(`没有可用脚本支持 ${source}`)
+		// 统一成「所有脚本…」前缀：调用方据此判定为整源失败，跳过降音质重试
+		const detail = errors.map((e: any) => String(e?.message ?? e)).join(' | ').slice(0, 160)
+		throw new Error(`所有脚本均失败(${source}): ${detail}`)
 	}
 }
 

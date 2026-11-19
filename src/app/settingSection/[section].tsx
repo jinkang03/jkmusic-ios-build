@@ -581,42 +581,75 @@ const SettingsSectionScreen = () => {
 					const verdict = !finalUrl ? 'empty' : finalUrl.includes('fake') ? 'fake' : 'ok'
 					logInfo(`[probe] ${source} pooled=${pooled} final=${verdict} name=${name}`)
 				} else if (action === 'playSearch') {
-					// 搜索某源第一首并播放（用于验证换源兜底，无需点击）
+					// 搜索某源并播放指定曲目（用于验证换源兜底，无需点击）
 					const src = String((params as any).source ?? 'kg')
-					const q = String((params as any).q ?? '牡丹亭')
+					const q = String((params as any).q ?? String((params as any).title ?? '牡丹亭'))
+					const wantId = String((params as any).id ?? '')
 					const { searchBySource } = await import('@/jk/musicSdk')
 					const { jkToTrack } = await import('@/jk/adapt')
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
-					const list: any[] = await searchBySource(src as any, q, 1, 3)
+					const list: any[] = await searchBySource(src as any, q, 1, 10)
 					if (!list.length) throw new Error('搜索结果为空')
+					const hit: any = wantId
+						? (list.find((x: any) => String(x.id) === wantId) ?? list[0])
+						: list[0]
 					if (String((params as any).force ?? '') === '1') {
 						try { await (tp as any).stop?.() } catch { /* ignore */ }
-						logInfo('[dev] playSearch force=1 source=', src, 'id=', String((list[0] as any)?.id ?? ''))
+						logInfo('[dev] playSearch force=1 source=', src, 'id=', String(hit?.id ?? ''))
 					}
-					const track: any = jkToTrack(list[0])
-					logInfo('[dev] playSearch', src, 'title=', String(track?.title ?? ''), 'id=', String(track?.id ?? ''))
+					const track: any = jkToTrack(hit)
+					logInfo('[dev] playSearch', src, 'title=', String(track?.title ?? ''), 'id=', String(track?.id ?? ''), 'singer=', String(track?.artist ?? ''))
 					await tp.playWithReplacePlayList(track, [track])
+				} else if (action === 'indexAll') {
+					// 把五源搜索结果全部写进「同曲多源索引」，供换源兜底直接查表
+					const q = String((params as any).q ?? '牡丹亭')
+					const { searchAllSources } = await import('@/jk/musicSdk')
+					const idx = await import('@/jk/crossSourceIndex')
+					let lists: any[] = []
+					try {
+						lists = await searchAllSources(q, 1, 5)
+					} catch (err) {
+						logInfo('[dev] indexAll search failed', String((err as any)?.message ?? err).slice(0, 80))
+					}
+					const items = lists.reduce((n: number, g: any) => n + (g?.list?.length ?? 0), 0)
+					idx.remember(lists.flatMap((g: any) => g?.list ?? []))
+					logInfo('[dev] indexAll q=', q, 'sources=', lists.length, 'items=', items, 'stats=', JSON.stringify(idx.stats()))
 				} else if (action === 'evict') {
 					const src = String((params as any).source ?? 'kg')
 					const sid = String((params as any).id ?? '')
 					const cm = await import('@/player/CacheManager')
-					const FS = await import('expo-file-system/legacy')
+					const mod: any = await import('expo-file-system/legacy')
+					const FS: any = mod?.default ?? mod
+					const dir = `${FS.documentDirectory}musicCache/`
 					let fileState = 'none'
+					let base = ''
 					try {
-						const p = cm.getLocalFilePath({ id: sid, platform: src } as any)
-						const uri = String(p).startsWith('file://') ? String(p) : `file://${p}`
-						const info: any = await FS.getInfoAsync(uri)
-						if (info?.exists) {
-							await FS.deleteAsync(uri, { idempotent: true })
-							fileState = 'deleted'
-						}
-						const base = String(p).split('/').pop() ?? ''
-						if (base) await cm.removeCacheIndexEntry(base).catch(() => undefined)
-					} catch { fileState = 'error' }
+						const index: any = await cm.readCacheIndex()
+						base = Object.keys(index ?? {}).find(k => k.startsWith(`${src}_${sid}`)) ?? ''
+					} catch { /* ignore */ }
+					// 不依赖 getLocalFilePath（它要求完整 musicItem，缺 title/artist 会抛错）
+					const candidates = [
+						...(base ? [`${base}.flac`, `${base}.mp3`, `${base}.m4a`] : []),
+						`${src}_${sid}.flac`,
+						`${src}_${sid}.mp3`,
+						`${src}_${sid}.m4a`,
+					]
+					for (const name of candidates) {
+						try {
+							const info: any = await FS.getInfoAsync(`${dir}${name}`)
+							if (info?.exists) {
+								await FS.deleteAsync(`${dir}${name}`, { idempotent: true })
+								fileState = 'deleted'
+							}
+						} catch { /* ignore */ }
+					}
+					if (base) {
+						try { await cm.removeCacheIndexEntry(base) } catch { /* ignore */ }
+					}
 					const { clearAltCache, clearPreloadCache } = await import('@/player/MusicSourceResolver')
 					clearAltCache()
 					clearPreloadCache()
-					logInfo('[dev] evict source=', src, 'id=', sid, 'file=', fileState, 'alt=cleared preload=cleared')
+					logInfo('[dev] evict source=', src, 'id=', sid, 'base=', base || '-', 'file=', fileState, 'alt=cleared preload=cleared')
 				} else if (action === 'clearxsource') {
 					const idx = await import('@/jk/crossSourceIndex')
 					idx.clear()
