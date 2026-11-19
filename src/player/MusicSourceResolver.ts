@@ -109,8 +109,6 @@ const findPlayableAlt = async (
 				altCache.set(cacheKey, found)
 				const fromSrc = readFromSource(musicItem)
 				logInfo('[resolve] switched', fromSrc, '->', found.source, title)
-				;(globalThis as any).__jkActualSource = String(found.source ?? '')
-				void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: fromSrc, to: String(found.source), toId: String((found as any).id ?? ''), title })).catch(() => undefined)
 				return found
 			} catch { /* 索引全部失败，走实时搜索 */ }
 		} else {
@@ -156,8 +154,6 @@ const findPlayableAlt = async (
 		const fromSrc2 = readFromSource(musicItem)
 		logInfo('[resolve] switched', fromSrc2, '->', found.source, title)
 		logInfo('[resolve] cross-source', found.source, found.title, 'from', fromSrc2)
-		;(globalThis as any).__jkActualSource = String(found.source ?? '')
-		void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: fromSrc2, to: String(found.source), toId: String((found as any).id ?? ''), title })).catch(() => undefined)
 		return found
 	} catch {
 		return null
@@ -268,7 +264,9 @@ export const resolveSource = async (
 					const cachedFrom = readFromSource(musicItem)
 					if (actualSource && actualSource !== cachedFrom) {
 						logInfo('[resolve] cached-source', cachedFrom, '->', String(actualSource), 'id=', String(actualId ?? '-'))
-						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: cachedFrom, to: String(actualSource), toId: actualId ? String(actualId) : undefined, title: String(musicItem.title ?? '') })).catch(() => undefined)
+						if (isCurrentSourceRequest(requestType)) {
+							void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: cachedFrom, to: String(actualSource), toId: actualId ? String(actualId) : undefined, title: String(musicItem.title ?? '') })).catch(() => undefined)
+						}
 					} else if (isCurrentSourceRequest(requestType)) {
 						// 缓存来自原源（或老条目无字段）：清掉上一首残留的换源提示
 						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue(null)).catch(() => undefined)

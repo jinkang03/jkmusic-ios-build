@@ -11,11 +11,14 @@ import { Image } from 'expo-image'
 type PlaylistsListProps = {
 	playlists: Playlist[]
 	onPlaylistPress: (playlist: Playlist) => void
+	/** 传入时由调用方负责删除（libraryStore）；不传则回退旧的 Cymusic store */
+	onPlaylistDelete?: (id: string, name: string) => void
 } & Partial<FlatListProps<Playlist>>
 
 export const PlaylistsList = ({
 	playlists,
 	onPlaylistPress: handlePlaylistPress,
+	onPlaylistDelete,
 	...flatListProps
 }: PlaylistsListProps) => {
 	const utilsStyles = useUtilsStyles()
@@ -57,26 +60,30 @@ export const PlaylistsList = ({
 	)
 
 	const showDeleteAlert = (playlist: Playlist) => {
-		Alert.alert('删除歌单', `确定要删除这个歌单吗 "${playlist.name}"?`, [
+		// 内置列表（试听列表 / 我的收藏）不允许删除
+		if (playlist.id === 'default' || playlist.id === 'love') {
+			Alert.alert('提示', '内置列表不能删除')
+			return
+		}
+		Alert.alert('删除歌单', `确定要删除「${playlist.name}」吗？`, [
 			{ text: '取消', style: 'cancel' },
 			{
 				text: '删除',
 				style: 'destructive',
-				onPress: async () => {
-					try {
-						const result = await myTrackPlayer.deletePlayLists(playlist.id)
-						if (result === 'success') {
-							// 删除成功
-							// 可以在这里添加一些成功的反馈，比如显示一个成功的提示
-							Alert.alert('成功', '歌单删除成功')
-						} else {
-							// 删除失败，显示错误信息
-							Alert.alert('错误', result)
-						}
-					} catch (error) {
-						// 处理可能发生的错误
-						Alert.alert('错误', 'An error occurred while deleting the playlist')
+				onPress: () => {
+					if (onPlaylistDelete) {
+						onPlaylistDelete(playlist.id, playlist.name)
+						return
 					}
+					// 兼容旧调用方：没有传 handler 时走原 Cymusic store
+					void (async () => {
+						try {
+							const result = await myTrackPlayer.deletePlayLists(playlist.id)
+							Alert.alert(result === 'success' ? '成功' : '错误', result === 'success' ? '歌单删除成功' : String(result))
+						} catch {
+							Alert.alert('错误', '删除歌单失败')
+						}
+					})()
 				},
 			},
 		])

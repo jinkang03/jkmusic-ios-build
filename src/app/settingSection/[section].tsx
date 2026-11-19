@@ -733,6 +733,15 @@ const SettingsSectionScreen = () => {
 					}
 					lib.addToList(listId, [jk], 'bottom')
 					logInfo('[dev] addToList ok', listId, 'count=', lib.getListById(listId).length)
+				} else if (action === 'removeList') {
+					// 验证歌单删除的数据层（UI 长按入口另测）
+					const listId = String((params as any).id ?? '')
+					if (!listId) throw new Error('缺少 id')
+					const lib = await import('@/jk/libraryStore')
+					const before = lib.getUserLists().length
+					lib.removeUserList(listId)
+					const after = lib.getUserLists().length
+					logInfo('[dev] removeList id=', listId, 'before=', before, 'after=', after)
 				} else if (action === 'importSource') {
 					const url = String((params as any).url ?? '')
 					if (!url) throw new Error('缺少 url')

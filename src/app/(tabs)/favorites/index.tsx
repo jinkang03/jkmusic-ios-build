@@ -6,10 +6,12 @@ import { PlaylistsList } from '@/components/PlaylistsList'
 import { screenPadding } from '@/constants/tokens'
 import { Playlist } from '@/helpers/types'
 import { jkToTrack } from '@/jk/adapt'
-import { LIST_IDS, getDefaultList, getLoveList, getUserLists } from '@/jk/libraryStore'
+import { LIST_IDS, getDefaultList, getLoveList, getUserLists, removeUserList } from '@/jk/libraryStore'
 import { useNavigationSearch } from '@/hooks/useNavigationSearch'
 import { useDefaultStyles } from '@/styles'
 import i18n from '@/utils/i18n'
+import { logInfo } from '@/helpers/logger'
+import { showToast } from '@/utils/utils'
 import { router } from 'expo-router'
 import React, { useMemo, useState, useCallback } from 'react'
 import { ScrollView, View } from 'react-native'
@@ -73,6 +75,12 @@ const FavoritesScreen = () => {
 					playlists={filteredPlayLists}
 					onPlaylistPress={(playlist: Playlist) => {
 						router.push(`/(tabs)/favorites/${playlist.id}` as any)
+					}}
+					onPlaylistDelete={(id, name) => {
+						removeUserList(id)
+						setVersion(v => v + 1)
+						logInfo('[library] removeList id=', id, 'remain=', getUserLists().length, 'name=', name)
+						showToast('已删除', `歌单「${name}」已删除`, 'success')
 					}}
 				/>
 			</ScrollView>
