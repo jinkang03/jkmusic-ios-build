@@ -109,25 +109,39 @@ export const importSetting = (data: Record<string, any>) => {
 	return { applied, skipped }
 }
 
-const toJkMusic = (song: any) => {
-	// 导入要保留播放所需的全部字段：songmid 是取流的关键，albumName/picUrl 影响封面与专辑列
+/** 导入歌曲的 id 规范化：去源前缀、kg 取 hash、mg 取 copyrightId */
+const normalizeImportedSong = (song: any) => {
+	const source = String(song?.source ?? song?.meta?.source ?? 'kw')
 	const meta: Record<string, any> = { ...(song?.meta ?? {}) }
-	const id = String(song?.id ?? meta.songmid ?? meta.hash ?? meta.copyrightId ?? '')
-	meta.songmid = String(meta.songmid ?? id)
-	meta.source = String(song?.source ?? meta.source ?? 'kw')
+	let rawId = String(song?.id ?? meta.songId ?? meta.songmid ?? '')
+	rawId = rawId.replace(/^(kw|tx|wy|kg|mg)_/, '')
+	// kg 复合 id：<songId>_<hash>
+	if (source === 'kg' && /^\d+_[0-9A-Fa-f]{16,}$/.test(rawId)) {
+		const [songId, hash] = rawId.split('_')
+		meta.songId = meta.songId ?? songId
+		meta.hash = meta.hash ?? hash
+		rawId = hash
+	}
+	// mg 取流用 copyrightId
+	if (source === 'mg' && meta.copyrightId) rawId = String(meta.copyrightId)
+	const id = rawId
+	meta.songmid = String(meta.songmid ?? meta.songId ?? id)
+	meta.source = source
+	if (!meta.hash && source === 'kg') meta.hash = id
 	if (song?.albumName && !meta.albumName) meta.albumName = String(song.albumName)
 	if (song?.album && !meta.albumName) meta.albumName = String(song.album)
 	if (song?.picUrl && !meta.picUrl) meta.picUrl = String(song.picUrl)
-	if (song?.albumId && !meta.albumId) meta.albumId = String(song.albumId)
 	return {
 		id,
 		name: String(song?.name ?? ''),
 		singer: String(song?.singer ?? ''),
-		source: meta.source,
+		source,
 		interval: song?.interval ?? null,
 		meta,
 	}
 }
+
+const toJkMusic = normalizeImportedSong
 
 /** 导入歌单：按 id 去重，已存在的合并歌曲（按 id 去重），不存在的新建 */
 export const importPlayList = (data: any[]) => {
@@ -142,13 +156,15 @@ export const importPlayList = (data: any[]) => {
 	let songs = 0
 
 	const mergeInto = (target: any[], incoming: any[]) => {
-		const seen = new Set(target.map((s: any) => String(s.id)))
+		const keyOf = (x: any) => `${String(x?.source ?? '')}_${String(x?.id ?? '')}`
+		const seen = new Set(target.map(keyOf))
 		let added = 0
 		for (const song of incoming) {
 			const jk = toJkMusic(song)
-			if (!jk.id || seen.has(jk.id)) continue
+			const k = keyOf(jk)
+			if (!jk.id || seen.has(k)) continue
 			target.push(jk)
-			seen.add(jk.id)
+			seen.add(k)
 			added++
 		}
 		return added
@@ -156,7 +172,10 @@ export const importPlayList = (data: any[]) => {
 
 	for (const raw of data) {
 		if (!raw || (!raw.id && !raw.name)) continue
-		const incoming = Array.isArray(raw.songs) ? raw.songs : []
+		const beforeCount = songs
+		const incoming = Array.isArray(raw.list) ? raw.list
+			: Array.isArray(raw.songs) ? raw.songs
+			: Array.isArray(raw.musicList) ? raw.musicList : []
 		const id = String(raw.id ?? '')
 		if (id === LIST_IDS.LOVE) {
 			songs += mergeInto(love, incoming); merged++
@@ -173,6 +192,7 @@ export const importPlayList = (data: any[]) => {
 				lists++
 			}
 		}
+		logInfo('[jk/backup] importPlayList per-list name=', String(raw.name ?? ''), 'incoming=', incoming.length, 'added=', songs - beforeCount)
 	}
 
 	setLoveList(love)

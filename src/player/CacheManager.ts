@@ -123,7 +123,8 @@ export const downloadToCache = async (
 				artist: (musicItem as any).artist,
 				album: (musicItem as any).album,
 				// manual=true 表示用户主动下载；播放产生的缓存是 false
-				manual: opts?.manual === true,
+				// 手动下载时强制升级为 true（同一首之前可能是播放缓存）
+				manual: opts?.manual === true ? true : ((await readCacheIndex())[String(localPath).split('/').pop() ?? '']?.manual === true),
 				actualSource: String(opts?.actualSource ?? (musicItem as any).platform ?? '') || undefined,
 				actualId: String(opts?.actualId ?? (musicItem as any).id ?? '') || undefined,
 				quality: String(opts?.quality ?? (globalThis as any).__jkActualQuality ?? '') || 'unknown',

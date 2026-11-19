@@ -1,3 +1,4 @@
+import { logInfo } from '@/helpers/logger'
 /**
  * JKMUSIC 的列表模型（试听列表 / 我的收藏 / 用户列表 / 不喜欢），
  * 持久化到 MMKV，键名与桌面版语义一致。
@@ -90,7 +91,9 @@ export const createUserList = (name: string): JkUserList => {
 }
 
 export const removeUserList = (id: string) => {
-	setUserLists(state.userLists.filter(item => item.id !== id))
+	const next = state.userLists.filter(item => item.id !== id)
+	setUserLists(next)
+	logInfo('[library] removeList id=', id, 'remain=', next.length)
 }
 
 export const renameUserList = (id: string, name: string) => {

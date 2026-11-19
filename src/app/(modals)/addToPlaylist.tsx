@@ -32,6 +32,7 @@ const AddToPlaylistScreen = () => {
 	const choose = (id: string, name: string) => {
 		const m = takePendingMusic()
 		if (!m) {
+			logInfo('[addToPlaylist] pending empty! target=', id, name)
 			showToast('提示', '没有待添加的歌曲', 'info')
 			router.back()
 			return
