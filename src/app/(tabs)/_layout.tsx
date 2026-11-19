@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { useMemo } from 'react'
+import { useLiveActivity } from '@/hooks/useLiveActivity'
 import { StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -31,6 +32,8 @@ const TabBarBackground = ({ tint }: { tint: BlurTint }) => (
 )
 
 const TabsNavigation = () => {
+	// 灵动岛 / 锁屏实时进度（旁路，不支持时静默跳过）
+	useLiveActivity()
 	const { bottom } = useSafeAreaInsets()
 	const { blurTint, colors, isDark } = useAppTheme()
 	const mac = macPalette(!!isDark)

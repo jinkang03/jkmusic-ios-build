@@ -13,6 +13,9 @@
 		6BE0429FDCE927071B5FF8A4 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0AA1E90433ED4490AD7A72A7 /* PrivacyInfo.xcprivacy */; };
 		97A6F33F28ED4825937DB201 /* ShareExtensionPreprocessor.js in Resources */ = {isa = PBXBuildFile; fileRef = 355C8722E5F4486A88551C24 /* ShareExtensionPreprocessor.js */; };
 		99F8D341A962484BAC57E641 /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B0D0087D39D344A7A48B7819 /* MainInterface.storyboard */; };
+		AA01FFFF0000000000000005 /* JKMUSICWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA01FFFF0000000000000004 /* JKMUSICWidgetBundle.swift */; };
+		AA01FFFF0000000000000007 /* JKMUSICLiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA01FFFF0000000000000006 /* JKMUSICLiveActivityAttributes.swift */; };
+		AA01FFFF000000000000000F /* JKMUSICWidget.appex in Copy Files */ = {isa = PBXBuildFile; fileRef = AA01FFFF0000000000000002 /* JKMUSICWidget.appex */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		D457E7CD8E364D49AEDD1A3B /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87DDBD0905EF4006B6CA9059 /* ShareViewController.swift */; };
 		EF40C9BF391E05EB66508CA6 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D8710B05DE520F2AB5C654 /* ExpoModulesProvider.swift */; };
@@ -22,6 +25,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		AA01FFFF0000000000000011 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA01FFFF0000000000000001;
+			remoteInfo = JKMUSICWidget;
+		};
 		C436BC2D82294D38B1A3E2F1 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
@@ -39,6 +49,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				0AEC77EB9B4B4D90A00362B5 /* ShareExtension.appex in Copy Files */,
+				AA01FFFF000000000000000F /* JKMUSICWidget.appex in Copy Files */,
 			);
 			name = "Copy Files";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -56,6 +67,10 @@
 		7D6094DA3DB0427182767A51 /* ShareExtension.entitlements */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = ShareExtension.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		87DDBD0905EF4006B6CA9059 /* ShareViewController.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		A0117DC720134FA5B086A99E /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = undefined; name = ShareExtension.appex; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA01FFFF0000000000000002 /* JKMUSICWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = JKMUSICWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA01FFFF0000000000000004 /* JKMUSICWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = JKMUSICWidgetBundle.swift; path = JKMUSICWidgetBundle.swift; sourceTree = "<group>"; };
+		AA01FFFF0000000000000006 /* JKMUSICLiveActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = JKMUSICLiveActivityAttributes.swift; path = JKMUSICLiveActivityAttributes.swift; sourceTree = "<group>"; };
+		AA01FFFF0000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = Info.plist; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = JKMUSIC/SplashScreen.storyboard; sourceTree = "<group>"; };
 		AA4485453B0415F1F9BDB9E1 /* libPods-JKMUSIC.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-JKMUSIC.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0D0087D39D344A7A48B7819 /* MainInterface.storyboard */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = MainInterface.storyboard; path = MainInterface.storyboard; sourceTree = "<group>"; };
@@ -77,6 +92,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		2451343C3F794AE3A273DD75 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA01FFFF000000000000000D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -141,6 +163,7 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				B92032731A4846B7BE102041 /* ShareExtension */,
+				AA01FFFF0000000000000003 /* JKMUSICWidget */,
 				67C204931C392B02F006661C /* Pods */,
 				46DA3577F701321C03F1E3AA /* ExpoModulesProviders */,
 			);
@@ -154,8 +177,20 @@
 			children = (
 				13B07F961A680F5B00A75B9A /* JKMUSIC.app */,
 				A0117DC720134FA5B086A99E /* ShareExtension.appex */,
+				AA01FFFF0000000000000002 /* JKMUSICWidget.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		AA01FFFF0000000000000003 /* JKMUSICWidget */ = {
+			isa = PBXGroup;
+			children = (
+				AA01FFFF0000000000000004 /* JKMUSICWidgetBundle.swift */,
+				AA01FFFF0000000000000006 /* JKMUSICLiveActivityAttributes.swift */,
+				AA01FFFF0000000000000008 /* Info.plist */,
+			);
+			name = JKMUSICWidget;
+			path = JKMUSICWidget;
 			sourceTree = "<group>";
 		};
 		B92032731A4846B7BE102041 /* ShareExtension */ = {
@@ -229,11 +264,29 @@
 			);
 			dependencies = (
 				2C4F900AB0774F71940552FB /* PBXTargetDependency */,
+				AA01FFFF0000000000000010 /* PBXTargetDependency */,
 			);
 			name = JKMUSIC;
 			productName = JKMUSIC;
 			productReference = 13B07F961A680F5B00A75B9A /* JKMUSIC.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AA01FFFF0000000000000001 /* JKMUSICWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA01FFFF0000000000000009 /* Build configuration list for PBXNativeTarget "JKMUSICWidget" */;
+			buildPhases = (
+				AA01FFFF000000000000000C /* Sources */,
+				AA01FFFF000000000000000D /* Frameworks */,
+				AA01FFFF000000000000000E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = JKMUSICWidget;
+			productName = JKMUSICWidget;
+			productReference = AA01FFFF0000000000000002 /* JKMUSICWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -263,6 +316,7 @@
 			targets = (
 				13B07F861A680F5B00A75B9A /* JKMUSIC */,
 				095E749FE9CE4008BFE498D2 /* ShareExtension */,
+				AA01FFFF0000000000000001 /* JKMUSICWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -279,6 +333,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA01FFFF000000000000000E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CDD2D9698C434D1188B9A2C8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -292,24 +353,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		A1B2C3D4E5F60718293A4B5C /* Copy user-api-preload.js */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Copy user-api-preload.js";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\nSRC=\"$SRCROOT/../src/helpers/userApi/user-api-preload.js\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/user-api-preload.js\"\nif [ ! -s \"$SRC\" ]; then\n  echo \"error: missing $SRC\"\n  exit 1\nfi\ncp -f \"$SRC\" \"$DEST\"\necho \"copied user-api-preload.js: $(wc -c < \"$DEST\" | tr -d ' ') bytes\"";
-		};
 		00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -427,6 +470,24 @@
 			shellPath = /bin/sh;
 			shellScript = "# Strip dev-launcher-specific local network permission keys from non-Debug builds\n# This only removes _expo._tcp Bonjour services and the dev-launcher usage description.\n# Other Bonjour services and custom descriptions are preserved for production use.\n\nif [ \"$CONFIGURATION\" != \"Debug\" ]; then\n  PLIST_PATH=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n  if [ -f \"$PLIST_PATH\" ]; then\n    # Check if NSBonjourServices exists\n    if /usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" >/dev/null 2>&1; then\n      # Get the count of services\n      COUNT=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null | grep \"^    \" | wc -l | tr -d ' ')\n\n      # Remove _expo._tcp\n      for ((i=COUNT-1; i>=0; i--)); do\n        SERVICE=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices:$i\" \"$PLIST_PATH\" 2>/dev/null || echo \"\")\n        if echo \"$SERVICE\" | grep -q \"_expo._tcp\"; then\n          /usr/libexec/PlistBuddy -c \"Delete :NSBonjourServices:$i\" \"$PLIST_PATH\" 2>/dev/null || true\n        fi\n      done\n\n      # If the array is now empty, remove it entirely\n      REMAINING=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null | grep \"^    \" | wc -l | tr -d ' ')\n      if [ \"$REMAINING\" -eq \"0\" ]; then\n        /usr/libexec/PlistBuddy -c \"Delete :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null || true\n      fi\n    fi\n\n    # Only delete the description if it matches the dev-launcher default text\n    DESC=$(/usr/libexec/PlistBuddy -c \"Print :NSLocalNetworkUsageDescription\" \"$PLIST_PATH\" 2>/dev/null || echo \"\")\n    if echo \"$DESC\" | grep -q \"Expo Dev Launcher\"; then\n      /usr/libexec/PlistBuddy -c \"Delete :NSLocalNetworkUsageDescription\" \"$PLIST_PATH\" 2>/dev/null || true\n    fi\n  fi\nfi\n";
 		};
+		A1B2C3D4E5F60718293A4B5C /* Copy user-api-preload.js */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy user-api-preload.js";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\nSRC=\"$SRCROOT/../src/helpers/userApi/user-api-preload.js\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/user-api-preload.js\"\nif [ ! -s \"$SRC\" ]; then\n  echo \"error: missing $SRC\"\n  exit 1\nfi\ncp -f \"$SRC\" \"$DEST\"\necho \"copied user-api-preload.js: $(wc -c < \"$DEST\" | tr -d ' ') bytes\"";
+		};
 		F5B52E32F660521AA9EDD7BD /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -463,6 +524,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA01FFFF000000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA01FFFF0000000000000005 /* JKMUSICWidgetBundle.swift in Sources */,
+				AA01FFFF0000000000000007 /* JKMUSICLiveActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E294E908EDD1403A86229F5D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -478,6 +548,11 @@
 			isa = PBXTargetDependency;
 			target = 095E749FE9CE4008BFE498D2 /* ShareExtension */;
 			targetProxy = C436BC2D82294D38B1A3E2F1 /* PBXContainerItemProxy */;
+		};
+		AA01FFFF0000000000000010 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA01FFFF0000000000000001 /* JKMUSICWidget */;
+			targetProxy = AA01FFFF0000000000000011 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -686,6 +761,54 @@
 			};
 			name = Release;
 		};
+		AA01FFFF000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = JKMUSICWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = com.jkmusic.ios.JKMUSICWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA01FFFF000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = JKMUSICWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.jkmusic.ios.JKMUSICWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		FB61B82C57C847D4A6A79BF1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -766,6 +889,15 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA01FFFF0000000000000009 /* Build configuration list for PBXNativeTarget "JKMUSICWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA01FFFF000000000000000A /* Debug */,
+				AA01FFFF000000000000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
