@@ -1,4 +1,4 @@
-import { getAccentColor } from '@/jk/themeStore'
+import { getAccentColor, isWallpaperOn, glassAlpha } from '@/jk/themeStore'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
@@ -96,7 +96,16 @@ export const getThemeColors = (theme: ResolvedTheme): ThemeColors => {
 	// 品牌色统一由 mac 主题决定：Cymusic 旧 token 里的 #fc3c44 不再生效，
 	// 这样所有用 colors.primary 的旧组件都会跟随主题切换。
 	const themed = getAccentColor()
-	return themed ? { ...base, primary: themed } : base
+	const palette = themed ? { ...base, primary: themed } : base
+	// 壁纸开启：页面底色半透明（与 macPalette 一致），未开启时保持实色
+	if (isWallpaperOn()) {
+		const a = glassAlpha()
+		return {
+			...palette,
+			background: theme === 'dark' ? `rgba(18,18,20,${a.toFixed(3)})` : `rgba(255,255,255,${a.toFixed(3)})`,
+		}
+	}
+	return palette
 }
 
 let runtimeColors: ThemeColors = darkColors

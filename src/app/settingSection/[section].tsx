@@ -1,11 +1,11 @@
 import { nowLanguage, changeLanguage } from '@/utils/i18n'
-import { MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, setMacTheme, setAccentColor, themeName, type MacThemeId } from '@/jk/themeStore'
+import { MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore, setMacTheme, setAccentColor, setWallpaper, getWallpaperUri, themeName, type MacThemeId } from '@/jk/themeStore'
 /**
  * 设置分区页：键名与桌面版一致（点分格式），值由 settingsStore 持久化。
  * 桌面版专有分区只做说明，控件照常可读写（配置会保存，只是 iOS 不生效）。
  */
 import React from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Image, Pressable, ScrollView, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -26,6 +26,7 @@ const BasicSection = () => {
 	const lang = nowLanguage.useValue()
 	const macTheme = macThemeStore.useValue()
 	const accent = accentStore.useValue()
+	const wallpaper = wallpaperStore.useValue()
 	const { themeMode, setThemeMode } = useThemeMode()
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
@@ -33,6 +34,27 @@ const BasicSection = () => {
 	const [fontSize, setFontSize] = useSetting('common.fontSize', 16)
 	const [glass, setGlass] = useSetting('common.glassBlur', 0)
 	const [sourceName, setSourceName] = useSetting('common.sourceNameType', 'alias')
+
+	const pickWallpaper = async() => {
+		try {
+			const ImagePicker = await import('expo-image-picker')
+			const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+			if (!perm.granted) {
+				showToast(tr('提示', 'Notice'), tr('需要相册权限才能选择壁纸', 'Photo library permission is required'), 'error')
+				return
+			}
+			const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as any, quality: 0.9 })
+			if (res.canceled || !res.assets?.[0]?.uri) return
+			const FS = await import('expo-file-system/legacy')
+			const dest = `${(FS as any).documentDirectory}wallpaper.jpg`
+			await (FS as any).copyAsync({ from: res.assets[0].uri, to: dest })
+			// 只存文件名：绝对路径在重装后会指向旧容器
+			setWallpaper({ uri: 'wallpaper.jpg' })
+			showToast(tr('已设置', 'Done'), tr('壁纸已应用到功能页面', 'Wallpaper applied to main pages'), 'success')
+		} catch (err) {
+			showToast(tr('设置失败', 'Failed'), String((err as any)?.message ?? err).slice(0, 60), 'error')
+		}
+	}
 
 	return (
 		<>
@@ -96,6 +118,37 @@ const BasicSection = () => {
 					</Text>
 				</Pressable>
 			</View>
+			{/* 壁纸：作用于「我的列表/歌单/排行榜/搜索/下载/设置」等功能页面（播放页仍用封面） */}
+			<SettingRow
+				label={tr('主题壁纸', 'Wallpaper')}
+				hint={wallpaper.uri
+					? tr('已应用到功能页面（播放页仍显示封面）', 'Applied to main pages (player keeps artwork)')
+					: tr('选择一张图片作为功能页面背景', 'Pick an image as the background of main pages')}
+			>
+				<View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+					{wallpaper.uri ? (
+						<Image source={{ uri: getWallpaperUri(wallpaper.uri) }} style={{ width: 46, height: 28, borderRadius: 6, borderWidth: 0.5, borderColor: c.divider }} />
+					) : null}
+					<Pressable onPress={() => { void pickWallpaper() }}>
+						<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('选择图片', 'Choose Image')}</Text>
+					</Pressable>
+					{wallpaper.uri ? (
+						<Pressable onPress={() => setWallpaper({ uri: '' })}>
+							<Text style={{ color: c.danger, fontSize: macFont.body }}>{tr('清除', 'Clear')}</Text>
+						</Pressable>
+					) : null}
+				</View>
+			</SettingRow>
+			{wallpaper.uri ? (
+				<>
+					<SettingRow label={tr('壁纸磨砂', 'Wallpaper Blur')} hint={tr('0 = 清晰，40 = 最模糊', '0 = sharp, 40 = strongest')}>
+						<SettingSlider value={wallpaper.blur} min={0} max={40} step={1} onChange={(v) => setWallpaper({ blur: v })} format={(v) => `${Math.round(v)}`} />
+					</SettingRow>
+					<SettingRow label={tr('玻璃不透明度', 'Glass Opacity')} hint={tr('越高页面底色越实，壁纸越淡', 'Higher = more solid pages, fainter wallpaper')}>
+						<SettingSlider value={wallpaper.opacity} min={10} max={100} step={1} onChange={(v) => setWallpaper({ opacity: v })} format={(v) => `${Math.round(v)}%`} />
+					</SettingRow>
+				</>
+			) : null}
 			<SettingRow label={tr('字号', 'Font Size')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSelect value={String(Number(fontSize) || 16)} onChange={(v) => setFontSize(Number(v) as any)} options={[
 				{ value: '14', label: tr('小', 'Small') }, { value: '16', label: tr('标准', 'Standard') }, { value: '18', label: tr('大', 'Large') },
 			]} /></SettingRow>
@@ -786,6 +839,14 @@ const SettingsSectionScreen = () => {
 					const { setAccentColor } = await import('@/jk/themeStore')
 					setAccentColor(String((params as any).color ?? ''))
 					logInfo('[dev] accent', String((params as any).color ?? '(follow theme)'))
+				} else if (action === 'wallpaper') {
+					const { setWallpaper: setWp } = await import('@/jk/themeStore')
+					const next: any = {}
+					if ((params as any).uri !== undefined) next.uri = String((params as any).uri)
+					if ((params as any).blur !== undefined) next.blur = Number((params as any).blur)
+					if ((params as any).opacity !== undefined) next.opacity = Number((params as any).opacity)
+					setWp(next)
+					logInfo('[dev] wallpaper', JSON.stringify(next))
 				} else if (action === 'themeMode') {
 					const mode = String((params as any).mode ?? 'system')
 					const { themeModeStore } = await import('@/hooks/useAppTheme')

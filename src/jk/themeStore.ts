@@ -89,9 +89,22 @@ export const setWallpaper = (next: Partial<WallpaperState>) => {
 	try { PersistStatus.set('app.wallpaper' as any, merged) } catch { /* ignore */ }
 }
 
+/** 是否启用「功能页面壁纸」 */
+export const isWallpaperOn = () => !!wallpaperStore.getValue()?.uri
+
+/**
+ * 玻璃卡片底色 alpha：由「玻璃不透明度」滑块反推。
+ * 越大越不透明（壁纸越淡），越小越透（壁纸越明显）。
+ */
+export const glassAlpha = () => {
+	const o = Number(wallpaperStore.getValue()?.opacity ?? 70)
+	const ratio = Math.min(100, Math.max(10, Number.isFinite(o) ? o : 70)) / 100
+	return Math.min(0.95, Math.max(0.08, 0.12 + 0.78 * ratio))
+}
+
 export const getMacTheme = () => macThemeStore.getValue()
 
 export default {
 	MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore,
-	setMacTheme, setAccentColor, setWallpaper, getAccentColor, getMacTheme, getWallpaperUri, themeName,
+	setMacTheme, setAccentColor, setWallpaper, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha,
 }

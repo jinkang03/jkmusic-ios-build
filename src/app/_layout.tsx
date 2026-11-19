@@ -3,6 +3,7 @@ import '@/shims/globalPolyfills'
 import { ensureDefaults } from '@/jk/settingsStore'
 import { playbackService } from '@/constants/playbackService'
 import { AppThemeProvider, useAppTheme } from '@/hooks/useAppTheme'
+import WallpaperBackground from '@/components/WallpaperBackground'
 import LyricManager from '@/helpers/lyricManager'
 import { useLogTrackPlayerState } from '@/hooks/useLogTrackPlayerState'
 import { useSetupTrackPlayer } from '@/hooks/useSetupTrackPlayer'
@@ -77,7 +78,7 @@ const App = () => {
 }
 
 const ThemedAppShell = () => {
-	const { colors, isDark, statusBarStyle } = useAppTheme()
+	const { colors, isDark, statusBarStyle, wallpaper } = useAppTheme()
 	const { hasShareIntent } = useShareIntentContext()
 	const navigationState = useRootNavigationState()
 
@@ -133,10 +134,24 @@ const ThemedAppShell = () => {
 		[colors],
 	)
 
+	// 壁纸开启时导航层背景必须透明，否则 Stack/Tabs 的场景实色底会挡住壁纸；
+	// 没开壁纸时保持原来的实色，避免任何页面漏出底层黑底。
+	const wallpaperOn = !!wallpaper?.uri
+	const navTheme = useMemo(() => {
+		const base = isDark ? DarkTheme : DefaultTheme
+		if (!wallpaperOn) return base
+		return {
+			...base,
+			colors: { ...base.colors, background: 'transparent', card: 'transparent' },
+		}
+	}, [isDark, wallpaperOn])
+
 	return (
 		<SafeAreaProvider>
 			<GestureHandlerRootView style={{ flex: 1 }}>
-				<ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+				{/* 功能页面壁纸（最底层；play 页不受影响） */}
+				<WallpaperBackground />
+				<ThemeProvider value={navTheme}>
 					<RootNavigation />
 				</ThemeProvider>
 				<StatusBar style={statusBarStyle} />

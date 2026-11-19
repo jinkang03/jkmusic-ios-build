@@ -183,7 +183,8 @@ const PlayerScreenContent = () => {
 	const swappedLyricKeyRef = React.useRef<string>('')
 	const trackToDisplay = currentActiveTrack ?? prevTrackRef.current
 
-	const mac = macPalette(!!useAppTheme().isDark)
+	const { isDark: playerIsDark } = useAppTheme()
+	const mac = macPalette(!!playerIsDark)
 	// 封面固定正方形：屏宽 62% 与可用高度 50% 取小，避免被 flex 拉伸或裁切
 	const resolvedFrom = resolvedFromStore.useValue()
 	const coverSize = Math.min(width * 0.52, Math.max(150, (height - 420) * 0.46))
@@ -564,10 +565,11 @@ const PlayerScreenContent = () => {
 			<View style={[styles.screen, { backgroundColor: 'transparent' }]}>
 				{/* 背景：封面铺满 + 模糊 + 压暗，保证文字对比度（保持原样，不叠自定义壁纸） */}
 				<View style={StyleSheet.absoluteFill} pointerEvents="none">
+					{/* 无封面时用实色兜底：播放页不参与壁纸，避免透出下层壁纸 */}
 					{artworkUri ? (
 						<Image source={{ uri: artworkUri }} contentFit="cover" style={StyleSheet.absoluteFill} />
 					) : (
-						<View style={[StyleSheet.absoluteFill, { backgroundColor: mac.bg }]} />
+						<View style={[StyleSheet.absoluteFill, { backgroundColor: playerIsDark ? '#000000' : '#FFFFFF' }]} />
 					)}
 					<BlurView intensity={Math.round(Number(bgBlur) * 100)} tint="dark" style={StyleSheet.absoluteFill} />
 				</View>

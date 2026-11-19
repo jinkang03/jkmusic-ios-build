@@ -1,4 +1,4 @@
-import { getAccentColor } from '@/jk/themeStore'
+import { getAccentColor, isWallpaperOn, glassAlpha } from '@/jk/themeStore'
 
 /**
  * 桌面版视觉令牌（唯一事实来源：docs/mac-ui-spec.md + references/mac-ui/screenshots/）。
@@ -64,7 +64,17 @@ export type MacPalette = typeof macColors
 export const macPalette = (isDark: boolean): MacPalette => {
 	const base = isDark ? macDarkColors : macColors
 	const themed = getAccentColor()
-	return themed ? { ...base, primary: themed } : base
+	const palette = themed ? { ...base, primary: themed } : base
+	// 壁纸开启：页面底色改成半透明玻璃（mac 的 --glass-tint / --glass-tint-dark 思路），
+	// 让下层的壁纸透出来。没开壁纸时完全保持原来的实色。
+	if (isWallpaperOn()) {
+		const a = glassAlpha()
+		return {
+			...palette,
+			bg: isDark ? `rgba(18,18,20,${a.toFixed(3)})` : `rgba(255,255,255,${a.toFixed(3)})`,
+		}
+	}
+	return palette
 }
 
 export default { colors: macColors, darkColors: macDarkColors, radius: macRadius, font: macFont, space: macSpace, palette: macPalette }
