@@ -1,3 +1,57 @@
+## v1.2.1（2026-11-19）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.1-unsigned-20261119.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `761be2adca60d95a78bb4667ac64745c76ad823c23d2c80cc6ef06c76abff46d` |
+| 版本 / build | 1.2.1 / 5 |
+| 架构 | arm64 + JKMUSICWidget.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.1` |
+
+### 1.2.1 变更
+
+* **新增灵动岛 / 锁屏实时活动**（Widget Extension `JKMUSICWidget`）
+  - 锁屏卡片：歌名 + 歌手 + 2px 细线进度
+  - 灵动岛展开态：歌名 + 跨整岛细线进度
+  - 紧凑态 / 最小态：音符图标 + 百分比
+  - 颜色取当前主题色（`primaryHex` 由 JS 传入）
+* 主 App 增加 `NSSupportsLiveActivities`
+* 播放状态旁路同步：切歌 `start`、2 秒粒度 `update`、无曲目 `end`；时长未就绪不启动
+* 不支持 Live Activity 的设备/系统上所有调用静默跳过，不影响播放
+
+### 断言（本次构建实测）
+
+```
+1) bundle id   : com.jkmusic.ios
+2) version     : 1.2.1
+3) build       : 5
+4) minos       : 16.4
+5) arch        : arm64
+6) jsbundle    : 6.0M
+7) preload     : 3 处 globalThis.lxu，21K
+8) dev 残留    : 0
+9) size        : 17.x MB
+10) sha256     : 761be2adca60d95a78bb4667ac64745c76ad823c23d2c80cc6ef06c76abff46d
+11) widget     : PlugIns/JKMUSICWidget.appex 存在
+12) LiveActivity: NSSupportsLiveActivities = true
+13) extension  : com.apple.widgetkit-extension
+```
+
+### 验证状态
+
+* 模拟器（iOS 26.3）：ActivityKit 成功创建 activity（`attributesType: JKMUSICLiveActivityAttributes`），
+  每 2 秒 update，日志 `[live] start` + `Updating activity: … state: active`
+* **灵动岛视觉需真机确认**：模拟器没有灵动岛硬件，锁屏卡片可用 Xcode Preview 预览
+* 自签安装时需连同 `.appex` 一起签名（Sideloadly / AltStore 会自动处理）
+
+### 已知限制
+
+* 灵动岛紧凑态无法跨岛画线（iOS 限制），紧凑态显示百分比，展开态显示细线
+* 其余限制同 1.2.0（酷狗直连、128k 文件扩展名、内置列表名 i18n）
+
+---
+
 ## v1.2.0（2026-11-19）
 
 | 项 | 值 |

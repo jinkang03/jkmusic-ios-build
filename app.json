@@ -2,7 +2,7 @@
   "expo": {
     "name": "JKMUSIC",
     "slug": "jkmusic",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/1024.png",
     "userInterfaceStyle": "automatic",
@@ -26,7 +26,7 @@
         },
         "CADisableMinimumFrameDurationOnPhone": true
       },
-      "buildNumber": "4"
+      "buildNumber": "5"
     },
     "android": {
       "adaptiveIcon": {
