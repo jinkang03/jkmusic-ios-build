@@ -733,6 +733,10 @@ const SettingsSectionScreen = () => {
 					}
 					lib.addToList(listId, [jk], 'bottom')
 					logInfo('[dev] addToList ok', listId, 'count=', lib.getListById(listId).length)
+				} else if (action === 'fullLyric') {
+					const on = String((params as any).on ?? '1') === '1'
+					;(globalThis as any).__JK_FULL_LYRIC__ = on
+					logInfo('[dev] fullLyric on=', on)
 				} else if (action === 'removeList') {
 					// 验证歌单删除的数据层（UI 长按入口另测）
 					const listId = String((params as any).id ?? '')

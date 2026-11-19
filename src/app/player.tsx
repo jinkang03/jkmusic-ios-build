@@ -152,8 +152,17 @@ const PlayerScreenContent = () => {
 	const [showLyrics, setShowLyrics] = useState(false)
 	const [showLyricDelayControls, setShowLyricDelayControls] = useState(false)
 	const lyricDelaySeconds = PersistStatus.useValue('lyric.delaySeconds', 0) ?? 0
-	const lyricsOpacity = useSharedValue(0)
-	const lyricsTranslateY = useSharedValue(50)
+	// 初始值跟随 showLyrics：dev 开关直接置 true 时也要可见（否则 opacity 停在 0）
+	const lyricsOpacity = useSharedValue(showLyrics ? 1 : 0)
+	const lyricsTranslateY = useSharedValue(showLyrics ? 0 : 50)
+	// dev 验收开关：?action=fullLyric 会置位，便于无点击环境截图全屏歌词
+	React.useEffect(() => {
+		if ((globalThis as any).__JK_FULL_LYRIC__ === true) {
+			setShowLyrics(true)
+			lyricsOpacity.value = 1
+			lyricsTranslateY.value = 0
+		}
+	}, [lyricsOpacity, lyricsTranslateY])
 
 	const lyricsAnimatedStyle = useAnimatedStyle(() => ({
 		opacity: lyricsOpacity.value,

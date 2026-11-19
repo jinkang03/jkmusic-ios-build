@@ -175,6 +175,14 @@ export default function Lyric(_props: IProps) {
 		scrollToCurrentLrcItem()
 	}, [scrollToCurrentLrcItem])
 
+	// 歌词数据晚于组件挂载到位（lines 从 1 → 69）时，补滚一次到当前行。
+	// 否则进全屏后会停在第一行（暂停状态下自动滚动被跳过）。
+	useEffect(() => {
+		if (lyrics.length <= 1) return
+		const t = setTimeout(() => scrollToCurrentLrcItem(), 120)
+		return () => clearTimeout(t)
+	}, [lyrics.length, scrollToCurrentLrcItem])
+
 	const getItemLayout = useCallback((_: unknown, index: number) => {
 		const itemHeights = itemHeightsRef.current
 		const headerHeight = itemHeights.blankHeight ?? 0

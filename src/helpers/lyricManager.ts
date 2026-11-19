@@ -1,3 +1,4 @@
+import { logInfo } from '@/helpers/logger'
 /**
  * 管理当前歌曲的歌词
  */
@@ -128,10 +129,12 @@ async function refreshLyric(fromStart?: boolean, forceRequest = false, positionO
 			offset: lyricDelaySeconds,
 		})
 
+		const builtLyrics = parser.getLyric()
+		logInfo(`[lyricManager] rebuild lines=${builtLyrics.length} rawLen=${rawLrc.length} first3=${builtLyrics.slice(0, 3).map((x: any) => x?.time).join(',')}`)
 		lyricStateStore.setValue({
 			loading: false,
 			lyricParser: parser,
-			lyrics: parser.getLyric(),
+			lyrics: builtLyrics,
 			translationLyrics: lrcSource.translation ? parser.getTranslationLyric() : undefined,
 			meta: parser.getMeta(),
 			hasTranslation: !!lrcSource.translation,
