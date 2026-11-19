@@ -7,6 +7,7 @@ import { ThemeColors } from '@/constants/tokens'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import searchAll from '@/helpers/searchAll'
 import i18n from '@/utils/i18n'
+import { showToast } from '@/utils/utils'
 import debounce from 'lodash/debounce'
 import { useFocusEffect, useLocalSearchParams, useSegments } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -105,6 +106,16 @@ const SearchlistsScreen = () => {
 				}
 			} catch (error) {
 				console.error('Error fetching search results:', error)
+				if (requestId === searchRequestRef.current) {
+					// 企鹅搜索常因上游限流失败，给出可读提示而不是静默空白
+					showToast(
+						'搜索失败',
+						activeSourcePill === 'tx' ? '企鹅音乐暂时不可用，试试其它源' : '搜索失败，请稍后再试',
+						'error',
+					)
+					setSearchResults([])
+					setHasMore(false)
+				}
 			} finally {
 				if (requestId === searchRequestRef.current) {
 					setIsLoading(false)

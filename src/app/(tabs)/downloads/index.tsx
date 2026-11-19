@@ -18,6 +18,7 @@ import { downloadTasksStore } from '@/jk/downloadTasksStore'
 
 const FILTERS = ['全部', '已完成', '正在下载'] as const
 const QUALITIES = [
+	{ value: '', label: '全部' },
 	{ value: '128k', label: '128k' },
 	{ value: '320k', label: '320k' },
 	{ value: 'flac', label: 'flac' },
@@ -40,7 +41,8 @@ const DownloadsScreen = () => {
 	const [items, setItems] = useState<CacheItem[]>([])
 	const [total, setTotal] = useState(0)
 	const [loading, setLoading] = useState(true)
-	const [quality, setQuality] = useSetting('music.quality', '128k')
+	// 音质胶囊是「筛选器」，不是默认下载音质（默认音质在设置里）
+	const [quality, setQuality] = React.useState('')
 	const tasks = downloadTasksStore.useValue()
 	const downloading = Object.values(tasks ?? {}).filter((t: any) => t.status === 'downloading')
 	const failed = Object.values(tasks ?? {}).filter((t: any) => t.status === 'failed')
@@ -152,7 +154,8 @@ const DownloadsScreen = () => {
 		}
 	}
 
-	const shown = filter === '正在下载' ? [] : items
+	const filtered = quality ? items.filter((i: any) => String(i.quality) === quality) : items
+	const shown = filter === '正在下载' ? [] : filtered
 	const mb = (total / 1024 / 1024).toFixed(1)
 
 	return (

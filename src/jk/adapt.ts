@@ -16,9 +16,11 @@ export const jkToTrack = (music: JKMusic): Track => {
 	// songmid 必须来自 meta：kw 的 id 是数字 rid、kg 是 hash、mg 是 copyrightId，
 	// 而脚本要的是原始 songmid；取不到会退化成 15 秒试听片段
 	const sm = String(meta?.songmid ?? music.id ?? '')
+	// source 兜底：历史歌单/卡片数据里偶发 source 为空，platform 空会导致取流直接失败
+	const src = String((music as any)?.source ?? meta?.source ?? 'kw')
 	return {
 		id: sm,
-		platform: music.source,
+		platform: src as any,
 		title: music.name,
 		artist: music.singer,
 		album: meta.albumName ?? '',

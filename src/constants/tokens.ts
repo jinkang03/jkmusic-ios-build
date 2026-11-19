@@ -1,3 +1,5 @@
+import { macThemeStore } from '@/jk/themeStore'
+
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
 export type BlurTint = 'light' | 'dark'
@@ -89,8 +91,13 @@ export const darkColors: ThemeColors = {
 	blurTint: 'dark',
 }
 
-export const getThemeColors = (theme: ResolvedTheme): ThemeColors =>
-	theme === 'light' ? lightColors : darkColors
+export const getThemeColors = (theme: ResolvedTheme): ThemeColors => {
+	const base = theme === 'light' ? lightColors : darkColors
+	// 品牌色统一由 mac 主题决定：Cymusic 旧 token 里的 #fc3c44 不再生效，
+	// 这样所有用 colors.primary 的旧组件都会跟随主题切换。
+	const themed = macThemeStore?.getValue?.()?.primary
+	return themed ? { ...base, primary: themed } : base
+}
 
 let runtimeColors: ThemeColors = darkColors
 
