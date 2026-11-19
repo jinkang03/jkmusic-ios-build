@@ -1,3 +1,65 @@
+## v1.2.3（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.3-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `f646c13590c19cc59b68c6de621590188df3140208abdc7ed3dcb817becd3918` |
+| 版本 / build | 1.2.3 / 7 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.3` |
+
+本版按真机反馈分四批（H1–H4）修复，只动有问题的部分。
+
+### H1 功能 bug
+
+1. **播放页下载没有音质选择、下载页看不到**：改为弹 128k/320k/flac 选择，走 `downloadTrack` 写入
+   下载索引（`manual: true`）。旧实现 `cacheAndImportMusic` 只缓存 + 导入本地，下载页不显示。
+2. **歌词翻译开关无效**：新增 `nowTlyricState`，`lyricManager` 的 source 带上 `translation`，
+   `wy` 请求 `tv:-1`；全屏/紧凑翻译都按「时间就近匹配」（避免作词/作曲行导致整体错位）。
+
+### H2 主题（强调色 / 明暗 / 壁纸）
+
+1. **主题只改强调色**：主题预设只提供默认强调色；设置 → 基本设置新增「强调色」色板（8 色 + 跟随主题），
+   独立控制字体强调、进度条、按钮颜色。
+2. **整个窗口明暗**：新增「外观：跟随系统 / 浅色 / 深色」，与主题互不影响。
+3. **主题壁纸 + 磨砂/透明度**：可选择图片、清除、缩略图预览，壁纸磨砂（0–40）与不透明度（10–100%）可调，
+   播放页用壁纸 + 可调磨砂/压暗；没有壁纸时仍是封面模糊。
+4. 壁纸只持久化文件名，修重装/换容器后绝对路径失效导致壁纸空白。
+5. 设置项键值对齐桌面版：字号（px 14/16/18）、玻璃模糊（0..1）、显示源名（alias/real）。
+
+### H3 英语界面补齐
+
+1. 新增 `tr(zh, en)` 双语助手（渲染期翻译），tab 名、设置首页与 14 个分区页、搜索、下载、歌单、
+   排行榜、我的列表、本地音乐、音源管理、播放页、公共组件全部双语。
+2. 内置列表名英文显示 Listening / Favorites；音源名 Kuwo/Kugou/QQ Music/NetEase/Migu。
+3. 设置页「桌面专属」分组移到主列表之后；tab 标签 10px，英文 Downloads 不再截断。
+
+### H4 歌词滚动 / 逐字 / 渐隐
+
+1. **全屏歌词不逐字、不跟手**：当前行改按播放位置二分计算（progress 事件滞后会导致不滚动/逐字不亮），
+   去掉 900ms/2 行节流，逐行平滑滚到中间。
+2. **上下渐隐**：按「与当前行距离」做透明度渐隐（纯透明度，不叠黑色遮罩），与 mac 端一致。
+3. **播放页歌词顿挫**：紧凑歌词改为整行高度滑入动画；窗口行数按容器高度自适应，不再出现半截字；
+   翻译行绝对定位固定行高。
+4. 过滤「作词/作曲/编曲…」制作信息行；`wy` 歌词请求 `yv/ytv/lv/rv/kv` 传 -1 以拿回逐字 yrc。
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.2.3 / build 7 / minos 16.4 / arm64
+jsbundle 6.0M / dev 残留 0 / size 17.x MB
+sha256 f646c13590c19cc59b68c6de621590188df3140208abdc7ed3dcb817becd3918
+widget PlugIns/JKMUSICWidget.appex present / NSSupportsLiveActivities true
+PlugIns/ShareExtension.appex present
+```
+
+### 验证方式
+
+- 模拟器（iPhone 17 Pro / iOS 26.3）逐项截图：设置页（中文/英文/浅色）、强调色切换即时生效、
+  壁纸 + 磨砂/不透明度、播放页歌词逐字与渐隐、全屏歌词逐字（「花落」着色）。
+- 逐字数据核对日志：`[jk/lyric] got lyric=1466 lx=7118`、`[lyric] active idx=15 segs=6 lit=2`。
+
 ## v1.2.2（2026-11-20）
 
 | 项 | 值 |
