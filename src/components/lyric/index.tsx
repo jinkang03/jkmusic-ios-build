@@ -4,6 +4,8 @@ import type { FlatList as NativeFlatList, FlatListProps } from 'react-native'
 
 import { ThemeColors } from '@/constants/tokens'
 import LyricManager from '@/helpers/lyricManager'
+import { nowLxLyricState } from '@/player/PlayerStore'
+import { buildKaraokeMap, findKaraokeSegs } from '@/jk/karaoke'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import useDelayFalsy from '@/hooks/useDelayFalsy'
@@ -52,6 +54,11 @@ export default function Lyric(_props: IProps) {
 	const { meta, lyrics } = LyricManager.useLyricState()
 	// console.log('lyrics', lyrics)
 	const currentLrcItem = LyricManager.useCurrentLyric()
+	// 逐字歌词：全屏视图复用 MiniLyric 的 lxlyric 解析（之前只有紧凑视图支持）
+	const lxRaw = nowLxLyricState.useValue()
+	const karaokeMap = useMemo(() => buildKaraokeMap(lxRaw), [lxRaw])
+	const { position } = myTrackPlayer.useProgress(1)
+	const karaokeMs = Math.max(0, Number(position ?? 0)) * 1000
 	// const showTranslation = PersistStatus.useValue('lyric.showTranslation', false)
 	const fontSizeKey = PersistStatus.useValue('lyric.detailFontSize', 1)
 	const fontSizeStyle = useMemo(
@@ -243,10 +250,14 @@ export default function Lyric(_props: IProps) {
 				onLayout={handleLyricItemLayout}
 				light={draggingIndex === index}
 				highlight={currentLrcItem?.index === index}
+				karaokeSegs={currentLrcItem?.index === index
+					? findKaraokeSegs(karaokeMap, Number(item?.time ?? 0) * 1000)
+					: undefined}
+				karaokeNowMs={currentLrcItem?.index === index ? karaokeMs : undefined}
 				onPress={() => handleLyricItemPress(index)}
 			/>
 		)
-	}, [fontSizeStyle.fontSize, handleLyricItemLayout, draggingIndex, currentLrcItem?.index, handleLyricItemPress])
+	}, [fontSizeStyle.fontSize, handleLyricItemLayout, draggingIndex, currentLrcItem?.index, handleLyricItemPress, karaokeMap, karaokeMs])
 
 	return (
 		<>

@@ -94,11 +94,14 @@ const MiniLyric = () => {
 		const from = prevIdxRef.current
 		if (from === effectiveIndex) return
 		prevIdxRef.current = effectiveIndex
-		shiftY.setValue(ROW_HEIGHT)
+		shiftY.setValue(ROW_HEIGHT * 0.6)
 		Animated.timing(shiftY, {
-			toValue: 0, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true,
+			toValue: 0,
+			duration: 420,
+			easing: Easing.bezier(0.22, 1, 0.36, 1),
+			useNativeDriver: true,
 		}).start()
-		logInfo(`[minilyric] animate from=${from} to=${effectiveIndex} dur=280`)
+		logInfo(`[minilyric] animate from=${from} to=${effectiveIndex} dur=420`)
 	}, [effectiveIndex, shiftY])
 
 	// 逐字：从 lxlyric 原文建「行时间 → 分段」映射，再按当前行时间取（±30ms 容错）
@@ -149,9 +152,11 @@ const MiniLyric = () => {
 		)
 	}
 
-	const start = Math.max(0, effectiveIndex - WINDOW)
-	const end = Math.min(lyrics.length, effectiveIndex + WINDOW + 1)
-	const rows = lyrics.slice(start, end)
+	// 固定 5 行窗口：首尾不足时补空行，避免 justifyContent:center 导致整块上下跳动
+	const start = effectiveIndex - WINDOW
+	const windowSize = WINDOW * 2 + 1
+	const rows: Array<any> = []
+	for (let i = 0; i < windowSize; i++) rows.push(lyrics[start + i] ?? null)
 
 	return (
 		<View style={{ flex: 1, justifyContent: 'center', overflow: 'hidden' }}>
@@ -163,13 +168,17 @@ const MiniLyric = () => {
 				const absoluteIndex = start + idx
 				const distance = Math.abs(absoluteIndex - effectiveIndex)
 				const isCurrent = distance === 0
-				const opacity = isCurrent ? 1 : distance === 1 ? 0.75 : 0.5
+				// 距离分级：越远越淡（Apple Music 那种纵深感）
+				const opacity = isCurrent ? 1 : distance === 1 ? 0.6 : 0.32
 				if (isCurrent && renderLogRef.current !== `${absoluteIndex}:${karaokeSegs.filter(x => karaokeMs >= x.start).length}`) {
 					renderLogRef.current = `${absoluteIndex}:${karaokeSegs.filter(x => karaokeMs >= x.start).length}`
 					logInfo('[lyric] render row', absoluteIndex, 'isCurrent=', isCurrent,
 						'segs=', karaokeSegs.length,
 						'lit=', karaokeSegs.filter(x => karaokeMs >= x.start).length,
 						'color0=', karaokeSegs[0] ? (karaokeMs >= karaokeSegs[0].start ? 'primary' : 'muted') : 'none')
+				}
+				if (!item) {
+					return <View key={`blank-${absoluteIndex}`} style={{ height: ROW_HEIGHT }} />
 				}
 				return (
 					<Pressable

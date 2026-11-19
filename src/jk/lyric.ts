@@ -47,6 +47,41 @@ const buildSwappedMusic = (music: JKMusic): JKMusic | null => {
 	}
 }
 
+const isUsableLyric = (res: any) => {
+	const text = String(res?.lyric ?? '')
+	return text.length > 20 && !text.includes('暂无歌词')
+}
+
+/**
+ * 歌词兜底：某源没有词时，用「歌名+歌手」去同曲多源索引里找其它源再试。
+ * 酷狗大量曲目歌词接口返回空，但换到 kw/tx/wy 往往有词。
+ */
+const fetchLyricFromOtherSources = async(music: JKMusic): Promise<LyricResult | null> => {
+	try {
+		const idx = await import('@/jk/crossSourceIndex')
+		const hits = idx.lookup(music.name, music.singer)
+		for (const e of hits) {
+			if (!e?.id || e.source === music.source) continue
+			try {
+				const alt: JKMusic = {
+					id: String(e.id),
+					name: String(e.name || music.name || ''),
+					singer: String(e.singer || music.singer || ''),
+					source: e.source as any,
+					interval: music.interval ?? null,
+					meta: { songmid: String(e.id), hash: String(e.id), source: e.source },
+				}
+				const res = await getJkLyric(alt)
+				if (isUsableLyric(res)) {
+					logInfo('[jk/lyric] fallback-source', String(e.source), 'id=', String(e.id))
+					return normalize(res)
+				}
+			} catch { /* 试下一个源 */ }
+		}
+	} catch { /* ignore */ }
+	return null
+}
+
 export const fetchLyric = async(track: Track): Promise<LyricResult> => {
 	const music: JKMusic = trackToJk(track)
 	const swapped = buildSwappedMusic(music)
@@ -54,14 +89,29 @@ export const fetchLyric = async(track: Track): Promise<LyricResult> => {
 		const target = swapped ?? music
 		logInfo('[jk/lyric] source=', String(target.source), 'id=', String(target.id), 'swapped=', String(!!swapped))
 		const res = await getJkLyric(target)
+		if (isUsableLyric(res)) return normalize(res)
+		// 当前源没词 → 先用原曲目再试（换源场景），再走同曲多源兜底
+		if (swapped) {
+			try {
+				const orig = await getJkLyric(music)
+				if (isUsableLyric(orig)) return normalize(orig)
+			} catch { /* ignore */ }
+		}
+		const alt = await fetchLyricFromOtherSources(music)
+		if (alt) return alt
 		return normalize(res)
 	} catch (err) {
 		console.log('[jk/lyric] sdk failed, fallback', err)
 		// 换源歌词失败时退回原曲目再试一次，避免比不换源还差
 		if (swapped) {
 			try {
-				return normalize(await getJkLyric(music))
+				const orig = await getJkLyric(music)
+				if (isUsableLyric(orig)) return normalize(orig)
 			} catch { /* fallthrough */ }
+		}
+		{
+			const alt = await fetchLyricFromOtherSources(music)
+			if (alt) return alt
 		}
 		try {
 			const { myGetLyric } = await import('@/helpers/userApi/getMusicSource')
