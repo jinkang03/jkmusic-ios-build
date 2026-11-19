@@ -533,6 +533,53 @@ const SettingsSectionScreen = () => {
 					if (String((params as any).pause ?? '1') === '1') await (tp as any).pause()
 					const prog: any = (tp as any).getProgress?.() ?? {}
 					logInfo('[dev] seek ok pos=', pos, 'paused=', String((params as any).pause ?? '1'), 'now=', Number(prog?.position ?? 0).toFixed(2))
+				} else if (action === 'searchPlay') {
+					// 搜索一首歌并直接播放（验证「搜到 → 点播 → 出声」全链路）
+					const src = String((params as any).source ?? 'kg') as any
+					const q = String((params as any).q ?? '')
+					const index = Math.max(0, Number((params as any).index ?? 0) || 0)
+					if (!q) throw new Error('缺少 q')
+					const { searchBySource } = await import('@/jk/musicSdk')
+					const { jkToTrack } = await import('@/jk/adapt')
+					const { default: tp } = await import('@/helpers/trackPlayerIndex')
+					const list = await searchBySource(src, q, 1, 10)
+					const hit: any = list[index]
+					if (!hit) throw new Error('搜索结果为空')
+					const track: any = jkToTrack(hit)
+					await (tp as any).play(track)
+					logInfo('[dev] searchPlay', src, String(hit.name ?? ''), 'id=', track.id)
+				} else if (action === 'probe') {
+					// 直接验证「取流链路」而不命中本地缓存：先看脚本池原始结果，再看跨源兜底后的结果
+					const source = String((params as any).source ?? 'kw') as any
+					const id = String((params as any).id ?? '')
+					const name = String((params as any).name ?? '测试')
+					const singer = String((params as any).singer ?? '')
+					if (!id) throw new Error('缺少 id')
+					const { getPooledMusicUrl } = await import('@/jk/sourceRegistry')
+					const { resolveSource } = await import('@/player/MusicSourceResolver')
+					const { jkToTrack } = await import('@/jk/adapt')
+					let pooled = ''
+					try {
+						const url = await getPooledMusicUrl(name, singer, id, '320k', source, {
+							songmid: id, id, name, singer, source, hash: id,
+						})
+						pooled = url ? `ok(${url.slice(0, 50)})` : 'empty'
+					} catch (err) {
+						pooled = `fail(${String((err as any)?.message ?? err).slice(0, 60)})`
+					}
+					const track: any = jkToTrack({
+						id, name, singer, source, interval: null,
+						meta: { songmid: id, hash: id, source },
+					} as any)
+					let finalUrl = ''
+					try {
+						const r: any = await resolveSource(track, { requestType: 'current' } as any)
+						finalUrl = String(r?.url ?? '')
+					} catch (err) {
+						finalUrl = `throw:${String((err as any)?.message ?? err).slice(0, 60)}`
+					}
+					const verdict = !finalUrl ? 'empty' : finalUrl.includes('fake') ? 'fake' : 'ok'
+					logInfo(`[probe] ${source} pooled=${pooled} final=${verdict} name=${name}`)
 				} else if (action === 'smoke') {
 					const q = String((params as any).q ?? '周杰伦')
 					const { searchBySource, resolveMusicSource } = await import('@/jk/musicSdk').then(async(m) => {

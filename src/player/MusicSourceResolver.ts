@@ -47,6 +47,84 @@ const preloadCache = new Map<string, string>()
 const CURRENT_SOURCE_REQUEST_TIMEOUT_MS = 5000
 const PRELOAD_SOURCE_REQUEST_TIMEOUT_MS = 12000
 
+/**
+ * 跨源兜底：某个源整体取流失败（脚本后端停服、版权限制）时，
+ * 用「歌名 + 歌手」去其它可用源找同一首并取流，保证点歌能出声。
+ * 结果按歌曲缓存 5 分钟（URL 有时效，不宜久留）。
+ */
+const ALT_SOURCES: Array<{ id: 'kw' | 'wy' | 'tx', label: string }> = [
+	{ id: 'kw', label: '酷我' },
+	{ id: 'wy', label: '网易云' },
+	{ id: 'tx', label: 'QQ音乐' },
+]
+const ALT_CACHE_TTL_MS = 5 * 60 * 1000
+const altCache = new Map<string, { url: string, source: string, label: string, title: string, at: number }>()
+
+const normalizeMatchKey = (value: any) =>
+	String(value ?? '').toLowerCase().replace(/[\s\-_·・,，.。()（）]/g, '')
+
+const findPlayableAlt = async (
+	musicItem: IMusic.IMusicItem,
+	quality: string,
+	requestType: ResolveSourceRequestType,
+) => {
+	const title = String(musicItem?.title ?? '')
+	const artist = String(musicItem?.artist ?? '')
+	if (!title) return null
+	const cacheKey = `${musicItem?.platform}:${normalizeMatchKey(title)}:${normalizeMatchKey(artist)}:${quality}`
+	const cached = altCache.get(cacheKey)
+	if (cached && Date.now() - cached.at < ALT_CACHE_TTL_MS) {
+		logInfo('[resolve] cross-source cached', cached.source, cached.title)
+		return cached
+	}
+
+	const api: any = musicApiSelectedStore.getValue()
+	if (!api?.getMusicUrl) return null
+	const { searchBySource } = await import('@/jk/musicSdk')
+	const { jkToTrack } = await import('@/jk/adapt')
+
+	const targetTitle = normalizeMatchKey(title)
+	const targetArtist = normalizeMatchKey(artist)
+
+	// 并行找源：三个候选源同时搜索+取流，哪个先给出可用地址就用哪个。
+	// 串行时「kw 搜索超时 6s」会直接拖慢整个兜底，用户点歌要等 30s。
+	const attempts = ALT_SOURCES
+		.filter(alt => alt.id !== musicItem?.platform)
+		.map(alt => (async() => {
+			const list = await Promise.race([
+				searchBySource(alt.id, `${title} ${artist}`.trim(), 1, 5),
+				createTimeoutPromise(6000),
+			]) as any[]
+			const hit = (list || []).find((item: any) => {
+				const itemTitle = normalizeMatchKey(item?.name)
+				const itemArtist = normalizeMatchKey(item?.singer)
+				const titleOk = !!itemTitle && (itemTitle.includes(targetTitle) || targetTitle.includes(itemTitle))
+				const artistOk = !targetArtist || !itemArtist || itemArtist.includes(targetArtist) || targetArtist.includes(itemArtist)
+				return titleOk && artistOk
+			})
+			if (!hit) throw new Error(`${alt.id} 无匹配`)
+			const track: any = jkToTrack(hit)
+			const url = await Promise.race([
+				api.getMusicUrl(track.title, track.artist, track.id, quality, { requestType }, alt.id, track),
+				createTimeoutPromise(8000),
+			]) as string
+			if (typeof url !== 'string' || !/^https?:/.test(url)) throw new Error(`${alt.id} 无地址`)
+			return { url, source: alt.id, label: alt.label, title: String(hit.name ?? ''), at: Date.now() }
+		})().catch((err) => {
+			logInfo('[resolve] cross-source miss', alt.id, String((err as any)?.message ?? err).slice(0, 80))
+			throw err
+		}))
+
+	try {
+		const found = await Promise.any(attempts)
+		altCache.set(cacheKey, found)
+		logInfo('[resolve] cross-source', found.source, found.title, 'from', String(musicItem?.platform ?? ''))
+		return found
+	} catch {
+		return null
+	}
+}
+
 const isCurrentSourceRequest = (requestType: ResolveSourceRequestType) =>
 	requestType === 'current'
 
@@ -190,6 +268,8 @@ export const resolveSource = async (
 							{ requestKey, requestType, timeoutMs } as MusicUrlRequestContext,
 							// JKMUSIC 的自定义源按音源平台分发（kw/kg/tx/wy/mg）
 							musicItem.platform,
+							// 完整歌曲对象：脚本按各自的字段名取 id（kg 要 hash、mg 要 copyrightId）
+							musicItem,
 						),
 						createTimeoutPromise(timeoutMs),
 					])
@@ -220,7 +300,25 @@ export const resolveSource = async (
 					if (isCurrentSourceRequest(requestType)) {
 						logError(`${logPrefix} (catch error): ${errMsg}`)
 					}
-					currentQualityIndex++
+					// 整源级别失败（脚本池里所有脚本都没拿到地址）时，降音质重试没有意义：
+					// 直接结束音质循环，交给下面的跨源兜底，避免 3 个音质 × N 个脚本 长时间空转。
+					const sourceLevelFailure = /所有脚本|没有可用脚本|所有音源|所有接口均失败/.test(errMsg)
+					currentQualityIndex = sourceLevelFailure
+						? qualityOrder.length
+						: currentQualityIndex + 1
+				}
+			}
+
+			if (!resp_url) {
+				// 主源整条链路失败：换其它源播同一首（跨源兜底），避免点了没声音
+				const alt = await findPlayableAlt(musicItem, String(qualityStore.getValue() ?? '128k'), requestType)
+				if (alt?.url) {
+					resp_url = alt.url
+					if (isCurrentSourceRequest(requestType)) {
+						showToast('提示', `该源暂不可用，已用${alt.label}播放`, 'info')
+						nowApiState.setValue('正常')
+					}
+					logInfo(`${logPrefix} 跨源兜底成功:`, alt.source, alt.title)
 				}
 			}
 

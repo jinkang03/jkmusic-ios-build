@@ -2,6 +2,11 @@
  * 自定义源（lx-music 脚本）注册表：
  * 桌面版由主进程执行脚本，这里复用 Cymusic 原生 JavaScriptCore 运行时，
  * 把适配后的音源注入 global.lx.apis / qualityList，供 musicSdk 取播放地址。
+ *
+ * 多源聚合：
+ * 原生侧已支持「每个脚本一个独立 runtime」，因此可以同时持有多个脚本。
+ * 这里为每个平台维护一条候选链（主脚本优先 + 按实测能力排序），
+ * 某个脚本取流失败会自动换下一个，避免「一个脚本挂了整首歌就哑」。
  */
 
 import { logError, logInfo } from '@/helpers/logger'
@@ -17,6 +22,29 @@ type Registry = Record<string, JkSourceApi>
 const state = {
 	apis: {} as Registry,
 	qualityList: {} as Record<string, string[]>,
+}
+
+/** 每个脚本支持的平台（来自脚本 init 上报的 sources） */
+type PoolEntry = {
+	api: any
+	sources: string[]
+	order: number
+}
+
+const pool: PoolEntry[] = []
+let primaryApi: any = null
+
+/**
+ * 脚本优先级（按实测能力，越靠前越优先）。
+ * 名字用 includes 匹配，脚本改名后仍能命中；
+ * 主脚本永远排第一，不受此表影响。
+ */
+const SOURCE_PREFERENCE: Record<string, string[]> = {
+	kw: ['HelloWorld', '回避', '墨澜', '安妮', '裤佬', '星海'],
+	tx: ['回避', '墨澜', 'HelloWorld', '裤佬', '安妮', '星海'],
+	wy: ['安妮', '回避', '墨澜', 'HelloWorld', '裤佬', '星海'],
+	mg: ['HelloWorld', '星海', '裤佬', '墨澜', '回避'],
+	kg: ['回避', '裤佬', '墨澜', 'HelloWorld', '安妮', '星海'],
 }
 
 const ensureGlobal = () => {
@@ -48,39 +76,174 @@ export const clearSources = () => {
 	ensureGlobal()
 }
 
+const withScriptTimeout = <T>(work: Promise<T>, ms: number, label: string): Promise<T> =>
+	Promise.race([
+		work,
+		new Promise<T>((_, reject) => {
+			setTimeout(() => reject(new Error(`${label} 超时 ${ms}ms`)), ms)
+		}),
+	])
+
+const sourceScore = (source: string, entry: PoolEntry) => {
+	if (entry.api === primaryApi) return -1000
+	const names = SOURCE_PREFERENCE[source] ?? []
+	const name = String(entry.api?.name ?? '')
+	const hit = names.findIndex(n => name.includes(n))
+	return hit >= 0 ? hit : 100 + entry.order
+}
+
+/** 为某平台生成候选链（主脚本优先，其次按优先级表） */
+const candidatesFor = (source: string) =>
+	pool
+		.filter(entry => entry.sources.includes(source))
+		.sort((a, b) => sourceScore(source, a) - sourceScore(source, b))
+
 /**
- * 把当前选中的自定义源绑定到 global.lx，
- * musicSdk 取播放地址时会走这里。
+ * 池化取流：并发交给所有候选脚本，先成功的先用。
+ * 注意：这里返回 { promise } 是因为 musicSdk 的调用约定。
  */
-export const bindMusicApi = (api: any) => {
+const makePooledGetter = (source: string) => (musicInfo: any, quality: string) => {
+	const songmid = String(musicInfo?.songmid ?? musicInfo?.id ?? '')
+	const promise = getPooledMusicUrl(
+		musicInfo?.name ?? musicInfo?.title,
+		musicInfo?.singer ?? musicInfo?.artist,
+		songmid,
+		quality,
+		source,
+		musicInfo,
+	).then(url => ({ url, type: quality }))
+	return { promise }
+}
+
+/** 重建 global.lx.apis：每个平台一条候选链 */
+const rebuildRegistry = () => {
 	clearSources()
-	if (!api?.getMusicUrl) return
-	const supported: string[] = Array.isArray(api.supportedSources) && api.supportedSources.length
-		? api.supportedSources
-		: []
-	if (!supported.length) {
-		// 不再悄悄退化成 tx —— 那会把「脚本没上报源」这个问题藏起来，
-		// 症状是取流走到错误分支、播放只有 15 秒
-		logError('[jk/source] 音源没有上报任何源，跳过注册', api?.name)
+	const sources = new Set<string>()
+	for (const entry of pool) {
+		for (const s of entry.sources) sources.add(s)
+	}
+	for (const source of sources) {
+		if (!candidatesFor(source).length) continue
+		registerSourceApi(source, { getMusicUrl: makePooledGetter(source) }, ['128k', '320k', 'flac'])
+	}
+}
+
+/** 绑定主脚本（兼容旧的单选模型） */
+export const bindMusicApi = (api: any) => {
+	if (!api) {
+		primaryApi = null
+		pool.length = 0
+		rebuildRegistry()
 		return
 	}
-	for (const source of supported) {
-		registerSourceApi(source, {
-			getMusicUrl: (musicInfo: any, quality: string) => {
-				const songmid = musicInfo?.songmid ?? musicInfo?.id ?? ''
-				const promise = api
-					.getMusicUrl(musicInfo?.name, musicInfo?.singer, songmid, quality, { requestType: 'current' }, source)
-					.then((url: string) => ({ url, type: quality }))
-				return { promise }
-			},
-		}, ['128k', '320k', 'flac'])
+	if (api.__pooled) {
+		// 包装层只用于对外调用；候选池里必须是原始脚本对象，
+		// 否则池化取流会回调到自己，造成无限递归。
+		const origin = pool.find(entry => entry.api?.id === api.__originId)
+		primaryApi = origin?.api ?? null
+		rebuildRegistry()
+		logInfo(`[jk/source] primary=${String(api?.name ?? '')} pool=${pool.length}`)
+		return
 	}
-	// 这条日志是 P5 的验收锚点：logScreen 里必须能看到注册了哪些源
-	logInfo(`[jk/source] registered ${Object.keys(state.apis).join(',')}`)
+	primaryApi = api
+	if (api?.getMusicUrl && Array.isArray(api?.supportedSources) && api.supportedSources.length) {
+		const existing = pool.find(entry => entry.api?.id === api.id)
+		if (existing) {
+			existing.api = api
+			existing.sources = api.supportedSources
+		} else {
+			pool.push({ api, sources: api.supportedSources, order: pool.length })
+		}
+		rebuildRegistry()
+		logInfo(`[jk/source] registered ${Object.keys(state.apis).join(',')} (primary=${String(api?.name ?? '')})`)
+		return
+	}
+	if (!api?.getMusicUrl) return
+	// 未上报源的脚本按旧逻辑跳过，避免把请求发到错误的平台
+	logError('[jk/source] 音源没有上报任何源，跳过注册', api?.name)
+}
+
+/** 设置完整脚本池（多源聚合入口） */
+export const setSourcePool = (apis: any[]) => {
+	pool.length = 0
+	for (const api of apis) {
+		if (!api?.getMusicUrl) continue
+		if (!Array.isArray(api?.supportedSources) || !api.supportedSources.length) continue
+		pool.push({ api, sources: api.supportedSources, order: pool.length })
+	}
+	rebuildRegistry()
+	logInfo(
+		`[jk/source] pool=${pool.length}`,
+		pool.map(entry => `${String(entry.api?.name ?? '?')}(${entry.sources.join('/')})`).join(' | '),
+	)
+}
+
+/**
+ * 池化取流（供 MusicSourceResolver 直接调用）。
+ * 与 registry 中的 getMusicUrl 等价，但返回 Promise<string>。
+ */
+export const getPooledMusicUrl = async (
+	title: string,
+	artist: string,
+	songmid: string,
+	quality: string,
+	source: string,
+	meta?: Record<string, any>,
+): Promise<string> => {
+	const candidates = candidatesFor(source)
+	if (!candidates.length) throw new Error(`没有可用脚本支持 ${source}`)
+
+	// 并发竞速：同一首歌同时交给所有候选脚本，谁先给出可用地址就用谁。
+	// 串行时「一个脚本超时」会直接叠到用户等待时间上（kg 场景 8s+5s），
+	// 并发后总耗时 ≈ 最慢成功脚本的耗时。
+	const attempts = candidates.map((entry) => {
+		const api = entry.api
+		return (async() => {
+			try {
+				const url = await withScriptTimeout(
+					api.getMusicUrl(title, artist, songmid, quality, { requestType: 'current' }, source, meta),
+					6000,
+					String(api?.name ?? '脚本'),
+				)
+				if (typeof url === 'string' && /^https?:/.test(url)) {
+					if (entry !== candidates[0]) {
+						logInfo(`[jk/source] 取流兜底 ${source}: ${String(candidates[0]?.api?.name ?? '')} -> ${String(api?.name ?? '')}`)
+					}
+					return url
+				}
+				throw new Error(`脚本 ${String(api?.name ?? '')} 返回空地址`)
+			} catch (err) {
+				logInfo(
+					`[jk/source] 脚本取流失败 ${source}/${String(api?.name ?? '')}:`,
+					String((err as any)?.message ?? err).slice(0, 120),
+				)
+				throw err
+			}
+		})()
+	})
+
+	try {
+		return await Promise.any(attempts)
+	} catch (err) {
+		const errors = (err as any)?.errors ?? [err]
+		throw errors[0] ?? new Error(`没有可用脚本支持 ${source}`)
+	}
 }
 
 export const getRegisteredSources = () => Object.keys(state.apis)
 
 export const hasSource = (source: string) => !!state.apis[source]
 
-export default { registerSourceApi, unregisterSourceApi, clearSources, getRegisteredSources, hasSource, bindMusicApi }
+export const getSourcePool = () => pool.map(entry => ({ name: String(entry.api?.name ?? ''), sources: [...entry.sources] }))
+
+export default {
+	registerSourceApi,
+	unregisterSourceApi,
+	clearSources,
+	getRegisteredSources,
+	hasSource,
+	bindMusicApi,
+	setSourcePool,
+	getPooledMusicUrl,
+	getSourcePool,
+}

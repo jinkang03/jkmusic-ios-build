@@ -120,20 +120,23 @@ type LxRuntime = {
 	pendingHttpRequests: Map<string, HttpRequest>
 	inited: boolean
 	disposed: boolean
+	/** 原生 runtime 的 generation，用于多脚本并存时路由事件 */
+	generation: string
 	init: { resolve: () => void, reject: (err: Error) => void } | null
 	removeListener: (() => void) | null
 }
 
-let activeRuntime: LxRuntime | null = null
 let nextRequestId = 0
 
-const isActiveRuntime = (runtime: LxRuntime) => activeRuntime === runtime && !runtime.disposed
+/** 已加载脚本的 runtime 复用表：键为 musicApi.id */
+const loadedApiCache = new Map<string, { runtime: LxRuntime, api: IMusic.MusicApi }>()
+
+const isActiveRuntime = (runtime: LxRuntime) => !runtime.disposed && !!runtime.generation
 
 const retireRuntime = (runtime: LxRuntime, error: Error) => {
 	if (runtime.disposed) return
 	runtime.disposed = true
 	runtime.inited = false
-	if (activeRuntime === runtime) activeRuntime = null
 	runtime.init?.reject(error)
 	for (const request of runtime.pendingRequests.values()) request.reject(error)
 	runtime.pendingRequests.clear()
@@ -146,18 +149,23 @@ const retireRuntime = (runtime: LxRuntime, error: Error) => {
 	runtime.pendingHttpRequests.clear()
 	runtime.removeListener?.()
 	runtime.removeListener = null
+	for (const [id, cached] of loadedApiCache) {
+		if (cached.runtime === runtime) loadedApiCache.delete(id)
+	}
 }
 
 const failRuntime = (runtime: LxRuntime, error: Error) => {
 	if (!isActiveRuntime(runtime)) return
 	retireRuntime(runtime, error)
-	destroy()
+	destroy(runtime.generation)
 }
 
 // Native facade destruction invokes the same per-load cleanup callback. Keeping
 // the import one-way avoids a facade/adapter cycle and does not add a second bus.
 export const disposeLxMusicScript = () => {
-	if (activeRuntime) destroy()
+	// 销毁全部脚本（切源/退出时）
+	loadedApiCache.clear()
+	destroy()
 }
 
 const getLxRequestLogPrefix = (
@@ -230,6 +238,7 @@ const formatScriptActionLog = (runtime: LxRuntime, event: any) => {
  */
 const handleScriptAction = (runtime: LxRuntime, event: any) => {
 	if (!isActiveRuntime(runtime)) return
+	if (event?.generation !== runtime.generation) return
 	if (shouldLogScriptAction(runtime, event)) {
 		logInfo(formatScriptActionLog(runtime, event))
 	}
@@ -336,7 +345,7 @@ const finishHttpRequest = (
 	if (runtime.pendingHttpRequests.get(requestKey) !== request) return
 	if (request.timeout !== null) clearTimeout(request.timeout)
 	runtime.pendingHttpRequests.delete(requestKey)
-	if (isActiveRuntime(runtime)) sendAction('response', result)
+	if (isActiveRuntime(runtime)) sendAction('response', result, runtime.generation)
 }
 
 const abortHttpRequest = (runtime: LxRuntime, requestKey: string, expected?: HttpRequest) => {
@@ -465,10 +474,10 @@ const initLxMusicScript = (
 		pendingHttpRequests: new Map(),
 		inited: false,
 		disposed: false,
+		generation: '',
 		init: null,
 		removeListener: null,
 	}
-	activeRuntime = runtime
 
 	return new Promise((resolve, reject) => {
 		const timeout = setTimeout(() => {
@@ -492,7 +501,7 @@ const initLxMusicScript = (
 
 		try {
 			runtime.removeListener = onScriptAction(event => handleScriptAction(runtime, event))
-			loadScript({
+			runtime.generation = loadScript({
 				id: scriptId,
 				name: info.name || 'lx-music 音源',
 				description: info.description || '',
@@ -519,6 +528,7 @@ const getMusicUrlViaScript = (
 	quality: string,
 	requestContext?: LxRequestContext,
 	source: string = 'tx',
+	extraMeta?: Record<string, any>,
 ): Promise<string> => {
 	return new Promise((resolve, reject) => {
 		if (!isActiveRuntime(runtime) || !runtime.inited) {
@@ -570,6 +580,7 @@ const getMusicUrlViaScript = (
 					source,
 					info: {
 						musicInfo: {
+							...(extraMeta ?? {}),
 							id: songmid,
 							songmid,
 							title,
@@ -577,7 +588,7 @@ const getMusicUrlViaScript = (
 							singer: artist,
 							artist,
 							source,
-							hash: songmid,
+							hash: (extraMeta as any)?.hash ?? songmid,
 						},
 						requestContext: {
 							requestKey,
@@ -586,7 +597,7 @@ const getMusicUrlViaScript = (
 						type: quality || '128k',
 					},
 				},
-			} as any)
+			} as any, runtime.generation)
 		} catch (error) {
 			pending.reject(error instanceof Error ? error : new Error(String(error)))
 		}
@@ -630,18 +641,25 @@ export const adaptLxMusicScript = async (
 			quality: string,
 			requestContext?: LxRequestContext,
 			source?: string,
-		) => getMusicUrlViaScript(runtime, title, artist, songmid, quality, requestContext, source ?? supportedSources[0] ?? 'tx'),
+			extraMeta?: Record<string, any>,
+		) => getMusicUrlViaScript(runtime, title, artist, songmid, quality, requestContext, source ?? supportedSources[0] ?? 'tx', extraMeta),
 	}
 
+	loadedApiCache.set(musicApi.id, { runtime, api: musicApi })
 	return musicApi
 }
 
 /**
  * 重新加载 lx-music 脚本（从保存的 script 重建）
+ * 已加载且未销毁的脚本直接复用 runtime，避免多源路由预热时重复创建 JSContext。
  */
 export const reloadLxMusicScript = async (
 	musicApi: IMusic.MusicApi,
 ): Promise<IMusic.MusicApi> => {
+	const cached = loadedApiCache.get(musicApi.id)
+	if (cached && !cached.runtime.disposed) {
+		return cached.api
+	}
 	try {
 		const info = parseLxMusicScriptInfo(musicApi.script)
 		const runtime = await initLxMusicScript(musicApi.id, info, musicApi.script)
@@ -649,7 +667,7 @@ export const reloadLxMusicScript = async (
 		// 脚本 init 时上报的能力表就是「这个音源支持哪些平台」，必须带出去：
 		// bindMusicApi 依赖 api.supportedSources 决定把哪个源的取流请求交给脚本
 		const supportedSources = Object.keys((runtime as any).sources ?? {})
-		return {
+		const reloaded: IMusic.MusicApi = {
 			...musicApi,
 			supportedSources,
 			getMusicUrl: (
@@ -659,6 +677,7 @@ export const reloadLxMusicScript = async (
 				quality: string,
 				requestContext?: LxRequestContext,
 				source?: string,
+				extraMeta?: Record<string, any>,
 			) => getMusicUrlViaScript(
 				runtime,
 				title,
@@ -667,8 +686,11 @@ export const reloadLxMusicScript = async (
 				quality,
 				requestContext,
 				source ?? supportedSources[0] ?? 'tx',
+				extraMeta,
 			),
 		}
+		loadedApiCache.set(musicApi.id, { runtime, api: reloaded })
+		return reloaded
 	} catch (err) {
 		logError(
 			`[lxMusicAdapter] Failed to reload lx-music script "${musicApi.name}":`,

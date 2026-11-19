@@ -23,7 +23,7 @@ declare class UserApiModule extends NativeModule<{
 }> {
 	loadScript(info: UserApiScript): string
 	sendAction(action: string, info: string, generation: string): void
-	destroy(): string
+	destroy(generation?: string): string
 }
 
 export default requireNativeModule<UserApiModule>('UserApiModule')

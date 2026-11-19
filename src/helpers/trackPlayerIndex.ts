@@ -74,7 +74,7 @@ import {
 } from '@/player/CacheManager'
 
 import { resolveSource, preloadSource } from '@/player/MusicSourceResolver'
-import { bindMusicApi } from '@/jk/sourceRegistry'
+import { bindMusicApi, getPooledMusicUrl, setSourcePool } from '@/jk/sourceRegistry'
 
 const NEXT_TRACK_PRELOAD_DELAY_MS = 8000
 const createTrackSourceLoadingToken = (musicItem: IMusic.IMusicItem) =>
@@ -195,6 +195,17 @@ function migrate() {
 	Config.set('status.music', undefined)
 }
 
+/**
+ * 全新安装 / 用户删除了全部脚本时，加载内置音源，保证开箱可用。
+ */
+async function ensureBuiltinSources(): Promise<IMusic.MusicApi | null> {
+	// 内置脚本会把 100KB+ 的 lx 脚本内联进 JS bundle，Release minify 阶段耗时失控，
+	// 因此改为不内联：没有脚本时只做提示，由「设置 → 音源管理」导入。
+	// 多脚本聚合 + 跨源兜底保证导入后即便某个源失效也能出声。
+	logInfo('[jk/source] 未导入任何音源脚本：请在「设置 → 音源管理」导入')
+	return null
+}
+
 async function setupTrackPlayer() {
 	migrate()
 	const rate = PersistStatus.get('music.rate')
@@ -252,12 +263,17 @@ async function setupTrackPlayer() {
 		// Project cover addresses for display only; preserve stored IDs, songs and URLs.
 		playListsStore.setValue(resolvedPlayLists)
 	}
-	if (musicApiLists) {
+	if (Array.isArray(musicApiLists) && musicApiLists.length) {
 		musicApiStore.setValue(musicApiLists)
+	} else {
+		await ensureBuiltinSources()
 	}
 	if (selectedMusicApi) {
 		musicApiSelectedStore.setValue(selectedMusicApi)
 		bindMusicApi(selectedMusicApi)
+		await reloadNowSelectedMusicApi()
+	} else if (musicApiSelectedStore.getValue()) {
+		// 内置音源刚加载：选中态已在 ensureBuiltinSources 里写好，这里补加载与绑定
 		await reloadNowSelectedMusicApi()
 	}
 	if (importedLocalMusic) {
@@ -783,6 +799,72 @@ const addMusicApi = (musicApi: IMusic.MusicApi) => {
 		])
 	}
 }
+/** 把完整歌曲对象摊平成脚本能读的字段（各脚本字段名不同：hash/FileHash/SQFileHash/rid/copyrightId） */
+const flattenMusicForScript = (item: any, fallback: Record<string, any>) => {
+	const jk = item?.lxMusic
+	const meta = jk?.meta ?? item?.meta ?? {}
+	return {
+		...(meta ?? {}),
+		...(jk ?? {}),
+		...fallback,
+	}
+}
+
+/** 主脚本的 getMusicUrl 换成「池化取流」，所有调用方自动获得多源级联 */
+const withPooledUrl = (api: any) => {
+	if (!api) return api
+	return {
+		...api,
+		// 标记：这是对外包装层，不能进入候选池（否则池化会调用自己 → 无限递归）
+		__pooled: true,
+		__originId: api.id,
+		getMusicUrl: (
+			title: string,
+			artist: string,
+			songmid: string,
+			quality: string,
+			_ctx?: any,
+			source?: string,
+			item?: any,
+		) => getPooledMusicUrl(
+			title,
+			artist,
+			songmid,
+			quality,
+			String(source ?? api?.platform ?? 'tx'),
+			flattenMusicForScript(item, { songmid, id: songmid, name: title, singer: artist, source }),
+		),
+	}
+}
+
+/**
+ * 预热脚本池：把所有已导入脚本都加载到各自 runtime，
+ * 再按平台构建候选链。加载失败不影响主脚本可用。
+ */
+const applySourcePool = async (selectedApi: any) => {
+	const all: IMusic.MusicApi[] = (musicApiStore.getValue() || []) as any
+	const loaded: any[] = []
+	for (const api of all) {
+		try {
+			if (api?.scriptType === 'lxmusic' || isLxMusicScript(api?.script)) {
+				loaded.push(await reloadLxMusicScript(api))
+			} else if (api?.getMusicUrl) {
+				loaded.push(api)
+			}
+		} catch (error) {
+			logError(`[jk/source] 池化加载失败 ${String(api?.name ?? '')}:`, error)
+		}
+	}
+	let primary = loaded.find(api => api.id === selectedApi?.id)
+	if (!primary && selectedApi?.getMusicUrl) {
+		primary = selectedApi
+		loaded.unshift(selectedApi)
+	}
+	const ordered = primary ? [primary, ...loaded.filter(api => api.id !== primary?.id)] : loaded
+	if (ordered.length) setSourcePool(ordered)
+	return primary ?? selectedApi
+}
+
 const reloadNowSelectedMusicApi = async () => {
 	try {
 		// 获取当前存储的所有音源脚本
@@ -795,19 +877,21 @@ const reloadNowSelectedMusicApi = async () => {
 			logInfo('No music API is currently selected.')
 			return null
 		}
-		// 重新加载选中的脚本
+		// 重新加载选中的脚本，并把全部已导入脚本预热成候选池
 		const reloadedApi = await reloadMusicApi(selectedApi)
+		const primary = await applySourcePool(reloadedApi)
+		const pooledApi = withPooledUrl(primary)
 
 		// 更新 musicApiStore 中的脚本
-		musicApiSelectedStore.setValue(reloadedApi)
-		bindMusicApi(reloadedApi)
+		musicApiSelectedStore.setValue(pooledApi)
+		bindMusicApi(pooledApi)
 
 		// 更新 store 和持久化存储
-		PersistStatus.set('music.selectedMusicApi', reloadedApi)
+		PersistStatus.set('music.selectedMusicApi', pooledApi)
 
-		logInfo(`Selected music API "${reloadedApi.name}" reloaded successfully`)
+		logInfo(`Selected music API "${pooledApi?.name}" reloaded successfully`)
 
-		return reloadedApi
+		return pooledApi
 	} catch (error) {
 		logError('Error reloading selected music API:', error)
 		throw error
@@ -867,18 +951,20 @@ const setMusicApiAsSelectedById = async (musicApiId: string) => {
 		// 获取新选中的音源
 		const selectedApi = musicApis[targetApiIndex]
 
-		// 重新加载选中的音源脚本
+		// 重新加载选中的音源脚本，并把全部已导入脚本预热成候选池
 		const reloadedApi = await reloadMusicApi(selectedApi)
+		const primary = await applySourcePool(reloadedApi)
+		const pooledApi = withPooledUrl(primary)
 
 		// 更新重新加载后的音源
-		musicApiSelectedStore.setValue(reloadedApi)
-		bindMusicApi(reloadedApi)
+		musicApiSelectedStore.setValue(pooledApi)
+		bindMusicApi(pooledApi)
 		// 更新 store 和持久化存储
-		PersistStatus.set('music.selectedMusicApi', reloadedApi)
+		PersistStatus.set('music.selectedMusicApi', pooledApi)
 
-		logInfo(`Music API "${reloadedApi.name}" set as selected and reloaded successfully`)
+		logInfo(`Music API "${pooledApi?.name}" set as selected and reloaded successfully`)
 		// 改成非模态提示：Alert 会挡住后续所有截图与自动化操作
-		showToast('音源已切换', `${reloadedApi.name} 已设为当前音源`, 'success')
+		showToast('音源已切换', `${pooledApi?.name} 已设为当前音源`, 'success')
 	} catch (error) {
 		logError('Error setting music API as selected:', error)
 		showToast('音源切换失败', String((error as any)?.message ?? error).slice(0, 80), 'error')
@@ -894,6 +980,7 @@ const deleteMusicApiById = (musicApiId: string) => {
 	}
 	const musicApisFiltered = musicApis.filter((musicApi) => musicApi.id !== musicApiId)
 	musicApiStore.setValue(musicApisFiltered)
+	setSourcePool(musicApisFiltered.filter(api => Array.isArray((api as any).supportedSources) && (api as any).supportedSources.length))
 	PersistStatus.set('music.musicApi', musicApisFiltered)
 	logInfo('Music API deleted successfully')
 	Alert.alert('成功', '音源删除成功', [
