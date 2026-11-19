@@ -5,6 +5,7 @@ import { ThemeColors } from '@/constants/tokens'
 import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
 import { useLastActiveTrack } from '@/hooks/useLastActiveTrack'
 import { currentArtworkStore } from '@/jk/artworkStore'
+import { syncCurrentArtwork } from '@/jk/artworkSync'
 import { resolvedFromStore } from '@/player/PlayerStore'
 import { useDefaultStyles } from '@/styles'
 import { Ionicons } from '@expo/vector-icons'
@@ -41,6 +42,11 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 	const lastActiveTrack = useLastActiveTrack()
 	const isTrackSourceLoading = trackSourceLoadingStore.useValue() !== null
 	const displayedTrack = currentMusic ?? lastActiveTrack
+	// 迷你条自己也同步一次：用户可能一直在列表页切歌，从不进播放页
+	React.useEffect(() => {
+		syncCurrentArtwork(displayedTrack)
+	}, [displayedTrack?.id, displayedTrack?.platform])
+
 	const resolvedFrom = resolvedFromStore.useValue()
 
 	const artworkOpacity = useSharedValue(1)
