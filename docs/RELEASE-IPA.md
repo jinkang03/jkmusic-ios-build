@@ -1,3 +1,41 @@
+## v1.2.4（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.4-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `6d398d2fca853738baea9fda4de35f5dcc4bd7892dbae597a56c267157933bcd` |
+| 版本 / build | 1.2.4 / 8 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.4` |
+
+### 1.2.4 变更
+
+1. **播放页取消自定义壁纸**：背景恢复为「封面铺满 + 模糊」，封面正常显示；
+   播放页其它布局/交互未改动。
+2. **设置 → 基本设置移除壁纸入口**（主题壁纸 / 壁纸磨砂 / 壁纸不透明度），
+   避免留下不生效的设置项。强调色、主题、明暗仍保留。
+3. **歌词制作信息过滤补全**：除「作词/作曲/编曲」外，新增「合声/和声/配唱/录音助理/
+   录音工程/混音/母带/制作人/出品/监制/统筹/企划/发行」等写法（允许中间带 0–10 个字）。
+4. **无效设置项统一标注「暂不支持（仅保存）」**：字号、玻璃模糊、显示源名、播放倍速、
+   保存播放进度、显示歌词音译、列表设置 5 项、网络代理 3 项。
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.2.4 / build 8 / minos 16.4 / arm64
+jsbundle 6.0M / dev 残留 0 / size 17.x MB
+sha256 6d398d2fca853738baea9fda4de35f5dcc4bd7892dbae597a56c267157933bcd
+widget PlugIns/JKMUSICWidget.appex present / NSSupportsLiveActivities true
+PlugIns/ShareExtension.appex present
+```
+
+### 验证方式
+
+- 模拟器播放页截图：背景为封面模糊，无壁纸层；封面居中正常显示。
+- 设置 → 基本设置：只剩 语言/外观/主题/强调色/字号/玻璃模糊/显示源名。
+- 设置 → 列表设置：5 项均带「暂不支持（仅保存）」副标题。
+
 ## v1.2.3（2026-11-20）
 
 | 项 | 值 |
