@@ -13,12 +13,11 @@ import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { getBoardDetail, getBoards } from '@/jk/musicSdk'
 import type { JKSource } from '@/jk/musicSdk'
+import { sourceLabel } from '@/jk/sourceLabels'
+import { tr } from '@/utils/i18n'
 import { logError } from '@/helpers/logger'
 
 const BOARD_SOURCES: JKSource[] = ['kw', 'kg', 'tx', 'wy', 'mg']
-const SOURCE_LABELS: Record<string, string> = {
-	kw: '酷我音乐', kg: '酷狗音乐', tx: '企鹅音乐', wy: '网易音乐', mg: '咪咕音乐',
-}
 
 interface Board { id: string, name: string, source: JKSource }
 
@@ -78,14 +77,14 @@ const LeaderboardScreen = () => {
 	}, [source, activeBoard, loadDetail])
 
 	const sourceTabs = useMemo(
-		() => BOARD_SOURCES.map(item => ({ id: item, label: SOURCE_LABELS[item] ?? item })),
+		() => BOARD_SOURCES.map(item => ({ id: item, label: sourceLabel(item) })),
 		[],
 	)
 
 	return (
 		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
 			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 8 }}>
-				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700' }}>排行榜</Text>
+				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700' }}>{tr('排行榜', 'Charts')}</Text>
 			</View>
 
 			{/* 源胶囊行 */}
@@ -143,7 +142,7 @@ const LeaderboardScreen = () => {
 				<SongListView
 					tracks={tracks}
 					queueId={`leaderboard_${source}_${activeBoard}`}
-					emptyText="该榜单暂无歌曲"
+					emptyText={tr('该榜单暂无歌曲', 'No songs in this chart')}
 				/>
 			)}
 		</View>

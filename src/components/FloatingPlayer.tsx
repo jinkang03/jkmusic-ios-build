@@ -8,6 +8,7 @@ import { useLastActiveTrack } from '@/hooks/useLastActiveTrack'
 import { currentArtworkStore } from '@/jk/artworkStore'
 import { syncCurrentArtwork } from '@/jk/artworkSync'
 import { resolvedFromStore } from '@/player/PlayerStore'
+import { sourceLabel } from '@/jk/sourceLabels'
 import { useDefaultStyles } from '@/styles'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
@@ -28,7 +29,7 @@ const fmt = (sec?: number) => {
 	return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`
 }
 
-const SRC_LABEL: Record<string, string> = { kw: '酷我', kg: '酷狗', tx: '企鹅', wy: '网易', mg: '咪咕' }
+const srcShort = (id: string) => sourceLabel(id, true)
 
 export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 	const { blurTint, isDark } = useAppTheme()
@@ -99,7 +100,7 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 						{resolvedFrom && resolvedFrom.from !== resolvedFrom.to
 							&& (!resolvedFrom.title || resolvedFrom.title === displayedTrack.title) ? (
 							<Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 10, marginTop: 1 }}>
-								{SRC_LABEL[resolvedFrom.from] ?? resolvedFrom.from} → {SRC_LABEL[resolvedFrom.to] ?? resolvedFrom.to}
+								{srcShort(String(resolvedFrom.from))} → {srcShort(String(resolvedFrom.to))}
 							</Text>
 						) : null}
 					</View>

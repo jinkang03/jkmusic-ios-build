@@ -8,14 +8,21 @@
 import * as FileSystem from 'expo-file-system/legacy'
 import PersistStatus from '@/store/PersistStatus'
 import { GlobalState } from '@/utils/stateMapper'
+import { tr } from '@/utils/i18n'
 
 export type MacThemeId = 'jk' | 'ink' | 'sunset' | 'celadon'
 
-export const MAC_THEMES: Record<MacThemeId, { name: string, primary: string }> = {
-	jk: { name: 'JK 终包', primary: '#E240F7' },
-	ink: { name: '中国墨', primary: '#4B5563' },
-	sunset: { name: '落霞', primary: '#FF6B6B' },
-	celadon: { name: '青瓷', primary: '#2FA39A' },
+export const MAC_THEMES: Record<MacThemeId, { name: string, nameEn: string, primary: string }> = {
+	jk: { name: 'JK 终包', nameEn: 'JK Final', primary: '#E240F7' },
+	ink: { name: '中国墨', nameEn: 'Ink', primary: '#4B5563' },
+	sunset: { name: '落霞', nameEn: 'Sunset', primary: '#FF6B6B' },
+	celadon: { name: '青瓷', nameEn: 'Celadon', primary: '#2FA39A' },
+}
+
+/** 主题名按当前语言显示 */
+export const themeName = (id: MacThemeId) => {
+	const theme = MAC_THEMES[id] ?? MAC_THEMES.jk
+	return tr(theme.name, theme.nameEn)
 }
 
 /** 强调色预设色板 */
@@ -86,5 +93,5 @@ export const getMacTheme = () => macThemeStore.getValue()
 
 export default {
 	MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore,
-	setMacTheme, setAccentColor, setWallpaper, getAccentColor, getMacTheme, getWallpaperUri,
+	setMacTheme, setAccentColor, setWallpaper, getAccentColor, getMacTheme, getWallpaperUri, themeName,
 }

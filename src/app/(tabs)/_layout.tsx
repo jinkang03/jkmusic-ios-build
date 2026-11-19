@@ -2,7 +2,7 @@ import { FloatingPlayer } from '@/components/FloatingPlayer'
 import { BlurTint } from '@/constants/tokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { macPalette } from '@/constants/macTokens'
-import i18n from '@/utils/i18n'
+import { tr } from '@/utils/i18n'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
 import { Tabs } from 'expo-router/js-tabs'
@@ -54,7 +54,8 @@ const TabsNavigation = () => {
 					tabBarActiveTintColor: mac.primary,
 					tabBarInactiveTintColor: mac.textMuted,
 					tabBarLabelStyle: {
-						fontSize: 11,
+						// 10px：英文 "Downloads" 在 6 个 tab 下不会被截断
+						fontSize: 10,
 						fontWeight: '500',
 					},
 					headerShown: false,
@@ -74,7 +75,7 @@ const TabsNavigation = () => {
 					name="search"
 					options={{
 						headerShown: false,
-						title: '搜索',
+						title: tr('搜索', 'Search'),
 						tabBarIcon: ({ color, focused }) => (
 							<Ionicons name={focused ? 'search' : 'search-outline'} size={22} color={color} />
 						),
@@ -84,7 +85,7 @@ const TabsNavigation = () => {
 					name="songlist"
 					options={{
 						headerShown: false,
-						title: '歌单',
+						title: tr('歌单', 'Playlists'),
 						tabBarIcon: ({ color, focused }) => (
 							<Ionicons name={focused ? 'albums' : 'albums-outline'} size={22} color={color} />
 						),
@@ -94,7 +95,7 @@ const TabsNavigation = () => {
 					name="leaderboard"
 					options={{
 						headerShown: false,
-						title: '排行榜',
+						title: tr('排行榜', 'Charts'),
 						tabBarIcon: ({ color, focused }) => (
 							<Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={22} color={color} />
 						),
@@ -104,7 +105,7 @@ const TabsNavigation = () => {
 					name="favorites"
 					options={{
 						headerShown: false,
-						title: '我的列表',
+						title: tr('我的列表', 'My Lists'),
 						tabBarIcon: ({ color, focused }) => (
 							<Ionicons name={focused ? 'heart' : 'heart-outline'} size={22} color={color} />
 						),
@@ -114,7 +115,7 @@ const TabsNavigation = () => {
 					name="downloads"
 					options={{
 						headerShown: false,
-						title: '下载',
+						title: tr('下载', 'Downloads'),
 						tabBarIcon: ({ color, focused }) => (
 							<Ionicons name={focused ? 'download' : 'download-outline'} size={22} color={color} />
 						),
@@ -124,7 +125,7 @@ const TabsNavigation = () => {
 					name="settings"
 					options={{
 						headerShown: false,
-						title: '设置',
+						title: tr('设置', 'Settings'),
 						tabBarIcon: ({ color, focused }) => (
 							<Ionicons name={focused ? 'settings' : 'settings-outline'} size={22} color={color} />
 						),

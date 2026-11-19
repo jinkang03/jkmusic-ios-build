@@ -4,7 +4,7 @@ import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { Playlist } from '@/helpers/types'
 import { useNavigationSearch } from '@/hooks/useNavigationSearch'
 import { useUtilsStyles } from '@/styles'
-import i18n from '@/utils/i18n'
+import i18n, { tr } from '@/utils/i18n'
 import { useMemo } from 'react'
 import { Alert, FlatList, FlatListProps, Text, View } from 'react-native'
 import { Image } from 'expo-image'
@@ -62,13 +62,13 @@ export const PlaylistsList = ({
 	const showDeleteAlert = (playlist: Playlist) => {
 		// 内置列表（试听列表 / 我的收藏）不允许删除
 		if (playlist.id === 'default' || playlist.id === 'love') {
-			Alert.alert('提示', '内置列表不能删除')
+			Alert.alert(tr('提示', 'Notice'), tr('内置列表不能删除', 'Built-in lists cannot be deleted'))
 			return
 		}
-		Alert.alert('删除歌单', `确定要删除「${playlist.name}」吗？`, [
-			{ text: '取消', style: 'cancel' },
+		Alert.alert(tr('删除歌单', 'Delete Playlist'), tr(`确定要删除「${playlist.name}」吗？`, `Delete "${playlist.name}"?`), [
+			{ text: tr('取消', 'Cancel'), style: 'cancel' },
 			{
-				text: '删除',
+				text: tr('删除', 'Delete'),
 				style: 'destructive',
 				onPress: () => {
 					if (onPlaylistDelete) {
@@ -79,9 +79,9 @@ export const PlaylistsList = ({
 					void (async () => {
 						try {
 							const result = await myTrackPlayer.deletePlayLists(playlist.id)
-							Alert.alert(result === 'success' ? '成功' : '错误', result === 'success' ? '歌单删除成功' : String(result))
+							Alert.alert(result === 'success' ? tr('成功', 'Success') : tr('错误', 'Error'), result === 'success' ? tr('歌单删除成功', 'Playlist deleted') : String(result))
 						} catch {
-							Alert.alert('错误', '删除歌单失败')
+							Alert.alert(tr('错误', 'Error'), tr('删除歌单失败', 'Failed to delete playlist'))
 						}
 					})()
 				},

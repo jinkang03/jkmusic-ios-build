@@ -9,7 +9,7 @@ import { jkToTrack } from '@/jk/adapt'
 import { LIST_IDS, getDefaultList, getLoveList, getUserLists, removeUserList } from '@/jk/libraryStore'
 import { useNavigationSearch } from '@/hooks/useNavigationSearch'
 import { useDefaultStyles } from '@/styles'
-import i18n from '@/utils/i18n'
+import i18n, { tr } from '@/utils/i18n'
 import { logInfo } from '@/helpers/logger'
 import { showToast } from '@/utils/utils'
 import { router } from 'expo-router'
@@ -38,17 +38,17 @@ const FavoritesScreen = () => {
 		return [
 			{
 				id: LIST_IDS.DEFAULT,
-				name: '试听列表',
-				title: '试听列表',
-				description: `共 ${defaultList.length} 首`,
+				name: tr('试听列表', 'Listening'),
+				title: tr('试听列表', 'Listening'),
+				description: `${tr('共', '')} ${defaultList.length} ${tr('首', 'songs')}`.trim(),
 				coverImg: 'https://y.qq.com/mediastyle/global/img/cover_like.png?max_age=2592000',
 				tracks: defaultList.map(jkToTrack),
 			},
 			{
 				id: LIST_IDS.LOVE,
-				name: '我的收藏',
-				title: '我的收藏',
-				description: `共 ${loveList.length} 首`,
+				name: tr('我的收藏', 'Favorites'),
+				title: tr('我的收藏', 'Favorites'),
+				description: `${tr('共', '')} ${loveList.length} ${tr('首', 'songs')}`.trim(),
 				coverImg: 'https://y.qq.com/mediastyle/global/img/cover_like.png?max_age=2592000',
 				tracks: loveList.map(jkToTrack),
 			},
@@ -56,7 +56,7 @@ const FavoritesScreen = () => {
 				id: item.id,
 				name: item.name,
 				title: item.name,
-				description: `共 ${item.list.length} 首`,
+				description: `${tr('共', '')} ${item.list.length} ${tr('首', 'songs')}`.trim(),
 				coverImg: 'https://y.qq.com/mediastyle/global/img/cover_like.png?max_age=2592000',
 				tracks: item.list.map(jkToTrack),
 			})),
@@ -80,7 +80,7 @@ const FavoritesScreen = () => {
 						removeUserList(id)
 						setVersion(v => v + 1)
 						logInfo('[library] removeList id=', id, 'remain=', getUserLists().length, 'name=', name)
-						showToast('已删除', `歌单「${name}」已删除`, 'success')
+						showToast(tr('已删除', 'Deleted'), tr(`歌单「${name}」已删除`, `Playlist "${name}" deleted`), 'success')
 					}}
 				/>
 			</ScrollView>

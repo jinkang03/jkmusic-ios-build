@@ -6,7 +6,7 @@ import { getSingerMidBySingerName } from '@/helpers/userApi/getMusicSource'
 import { useFavorites } from '@/store/library'
 import { isInPlayList } from '@/store/playList'
 import { useQueue } from '@/store/queue'
-import i18n from '@/utils/i18n'
+import i18n, { tr } from '@/utils/i18n'
 import { MenuAction, MenuView } from '@react-native-menu/menu'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { PropsWithChildren, useCallback, useMemo, useState } from 'react'
@@ -171,7 +171,7 @@ export const TrackShortcutsMenu = ({
 				},
 				{
 					id: 'download-track',
-					title: '下载',
+					title: tr('下载', 'Download'),
 					image: 'arrow.down.circle',
 					// 二级菜单：手动下载可选音质（不选则用设置里的默认值）
 					subactions: [

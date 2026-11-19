@@ -32,7 +32,8 @@ import { usePlayerBackground } from '@/hooks/usePlayerBackground'
 import { useTrackPlayerFavorite } from '@/hooks/useTrackPlayerFavorite'
 import PersistStatus from '@/store/PersistStatus'
 import { useDefaultStyles } from '@/styles'
-import i18n from '@/utils/i18n'
+import i18n, { tr } from '@/utils/i18n'
+import { sourceLabel } from '@/jk/sourceLabels'
 import { setTimingClose } from '@/utils/timingClose'
 import { Entypo, MaterialCommunityIcons } from '@expo/vector-icons'
 import { MenuView } from '@react-native-menu/menu'
@@ -140,7 +141,7 @@ const ArtistDisplay = React.memo(({ artists, onViewArtist }: ArtistDisplayProps)
 	)
 })
 
-const SRC_LABEL: Record<string, string> = { kw: '酷我', kg: '酷狗', tx: '企鹅', wy: '网易', mg: '咪咕' }
+const srcShort = (id: string) => sourceLabel(id, true)
 
 const PlayerScreenContent = () => {
 	const colors = useThemeColors()
@@ -303,11 +304,11 @@ const PlayerScreenContent = () => {
 		void (async() => {
 			const switched = await switchAwayFromTrial(t)
 			if (switched === '__all_trial__') {
-				showToast('提示', '该曲各平台均为试听', 'info')
+				showToast(tr('提示', 'Notice'), tr('该曲各平台均为试听', 'Only previews are available on every platform'), 'info')
 			} else if (switched) {
-				showToast('提示', `该曲在当前平台仅提供试听，已切换到 ${switched}`, 'info')
+				showToast(tr('提示', 'Notice'), tr(`该曲在当前平台仅提供试听，已切换到 ${switched}`, `Preview only here, switched to ${switched}`), 'info')
 			} else {
-				showToast('提示', '该曲在当前平台仅提供试听片段', 'info')
+				showToast(tr('提示', 'Notice'), tr('该曲在当前平台仅提供试听片段', 'Only a preview clip is available on this platform'), 'info')
 			}
 		})()
 	}, [trackToDisplay, audioDuration])
@@ -429,11 +430,11 @@ const PlayerScreenContent = () => {
 				logError('[player] download failed', String((err as any)?.message ?? err))
 			}
 		}
-		Alert.alert('下载音质', `选择「${String((track as any).title ?? '')}」的下载音质`, [
+		Alert.alert(tr('下载音质', 'Download Quality'), tr(`选择「${String((track as any).title ?? '')}」的下载音质`, `Choose quality for "${String((track as any).title ?? '')}"`), [
 			{ text: '128k', onPress: () => { void run('128k') } },
 			{ text: '320k', onPress: () => { void run('320k') } },
 			{ text: 'flac', onPress: () => { void run('flac') } },
-			{ text: '取消', style: 'cancel' },
+			{ text: tr('取消', 'Cancel'), style: 'cancel' },
 		])
 	}, [trackToDisplay])
 
@@ -585,11 +586,11 @@ const PlayerScreenContent = () => {
 				</View>
 				{/* 顶部栏：收起 / 收藏 / 更多（更多沿用右侧原菜单，此处只放收起与收藏） */}
 				<View style={[styles.topBar, { paddingTop: top, height: top + 48 }]} pointerEvents="box-none">
-					<TouchableOpacity onPress={() => router.back()} hitSlop={12} accessibilityLabel="收起">
+					<TouchableOpacity onPress={() => router.back()} hitSlop={12} accessibilityLabel={tr('收起', 'Collapse')}>
 						<Ionicons name="chevron-down" size={26} color={colors.text} />
 					</TouchableOpacity>
 					<View style={{ flexDirection: 'row', gap: 20, alignItems: 'center' }}>
-						<TouchableOpacity onPress={handleFavorite} hitSlop={12} accessibilityLabel="收藏">
+						<TouchableOpacity onPress={handleFavorite} hitSlop={12} accessibilityLabel={tr('收藏', 'Favorite')}>
 							<Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={22} color={isFavorite ? mac.primary : colors.text} />
 						</TouchableOpacity>
 					</View>
@@ -732,7 +733,7 @@ const PlayerScreenContent = () => {
 						{buffering ? (
 							<View style={{ alignItems: 'center', marginTop: 8 }}>
 								<Text style={{ color: mac.primary, fontSize: 12 }}>
-									缓冲中… {typeof buffering.percent === 'number' ? `${buffering.percent}%` : ''}
+									{tr('缓冲中…', 'Buffering…')} {typeof buffering.percent === 'number' ? `${buffering.percent}%` : ''}
 								</Text>
 							</View>
 						) : null}
@@ -827,7 +828,7 @@ const PlayerScreenContent = () => {
 									{resolvedFrom && resolvedFrom.from !== resolvedFrom.to
 										&& (!resolvedFrom.title || resolvedFrom.title === trackToDisplay?.title) ? (
 										<Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
-											音源：{SRC_LABEL[resolvedFrom.from] ?? resolvedFrom.from} → {SRC_LABEL[resolvedFrom.to] ?? resolvedFrom.to}
+											音源：{srcShort(String(resolvedFrom.from))} → {srcShort(String(resolvedFrom.to))}
 										</Text>
 									) : null}
 									{trialDetected ? (

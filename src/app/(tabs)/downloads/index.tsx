@@ -15,10 +15,16 @@ import { logError, logInfo } from '@/helpers/logger'
 import { readCacheIndex, removeCacheIndexEntry } from '@/player/CacheManager'
 import { normalizeQuality } from '@/jk/downloader'
 import { downloadTasksStore } from '@/jk/downloadTasksStore'
+import { tr } from '@/utils/i18n'
 
-const FILTERS = ['全部', '已完成', '正在下载'] as const
+// 筛选项用 id 判断，文案渲染期翻译（模块级常量会在语言切换后过期）
+const FILTERS = ['all', 'done', 'downloading'] as const
+type FilterId = typeof FILTERS[number]
+const filterLabel = (id: FilterId) => id === 'done'
+	? tr('已完成', 'Completed')
+	: id === 'downloading' ? tr('正在下载', 'Downloading') : tr('全部', 'All')
 const QUALITIES = [
-	{ value: '', label: '全部' },
+	{ value: '', label: 'all' },
 	{ value: '128k', label: '128k' },
 	{ value: '320k', label: '320k' },
 	{ value: 'flac', label: 'flac' },
@@ -136,7 +142,7 @@ const DownloadsScreen = () => {
 				id: item.name.replace(/\.[^.]+$/, ''),
 				platform: 'local',
 				title: item.name.replace(/\.[^.]+$/, ''),
-				artist: '本地缓存',
+				artist: tr('本地缓存', 'Local cache'),
 				duration: 0,
 				url: item.uri.startsWith('file://') ? item.uri : `file://${item.uri}`,
 			}
@@ -167,23 +173,23 @@ const DownloadsScreen = () => {
 	}
 
 	const filtered = quality ? items.filter((i: any) => String(i.quality) === quality) : items
-	const shown = filter === '正在下载' ? [] : filtered
+	const shown = filter === 'downloading' ? [] : filtered
 	const mb = (total / 1024 / 1024).toFixed(1)
 
 	return (
 		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
 			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 8 }}>
-				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700' }}>下载</Text>
+				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700' }}>{tr('下载', 'Downloads')}</Text>
 			</View>
 
 			{/* 筛选胶囊 */}
 			<ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0, marginTop: 12 }} contentContainerStyle={{ paddingHorizontal: macSpace.pageX, gap: 8 }}>
 				{FILTERS.map(item => {
 					const active = item === filter
-					const count = item === '正在下载' ? downloading.length : items.length
+					const count = item === 'downloading' ? downloading.length : items.length
 					return (
 						<Pressable key={item} onPress={() => setFilter(item)} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: macRadius.pill, backgroundColor: active ? c.primary : c.fillSubtle }}>
-							<Text style={{ color: active ? '#fff' : c.text, fontSize: macFont.caption }}>{item} {count}</Text>
+							<Text style={{ color: active ? '#fff' : c.text, fontSize: macFont.caption }}>{filterLabel(item)} {count}</Text>
 						</Pressable>
 					)
 				})}
@@ -191,7 +197,7 @@ const DownloadsScreen = () => {
 
 			{/* 音质选择 */}
 			<View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: macSpace.pageX, marginTop: 10 }}>
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>下载音质</Text>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('下载音质', 'Quality')}</Text>
 				{QUALITIES.map(q => {
 					const active = q.value === quality
 					return (
@@ -206,7 +212,7 @@ const DownloadsScreen = () => {
 								backgroundColor: active ? c.primary : 'transparent',
 							}}
 						>
-							<Text style={{ color: active ? '#fff' : c.textMuted, fontSize: macFont.caption, fontWeight: active ? '600' : '400' }}>{q.label}</Text>
+							<Text style={{ color: active ? '#fff' : c.textMuted, fontSize: macFont.caption, fontWeight: active ? '600' : '400' }}>{q.value === '' ? tr('全部', 'All') : q.label}</Text>
 						</Pressable>
 					)
 				})}
@@ -229,14 +235,14 @@ const DownloadsScreen = () => {
 						<View key={`fl-${t.id}`} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.fillSubtle, borderRadius: 10, padding: 12 }}>
 							<View style={{ flex: 1 }}>
 								<Text style={{ color: c.text, fontSize: macFont.body }} numberOfLines={1}>{t.title || t.id}</Text>
-								<Text style={{ color: c.danger, fontSize: macFont.caption }}>失败：{String(t.error ?? '').slice(0, 40)}</Text>
+								<Text style={{ color: c.danger, fontSize: macFont.caption }}>{tr('失败：', 'Failed: ')}{String(t.error ?? '').slice(0, 40)}</Text>
 							</View>
 							<View style={{ flexDirection: 'row', gap: 8 }}>
 								<Pressable onPress={() => { void import('@/jk/downloader').then(m => m.downloadTrack({ id: t.id, title: t.title, artist: '', platform: 'kw', album: '' })) }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-									<Text style={{ color: c.primary, fontSize: macFont.caption }}>重试</Text>
+									<Text style={{ color: c.primary, fontSize: macFont.caption }}>{tr('重试', 'Retry')}</Text>
 								</Pressable>
 								<Pressable onPress={() => { void import('@/jk/downloadTasksStore').then(m => m.removeTask(t.id)) }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-									<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>清除</Text>
+									<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('清除', 'Clear')}</Text>
 								</Pressable>
 							</View>
 						</View>
@@ -247,7 +253,7 @@ const DownloadsScreen = () => {
 			{loading ? (
 				<StateView mode="loading" />
 			) : shown.length === 0 ? (
-				<StateView mode="empty" title="暂无已下载歌曲" hint="在歌曲行右侧「⋯」菜单里选「下载」" />
+				<StateView mode="empty" title={tr('暂无已下载歌曲', 'No downloaded songs')} hint={tr('在歌曲行右侧「⋯」菜单里选「下载」', 'Pick Download from the "⋯" menu on a song row')} />
 			) : (
 				<FlatList
 					data={shown}
@@ -269,10 +275,10 @@ const DownloadsScreen = () => {
 								</Text>
 							</View>
 							<Pressable onPress={() => playLocal(item)} hitSlop={8} style={{ paddingHorizontal: 8 }}>
-								<Text style={{ color: c.primary, fontSize: macFont.caption }}>试听</Text>
+								<Text style={{ color: c.primary, fontSize: macFont.caption }}>{tr('试听', 'Preview')}</Text>
 							</Pressable>
 							<Pressable onPress={() => removeOne(item.uri)} hitSlop={8} style={{ paddingHorizontal: 8 }}>
-								<Text style={{ color: c.danger, fontSize: macFont.caption }}>删除</Text>
+								<Text style={{ color: c.danger, fontSize: macFont.caption }}>{tr('删除', 'Delete')}</Text>
 							</Pressable>
 						</View>
 					)}
@@ -281,13 +287,13 @@ const DownloadsScreen = () => {
 
 			{/* 底部信息条 */}
 			<View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: macSpace.pageX, paddingVertical: 12, borderTopWidth: 0.5, borderTopColor: c.divider }}>
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>已用 {mb} MB / 上限 {limitMb} MB</Text>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('已用', 'Used')} {mb} MB / {tr('上限', 'Limit')} {limitMb} MB</Text>
 				<View style={{ flexDirection: 'row', gap: 8 }}>
 					<Pressable onPress={() => { void runBackfill() }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-						<Text style={{ color: c.text, fontSize: macFont.caption }}>刷新信息</Text>
+						<Text style={{ color: c.text, fontSize: macFont.caption }}>{tr('刷新信息', 'Refresh')}</Text>
 					</Pressable>
 					<Pressable onPress={clearAll} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-						<Text style={{ color: c.text, fontSize: macFont.caption }}>清理全部</Text>
+						<Text style={{ color: c.text, fontSize: macFont.caption }}>{tr('清理全部', 'Clear all')}</Text>
 					</Pressable>
 				</View>
 			</View>

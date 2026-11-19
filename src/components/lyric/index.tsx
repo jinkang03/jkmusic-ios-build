@@ -11,6 +11,7 @@ import { useThemeColors } from '@/hooks/useAppTheme'
 import useDelayFalsy from '@/hooks/useDelayFalsy'
 import PersistStatus from '@/store/PersistStatus'
 import { useSetting } from '@/jk/settingsStore'
+import { tr } from '@/utils/i18n'
 import { logInfo } from '@/helpers/logger'
 import delay from '@/utils/delay'
 import { musicIsPaused } from '@/utils/trackUtils'
@@ -326,7 +327,7 @@ export default function Lyric(_props: IProps) {
 					/>
 				) : (
 					<View style={styles.fullCenter}>
-						<Text style={[styles.white, fontSizeStyle]}>暂无歌词</Text>
+						<Text style={[styles.white, fontSizeStyle]}>{tr('暂无歌词', 'No lyrics')}</Text>
 					</View>
 				)}
 			</View>

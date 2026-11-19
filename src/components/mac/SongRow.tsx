@@ -4,6 +4,7 @@
  * 标题用 flexShrink 收缩而不是靠 numberOfLines 硬截断。
  */
 import React from 'react'
+import { tr } from '@/utils/i18n'
 import { Pressable, Text, useWindowDimensions, View } from 'react-native'
 import { macFont, macPalette, macSpace } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
@@ -85,9 +86,9 @@ export const SongRowHeader = () => {
 			}}
 		>
 			<Text style={{ width: COL_INDEX, color: c.textMuted, fontSize: macFont.badge }}>#</Text>
-			<Text style={{ flex: 1, color: c.textMuted, fontSize: macFont.badge }}>歌曲名</Text>
-			{!narrow ? <Text style={{ width: COL_META, color: c.textMuted, fontSize: macFont.badge }}>艺术家</Text> : null}
-			{!narrow ? <Text style={{ width: COL_META, color: c.textMuted, fontSize: macFont.badge }}>专辑名</Text> : null}
+			<Text style={{ flex: 1, color: c.textMuted, fontSize: macFont.badge }}>{tr('歌曲名', 'Title')}</Text>
+			{!narrow ? <Text style={{ width: COL_META, color: c.textMuted, fontSize: macFont.badge }}>{tr('艺术家', 'Artist')}</Text> : null}
+			{!narrow ? <Text style={{ width: COL_META, color: c.textMuted, fontSize: macFont.badge }}>{tr('专辑名', 'Album')}</Text> : null}
 			<Text style={{ width: COL_TIME, textAlign: 'right', color: c.textMuted, fontSize: macFont.badge }}>时长</Text>
 		</View>
 	)

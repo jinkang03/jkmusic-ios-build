@@ -8,7 +8,7 @@ import { Playlist } from '@/helpers/types'
 import { searchMusicInfoByName } from '@/helpers/userApi/getMusicSource'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import { useDefaultStyles } from '@/styles'
-import i18n from '@/utils/i18n'
+import i18n, { tr } from '@/utils/i18n'
 import MusicInfo from '@/utils/musicInfo'
 import * as DocumentPicker from 'expo-document-picker'
 import React, { useMemo, useState } from 'react'
@@ -69,15 +69,15 @@ const LocalMusicScreen = () => {
 	}
 	const exportSelectedTracks = async () => {
 		if (selectedTracks.size === 0) {
-			Alert.alert('提示', '请先选择要导出的歌曲')
+			Alert.alert(tr('提示', 'Notice'), tr('请先选择要导出的歌曲', 'Select songs to export first'))
 			setIsMultiSelectMode(false)
 			return
 		}
 		try {
-			Alert.alert('文件已保存到: 文件 App > 我的 iPhone > CyMusic > importedLocalMusic')
+			Alert.alert(tr('文件已保存到: 文件 App > 我的 iPhone > CyMusic > importedLocalMusic', 'Saved to Files App > On My iPhone > CyMusic > importedLocalMusic'))
 		} catch (error) {
 			console.error('导出过程中出错:', error)
-			Alert.alert('错误', '导出过程中出现错误，请重试。')
+			Alert.alert(tr('错误', 'Error'), tr('导出过程中出现错误，请重试。', 'Export failed, please try again.'))
 		}
 	}
 	const importLocalMusic = async () => {
@@ -95,7 +95,7 @@ const LocalMusicScreen = () => {
 			}
 			console.log('result.assets:', result.assets)
 			if (result.assets.length > 50) {
-				Alert.alert('提示', '一次最多只能导入50首歌曲')
+				Alert.alert(tr('提示', 'Notice'), tr('一次最多只能导入50首歌曲', 'You can import at most 50 songs at once'))
 				setIsLoading(false)
 				return
 			}
@@ -115,9 +115,9 @@ const LocalMusicScreen = () => {
 
 						return {
 							id: file.uri,
-							title: metadata?.title || file.name || '未知标题',
-							artist: metadata?.artist || '未知艺术家',
-							album: metadata?.album || '未知专辑',
+							title: metadata?.title || file.name || tr('未知标题', 'Unknown Title'),
+							artist: metadata?.artist || tr('未知艺术家', 'Unknown Artist'),
+							album: metadata?.album || tr('未知专辑', 'Unknown Album'),
 							artwork: unknownTrackImageUri,
 							url: file.uri,
 							platform: 'local',

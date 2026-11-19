@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native'
 import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { tr } from '@/utils/i18n'
 
 const SettingSelect = ({
 	value, options, onChange,
@@ -13,7 +14,7 @@ const SettingSelect = ({
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
 	const [open, setOpen] = useState(false)
-	const current = options.find(o => o.value === value)?.label ?? value ?? '未设置'
+	const current = options.find(o => o.value === value)?.label ?? value ?? tr('未设置', 'Not set')
 
 	return (
 		<>

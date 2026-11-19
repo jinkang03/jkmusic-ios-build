@@ -7,6 +7,7 @@ import { Image } from 'expo-image'
 import { Pressable, Text, View } from 'react-native'
 import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import i18n, { tr } from '@/utils/i18n'
 
 export const formatPlayCount = (value?: number | string): string => {
 	// kw 的 play_count 本身就是 "1.3万" 这种已格式化字符串，原样返回
@@ -14,8 +15,10 @@ export const formatPlayCount = (value?: number | string): string => {
 	const raw = typeof value === 'string' ? value.replace(/[^\d.]/g, '') : value
 	const n = Number(raw ?? 0)
 	if (!Number.isFinite(n) || n <= 0) return ''
-	if (n >= 1e8) return `${(n / 1e8).toFixed(1).replace(/\.0$/, '')}亿`
-	if (n >= 1e4) return `${(n / 1e4).toFixed(1).replace(/\.0$/, '')}万`
+	// 英文环境用 K/M，中文保持 万/亿
+	const isEn = i18n.locale === 'en'
+	if (n >= 1e8) return `${(n / 1e8).toFixed(1).replace(/\.0$/, '')}${isEn ? 'M' : '亿'}`
+	if (n >= 1e4) return `${(n / 1e4).toFixed(1).replace(/\.0$/, '')}${isEn ? 'K' : '万'}`
 	return String(Math.round(n))
 }
 
@@ -67,8 +70,8 @@ const SongListCard = ({
 					// kw 的 list 接口只返回 id/name/img/desc/source，没有作者与播放量，
 					// 缺数据就不渲染这一行，不要造假占位
 					const meta = [
-						Number(trackCount ?? 0) > 0 ? `曲目 ${Number(trackCount)}` : '',
-						formatPlayCount(playCount) ? `播放 ${formatPlayCount(playCount)}` : '',
+						Number(trackCount ?? 0) > 0 ? `${tr('曲目', 'Tracks')} ${Number(trackCount)}` : '',
+						formatPlayCount(playCount) ? `${tr('播放', 'Plays')} ${formatPlayCount(playCount)}` : '',
 					].filter(Boolean).join(' · ')
 					return meta ? (
 						<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{meta}</Text>

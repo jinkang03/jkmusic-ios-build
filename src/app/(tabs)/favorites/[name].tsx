@@ -7,6 +7,7 @@ import { useAppTheme } from '@/hooks/useAppTheme'
 import { jkToTrack } from '@/jk/adapt'
 import { getListById } from '@/jk/libraryStore'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { tr } from '@/utils/i18n'
 import React, { useMemo } from 'react'
 import { Text, View } from 'react-native'
 
@@ -37,14 +38,14 @@ const ListDetailScreen = () => {
 	if (!tracks.length) {
 		return (
 			<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-				<Text style={{ color: colors.textMuted }}>列表还是空的</Text>
+				<Text style={{ color: colors.textMuted }}>{tr('列表还是空的', 'This list is empty')}</Text>
 			</View>
 		)
 	}
 
 	return (
 		<View style={{ flex: 1, backgroundColor: colors.background }}>
-			<SongListView tracks={tracks} queueId={`mylist_${listId}`} autoPlayIndex={autoPlayIndex} showActions emptyText="列表还是空的" />
+			<SongListView tracks={tracks} queueId={`mylist_${listId}`} autoPlayIndex={autoPlayIndex} showActions emptyText={tr('列表还是空的', 'This list is empty')} />
 		</View>
 	)
 }

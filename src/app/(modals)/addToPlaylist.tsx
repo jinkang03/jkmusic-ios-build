@@ -10,6 +10,7 @@ import { macFont, macPalette, macSpace } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { logInfo } from '@/helpers/logger'
 import { showToast } from '@/utils/utils'
+import { tr } from '@/utils/i18n'
 import { LIST_IDS, addToList, getUserLists } from '@/jk/libraryStore'
 import { takePendingMusic } from '@/jk/pendingMusic'
 import { addToList as addToLibList } from '@/jk/libraryStore'
@@ -23,8 +24,8 @@ const AddToPlaylistScreen = () => {
 	const rows = React.useMemo(() => {
 		const userLists = getUserLists().map(item => ({ id: item.id, name: item.name, count: item.list.length }))
 		return [
-			{ id: 'love', name: '我的收藏', count: 0 },
-			{ id: LIST_IDS.DEFAULT, name: '试听列表', count: 0 },
+			{ id: 'love', name: tr('我的收藏', 'Favorites'), count: 0 },
+			{ id: LIST_IDS.DEFAULT, name: tr('试听列表', 'Listening'), count: 0 },
 			...userLists,
 		]
 	}, [])
@@ -33,14 +34,14 @@ const AddToPlaylistScreen = () => {
 		const m = takePendingMusic()
 		if (!m) {
 			logInfo('[addToPlaylist] pending empty! target=', id, name)
-			showToast('提示', '没有待添加的歌曲', 'info')
+			showToast(tr('提示', 'Notice'), tr('没有待添加的歌曲', 'No songs to add'), 'info')
 			router.back()
 			return
 		}
 		if (id === 'love') addToLibList(LIST_IDS.LOVE, [m], 'bottom')
 		else addToList(id, [m], 'bottom')
 		logInfo('[addToPlaylist] added', m.id, 'source=', (m as any).source, 'to', id, name)
-		showToast('提示', `已添加到 ${name}`, 'success')
+		showToast(tr('提示', 'Notice'), tr(`已添加到 ${name}`, `Added to ${name}`), 'success')
 		router.back()
 	}
 
@@ -48,9 +49,9 @@ const AddToPlaylistScreen = () => {
 		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
 			<View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: macSpace.pageX, height: 52 }}>
 				<Pressable onPress={() => router.back()}>
-					<Text style={{ color: c.primary, fontSize: macFont.body }}>返回</Text>
+					<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('返回', 'Back')}</Text>
 				</Pressable>
-				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700', marginLeft: 12 }}>添加到歌单</Text>
+				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700', marginLeft: 12 }}>{tr('添加到歌单', 'Add to Playlist')}</Text>
 			</View>
 			<ScrollView>
 				{rows.map(item => (

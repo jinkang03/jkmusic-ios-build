@@ -27,4 +27,10 @@ export const changeLanguage = (languageCode: string) => {
 	nowLanguage.setValue(languageCode)
 }
 
+/**
+ * 轻量双语助手：把中英文写在一起，避免为每个界面标签维护 key 表。
+ * 语言切换会整体重挂载（Stack key），所以渲染期调用即可即时生效。
+ */
+export const tr = (zh: string, en: string) => (i18n.locale === 'en' ? en : zh)
+
 export default i18n

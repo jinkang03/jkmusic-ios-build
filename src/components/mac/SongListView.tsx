@@ -5,6 +5,7 @@
  * 这里只负责渲染与把点击事件转成 playWithReplacePlayList，不自己维护队列。
  */
 import React, { useEffect, useRef } from 'react'
+import { tr } from '@/utils/i18n'
 import { FlatList, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
@@ -64,7 +65,7 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress,
 	}
 
 	if (!tracks.length) {
-		return <StateView mode="empty" title={emptyText ?? '暂无歌曲'} />
+		return <StateView mode="empty" title={emptyText ?? tr('暂无歌曲', 'No songs')} />
 	}
 
 	return (

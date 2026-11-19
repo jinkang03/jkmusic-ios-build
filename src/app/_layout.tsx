@@ -6,7 +6,7 @@ import { AppThemeProvider, useAppTheme } from '@/hooks/useAppTheme'
 import LyricManager from '@/helpers/lyricManager'
 import { useLogTrackPlayerState } from '@/hooks/useLogTrackPlayerState'
 import { useSetupTrackPlayer } from '@/hooks/useSetupTrackPlayer'
-import i18n, { nowLanguage, setI18nConfig } from '@/utils/i18n'
+import i18n, { nowLanguage, setI18nConfig, tr } from '@/utils/i18n'
 import {
 	DarkTheme,
 	DefaultTheme,
@@ -228,7 +228,7 @@ const RootNavigation = () => {
 				options={{
 					presentation: 'card',
 					headerShown: true,
-					headerTitle: '应用日志',
+					headerTitle: tr('应用日志', 'App Logs'),
 				}}
 			/>
 			<Stack.Screen
@@ -238,7 +238,7 @@ const RootNavigation = () => {
 					headerShown: true,
 					gestureEnabled: true,
 					gestureDirection: 'vertical',
-					headerTitle: '应用日志',
+					headerTitle: tr('应用日志', 'App Logs'),
 					headerStyle: {
 						backgroundColor: colors.background,
 					},

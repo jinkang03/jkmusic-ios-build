@@ -16,13 +16,11 @@ import i18n from '@/utils/i18n'
 import { Image } from 'expo-image'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { sourceLabel } from '@/jk/sourceLabels'
+import { tr } from '@/utils/i18n'
 import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, View } from 'react-native'
 
 const LIST_SOURCES: JKSource[] = ['kw', 'kg', 'tx', 'wy', 'mg']
-// 桌面版文案（spec 明确要求：企鹅音乐 / 网易音乐 / 咪咕音乐）
-const SOURCE_LABELS: Record<string, string> = {
-	kw: '酷我音乐', kg: '酷狗音乐', tx: '企鹅音乐', wy: '网易音乐', mg: '咪咕音乐',
-}
 const PAGE_SIZE_GUESS = 30
 
 interface SongListItem {
@@ -151,13 +149,13 @@ const SongListScreen = () => {
 	}, [loading, hasMore, list.length, source, tagId, sortId, page, loadList])
 
 	const sourceTabs = React.useMemo(
-		() => LIST_SOURCES.map(item => ({ id: item, label: SOURCE_LABELS[item] ?? sources.find(s => s.id === item)?.name ?? item })),
+		() => LIST_SOURCES.map(item => ({ id: item, label: sourceLabel(item) || sources.find(s => s.id === item)?.name || item })),
 		[],
 	)
 
 	const sorts = [
-		{ id: 'new', label: '最新' },
-		{ id: 'hot', label: '最热' },
+		{ id: 'new', label: tr('最新', 'New') },
+		{ id: 'hot', label: tr('最热', 'Hot') },
 	]
 
 	return (

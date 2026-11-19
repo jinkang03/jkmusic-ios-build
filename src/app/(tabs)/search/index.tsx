@@ -11,6 +11,8 @@ import { showToast } from '@/utils/utils'
 import debounce from 'lodash/debounce'
 import { useFocusEffect, useLocalSearchParams, useSegments } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { sourceLabel } from '@/jk/sourceLabels'
+import { tr } from '@/utils/i18n'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
 	Animated,
@@ -28,13 +30,14 @@ import type { Track } from '@/player/types'
 type SearchType = 'songs' | 'artists'
 
 // 桌面版源胶囊（聚合 = 全源并行）
-const SOURCE_PILLS: Array<{ id: string, label: string }> = [
-	{ id: 'kw', label: '酷我' },
-	{ id: 'kg', label: '酷狗' },
-	{ id: 'tx', label: '企鹅' },
-	{ id: 'wy', label: '网易' },
-	{ id: 'mg', label: '咪咕' },
-	{ id: 'all', label: '聚合搜索' },
+/** 源胶囊在渲染期生成，保证语言切换后立即生效 */
+const sourcePills = () => [
+	{ id: 'kw', label: sourceLabel('kw', true) },
+	{ id: 'kg', label: sourceLabel('kg', true) },
+	{ id: 'tx', label: sourceLabel('tx', true) },
+	{ id: 'wy', label: sourceLabel('wy', true) },
+	{ id: 'mg', label: sourceLabel('mg', true) },
+	{ id: 'all', label: tr('聚合搜索', 'All Sources') },
 ]
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
@@ -109,8 +112,10 @@ const SearchlistsScreen = () => {
 				if (requestId === searchRequestRef.current) {
 					// 企鹅搜索常因上游限流失败，给出可读提示而不是静默空白
 					showToast(
-						'搜索失败',
-						activeSourcePill === 'tx' ? '企鹅音乐暂时不可用，试试其它源' : '搜索失败，请稍后再试',
+						tr('搜索失败', 'Search failed'),
+						activeSourcePill === 'tx'
+							? tr('企鹅音乐暂时不可用，试试其它源', 'QQ Music is unavailable, try another source')
+							: tr('搜索失败，请稍后再试', 'Search failed, please try again later'),
 						'error',
 					)
 					setSearchResults([])
@@ -262,7 +267,7 @@ const SearchlistsScreen = () => {
 	return (
 		<SafeAreaView style={[styles.safeArea, { backgroundColor: mac.bg }]} edges={['top', 'left', 'right']}>
 			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 8 }}>
-				<Text style={{ color: mac.textStrong, fontSize: macFont.display, fontWeight: '700' }}>搜索</Text>
+				<Text style={{ color: mac.textStrong, fontSize: macFont.display, fontWeight: '700' }}>{tr('搜索', 'Search')}</Text>
 				{/* 自绘胶囊搜索框：高 44，左放大镜，右侧清除 */}
 				<View style={{
 					flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -273,7 +278,7 @@ const SearchlistsScreen = () => {
 					<TextInput
 						value={search}
 						onChangeText={setSearch}
-						placeholder="在线搜索歌曲或歌手"
+						placeholder={tr('在线搜索歌曲或歌手', 'Search songs or artists')}
 						autoFocus={Boolean(autoFocus)}
 						placeholderTextColor={mac.textMuted}
 						returnKeyType="search"
@@ -294,7 +299,7 @@ const SearchlistsScreen = () => {
 				style={{ flexGrow: 0, flexShrink: 0, marginTop: 10 }}
 				contentContainerStyle={{ paddingHorizontal: macSpace.pageX, gap: 8 }}
 			>
-				{SOURCE_PILLS.map(pill => {
+				{sourcePills().map(pill => {
 					const active = pill.id === activeSourcePill
 					return (
 						<Pressable
@@ -348,11 +353,11 @@ const SearchlistsScreen = () => {
 					<View style={{ marginHorizontal: macSpace.pageX, marginTop: 12, borderRadius: macRadius.card, backgroundColor: mac.fillSubtle, padding: 14 }}>
 						{showHot ? (
 							<View style={{ marginBottom: showHistory ? 14 : 0 }}>
-								<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600', marginBottom: 8 }}>热门搜索</Text>
+								<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600', marginBottom: 8 }}>{tr('热门搜索', 'Trending')}</Text>
 								{hotWords.length === 0 ? (
 									<Pressable onPress={() => { setHotFailed(false); setHotTick(v => v + 1) }} disabled={!hotFailed}>
 										<Text style={{ color: hotFailed ? mac.primary : mac.textMuted, fontSize: macFont.caption }}>
-											{hotFailed ? '加载失败，点击重试' : '暂无热门搜索'}
+											{hotFailed ? tr('加载失败，点击重试', 'Failed, tap to retry') : tr('暂无热门搜索', 'No trending searches')}
 										</Text>
 									</Pressable>
 								) : (
@@ -369,15 +374,15 @@ const SearchlistsScreen = () => {
 						{showHistory ? (
 							<View>
 								<View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-									<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600' }}>历史搜索</Text>
+									<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600' }}>{tr('历史搜索', 'Recent')}</Text>
 									{history.length > 0 ? (
 										<Pressable onPress={() => setHistory([])} hitSlop={8}>
-											<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>清空</Text>
+											<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>{tr('清空', 'Clear')}</Text>
 										</Pressable>
 									) : null}
 								</View>
 								{history.length === 0 ? (
-									<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>暂无历史</Text>
+									<Text style={{ color: mac.textMuted, fontSize: macFont.caption }}>{tr('暂无历史', 'No recent searches')}</Text>
 								) : (
 									<View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
 										{history.map(h => (
@@ -398,7 +403,7 @@ const SearchlistsScreen = () => {
 					onTrackPress={() => rememberHistory(search)}
 					tracks={searchResults as any}
 					queueId={`search_${searchType}`}
-					emptyText={search ? '没有搜索结果' : '输入关键词开始搜索'}
+					emptyText={search ? tr('没有搜索结果', 'No results') : tr('输入关键词开始搜索', 'Type a keyword to search')}
 				/>
 			</View>
 		</SafeAreaView>

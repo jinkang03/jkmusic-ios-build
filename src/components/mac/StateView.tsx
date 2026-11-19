@@ -6,14 +6,14 @@ import React from 'react'
 import { ActivityIndicator, Text, View } from 'react-native'
 import { macFont, macSpace, macPalette } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { tr } from '@/utils/i18n'
 
 type Mode = 'loading' | 'empty' | 'error'
 
-const DEFAULT_TEXT: Record<Mode, string> = {
-	loading: '加载中…',
-	empty: '暂无内容',
-	error: '出错了',
-}
+/** 文案在渲染期生成：模块级常量会在语言切换后过期 */
+const defaultText = (mode: Mode) => mode === 'loading'
+	? tr('加载中…', 'Loading…')
+	: mode === 'empty' ? tr('暂无内容', 'Nothing here') : tr('出错了', 'Something went wrong')
 
 const StateView = ({
 	mode,
@@ -32,7 +32,7 @@ const StateView = ({
 		<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: macSpace.pageX, paddingVertical: 48 }}>
 			{mode === 'loading' ? <ActivityIndicator color={c.primary} /> : null}
 			<Text style={{ color: mode === 'error' ? c.danger : c.text, fontSize: macFont.body, marginTop: mode === 'loading' ? 12 : 0 }}>
-				{title ?? DEFAULT_TEXT[mode]}
+				{title ?? defaultText(mode)}
 			</Text>
 			{hint ? (
 				<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: 6, textAlign: 'center' }}>
@@ -41,7 +41,7 @@ const StateView = ({
 			) : null}
 			{onRetry && mode === 'error' ? (
 				<Text onPress={onRetry} style={{ color: c.primary, fontSize: macFont.body, marginTop: 14 }}>
-					重试
+					{tr('重试', 'Retry')}
 				</Text>
 			) : null}
 		</View>

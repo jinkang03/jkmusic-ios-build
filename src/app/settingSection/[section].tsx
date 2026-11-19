@@ -1,5 +1,5 @@
 import { nowLanguage, changeLanguage } from '@/utils/i18n'
-import { MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore, setMacTheme, setAccentColor, setWallpaper, getWallpaperUri, type MacThemeId } from '@/jk/themeStore'
+import { MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore, setMacTheme, setAccentColor, setWallpaper, getWallpaperUri, themeName, type MacThemeId } from '@/jk/themeStore'
 /**
  * 设置分区页：键名与桌面版一致（点分格式），值由 settingsStore 持久化。
  * 桌面版专有分区只做说明，控件照常可读写（配置会保存，只是 iOS 不生效）。
@@ -18,30 +18,8 @@ import { useAppTheme, useThemeMode } from '@/hooks/useAppTheme'
 import { setSetting, useSetting } from '@/jk/settingsStore'
 import { showToast } from '@/utils/utils'
 import { logError, logInfo } from '@/helpers/logger'
-
-const SECTION_TITLES: Record<string, string> = {
-	basic: '基本设置',
-	player: '播放设置',
-	detail: '播放详情页设置',
-	desktopLyric: '桌面歌词设置',
-	search: '搜索设置',
-	list: '列表设置',
-	download: '下载设置',
-	hotkey: '快捷键设置',
-	sync: '数据同步',
-	openapi: '开放 API',
-	network: '网络设置',
-	ocd: '强迫症设置',
-	backup: '备份与恢复',
-	other: '其他',
-}
-
-const DESKTOP_ONLY: Record<string, string> = {
-	desktopLyric: '桌面歌词仅桌面版支持，这里的配置会被保存但不会生效。',
-	hotkey: '快捷键仅桌面版支持，这里的配置会被保存但不会生效。',
-	openapi: '开放 API 需要常驻监听端口，iOS 不支持，配置会被保存但不生效。',
-	sync: '数据同步需要常驻服务端，当前版本未实现。',
-}
+import { getSectionTitle, getSectionNote } from '@/jk/settingsSections'
+import { tr } from '@/utils/i18n'
 
 const BasicSection = () => {
 	// 语言/主题写真正被消费的键；强调色与壁纸独立于主题
@@ -62,7 +40,7 @@ const BasicSection = () => {
 			const ImagePicker = await import('expo-image-picker')
 			const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
 			if (!perm.granted) {
-				showToast('提示', '需要相册权限才能选择壁纸', 'error')
+				showToast(tr('提示', 'Notice'), tr('需要相册权限才能选择壁纸', 'Photo library permission is required'), 'error')
 				return
 			}
 			const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as any, quality: 0.9 })
@@ -72,37 +50,37 @@ const BasicSection = () => {
 			await (FS as any).copyAsync({ from: res.assets[0].uri, to: dest })
 			// 只存文件名：绝对路径在重装后会指向旧容器
 			setWallpaper({ uri: 'wallpaper.jpg' })
-			showToast('已设置', '主题壁纸已更新', 'success')
+			showToast(tr('已设置', 'Done'), tr('主题壁纸已更新', 'Wallpaper updated'), 'success')
 		} catch (err) {
-			showToast('设置失败', String((err as any)?.message ?? err).slice(0, 60), 'error')
+			showToast(tr('设置失败', 'Failed'), String((err as any)?.message ?? err).slice(0, 60), 'error')
 		}
 	}
 
 	return (
 		<>
-			<SettingRow label="语言"><SettingSelect
+			<SettingRow label={tr('语言', 'Language')}><SettingSelect
 				value={lang === 'en' ? 'en' : 'zh'}
 				onChange={(v) => changeLanguage(v)}
-				options={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }]}
+				options={[{ value: 'zh', label: tr('中文', 'Chinese') }, { value: 'en', label: 'English' }]}
 			/></SettingRow>
-			<SettingRow label="外观"><SettingSelect
+			<SettingRow label={tr('外观', 'Appearance')}><SettingSelect
 				value={themeMode}
 				onChange={(v) => setThemeMode(v as any)}
 				options={[
-					{ value: 'system', label: '跟随系统' },
-					{ value: 'light', label: '浅色' },
-					{ value: 'dark', label: '深色' },
+					{ value: 'system', label: tr('跟随系统', 'System') },
+					{ value: 'light', label: tr('浅色', 'Light') },
+					{ value: 'dark', label: tr('深色', 'Dark') },
 				]}
 			/></SettingRow>
-			<SettingRow label="主题"><SettingSelect
+			<SettingRow label={tr('主题', 'Theme')}><SettingSelect
 				value={macTheme.id}
 				onChange={(v) => setMacTheme(v as MacThemeId)}
-				options={(Object.keys(MAC_THEMES) as MacThemeId[]).map(id => ({ value: id, label: MAC_THEMES[id].name }))}
+				options={(Object.keys(MAC_THEMES) as MacThemeId[]).map(id => ({ value: id, label: themeName(id) }))}
 			/></SettingRow>
 			{/* 强调色：控制字体/进度条/按钮等「强调」用色；留空则跟随主题预设 */}
 			<SettingRow
-				label="强调色"
-				hint={accent ? '自定义' : `跟随主题 · ${MAC_THEMES[macTheme.id].name}`}
+				label={tr('强调色', 'Accent Color')}
+				hint={accent ? tr('自定义', 'Custom') : `${tr('跟随主题', 'Follows theme')} · ${themeName(macTheme.id)}`}
 			>
 				<View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: accent || macTheme.primary, borderWidth: 0.5, borderColor: c.divider }} />
 			</SettingRow>
@@ -136,41 +114,41 @@ const BasicSection = () => {
 				>
 					<Ionicons name={accent ? 'refresh-outline' : 'checkmark-circle'} size={14} color={c.primary} />
 					<Text style={{ color: c.primary, fontSize: macFont.caption }}>
-						{accent ? `恢复跟随主题（${MAC_THEMES[macTheme.id].name}）` : '当前跟随主题'}
+						{accent ? `${tr('恢复跟随主题', 'Follow theme')} · ${themeName(macTheme.id)}` : tr('当前跟随主题', 'Following theme')}
 					</Text>
 				</Pressable>
 			</View>
-			<SettingRow label="主题壁纸" hint={wallpaper.uri ? '仅播放页生效' : '选择一张图片作为播放页背景'}>
+			<SettingRow label={tr('主题壁纸', 'Wallpaper')} hint={wallpaper.uri ? tr('仅播放页生效', 'Now Playing page only') : tr('选择一张图片作为播放页背景', 'Pick an image for the Now Playing background')}>
 				<View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
 					{wallpaper.uri ? (
 						<Image source={{ uri: getWallpaperUri(wallpaper.uri) }} style={{ width: 46, height: 28, borderRadius: 6, borderWidth: 0.5, borderColor: c.divider }} />
 					) : null}
 					<Pressable onPress={() => { void pickWallpaper() }}>
-						<Text style={{ color: c.primary, fontSize: macFont.body }}>选择图片</Text>
+						<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('选择图片', 'Choose Image')}</Text>
 					</Pressable>
 					{wallpaper.uri ? (
 						<Pressable onPress={() => setWallpaper({ uri: '' })}>
-							<Text style={{ color: c.danger, fontSize: macFont.body }}>清除</Text>
+							<Text style={{ color: c.danger, fontSize: macFont.body }}>{tr('清除', 'Clear')}</Text>
 						</Pressable>
 					) : null}
 				</View>
 			</SettingRow>
 			{wallpaper.uri ? (
 				<>
-					<SettingRow label="壁纸磨砂">
+					<SettingRow label={tr('壁纸磨砂', 'Wallpaper Blur')}>
 						<SettingSlider value={wallpaper.blur} min={0} max={40} step={1} onChange={(v) => setWallpaper({ blur: v })} format={(v) => `${Math.round(v)}`} />
 					</SettingRow>
-					<SettingRow label="壁纸不透明度">
+					<SettingRow label={tr('壁纸不透明度', 'Wallpaper Opacity')}>
 						<SettingSlider value={wallpaper.opacity} min={10} max={100} step={1} onChange={(v) => setWallpaper({ opacity: v })} format={(v) => `${Math.round(v)}%`} />
 					</SettingRow>
 				</>
 			) : null}
-			<SettingRow label="字号"><SettingSelect value={String(Number(fontSize) || 16)} onChange={(v) => setFontSize(Number(v) as any)} options={[
-				{ value: '14', label: '小' }, { value: '16', label: '标准' }, { value: '18', label: '大' },
+			<SettingRow label={tr('字号', 'Font Size')}><SettingSelect value={String(Number(fontSize) || 16)} onChange={(v) => setFontSize(Number(v) as any)} options={[
+				{ value: '14', label: tr('小', 'Small') }, { value: '16', label: tr('标准', 'Standard') }, { value: '18', label: tr('大', 'Large') },
 			]} /></SettingRow>
-			<SettingRow label="玻璃模糊"><SettingSwitch value={Number(glass) > 0} onChange={(v) => setGlass((v ? 1 : 0) as any)} /></SettingRow>
-			<SettingRow label="显示源名"><SettingSelect value={sourceName === 'real' ? 'real' : 'alias'} onChange={(v) => setSourceName(v as any)} options={[
-				{ value: 'real', label: '原名' }, { value: 'alias', label: '缩写' },
+			<SettingRow label={tr('玻璃模糊', 'Glass Blur')}><SettingSwitch value={Number(glass) > 0} onChange={(v) => setGlass((v ? 1 : 0) as any)} /></SettingRow>
+			<SettingRow label={tr('显示源名', 'Source Name Type')}><SettingSelect value={sourceName === 'real' ? 'real' : 'alias'} onChange={(v) => setSourceName(v as any)} options={[
+				{ value: 'real', label: tr('原名', 'Full') }, { value: 'alias', label: tr('缩写', 'Alias') },
 			]} /></SettingRow>
 		</>
 	)
@@ -196,16 +174,16 @@ const PlayerSection = () => {
 	const [showRoma, setShowRoma] = useSetting('player.isShowLyricRoma', false)
 	return (
 		<>
-			<SettingRow label="音质"><SettingSelect value={quality} onChange={setQuality} options={[
+			<SettingRow label={tr('音质', 'Audio Quality')}><SettingSelect value={quality} onChange={setQuality} options={[
 				{ value: '128k', label: '128k' }, { value: '320k', label: '320k' }, { value: 'flac', label: 'flac' },
 			]} /></SettingRow>
-			<SettingRow label="音量"><SettingSlider value={Number(volume)} min={0} max={1} step={0.01} onChange={setVolume} format={v => `${Math.round(v * 100)}%`} /></SettingRow>
-			<SettingRow label="播放倍速"><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
-			<SettingRow label="保存播放进度"><SettingSwitch value={saveTime} onChange={setSaveTime} /></SettingRow>
-			<SettingRow label="自动跳过错误曲目"><SettingSwitch value={autoSkip} onChange={setAutoSkip} /></SettingRow>
-			<SettingRow label="播放结束停止"><SettingSwitch value={stopEnd} onChange={setStopEnd} /></SettingRow>
-			<SettingRow label="显示歌词翻译"><SettingSwitch value={showTrans} onChange={setShowTrans} /></SettingRow>
-			<SettingRow label="显示歌词音译"><SettingSwitch value={showRoma} onChange={setShowRoma} /></SettingRow>
+			<SettingRow label={tr('音量', 'Volume')}><SettingSlider value={Number(volume)} min={0} max={1} step={0.01} onChange={setVolume} format={v => `${Math.round(v * 100)}%`} /></SettingRow>
+			<SettingRow label={tr('播放倍速', 'Playback Speed')}><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
+			<SettingRow label={tr('保存播放进度', 'Save Playback Position')}><SettingSwitch value={saveTime} onChange={setSaveTime} /></SettingRow>
+			<SettingRow label={tr('自动跳过错误曲目', 'Auto-skip Failed Tracks')}><SettingSwitch value={autoSkip} onChange={setAutoSkip} /></SettingRow>
+			<SettingRow label={tr('播放结束停止', 'Stop When Finished')}><SettingSwitch value={stopEnd} onChange={setStopEnd} /></SettingRow>
+			<SettingRow label={tr('显示歌词翻译', 'Show Lyric Translation')}><SettingSwitch value={showTrans} onChange={setShowTrans} /></SettingRow>
+			<SettingRow label={tr('显示歌词音译', 'Show Lyric Romanization')}><SettingSwitch value={showRoma} onChange={setShowRoma} /></SettingRow>
 		</>
 	)
 }
@@ -218,12 +196,12 @@ const ListSection = () => {
 	const [addPos, setAddPos] = useSetting('list.addMusicLocationType', 'top')
 	return (
 		<>
-			<SettingRow label="显示操作按钮"><SettingSwitch value={actionBtns} onChange={setActionBtns} /></SettingRow>
-			<SettingRow label="点击整行播放"><SettingSwitch value={clickPlay} onChange={setClickPlay} /></SettingRow>
-			<SettingRow label="显示来源"><SettingSwitch value={showSource} onChange={setShowSource} /></SettingRow>
-			<SettingRow label="记住滚动位置"><SettingSwitch value={saveScroll} onChange={setSaveScroll} /></SettingRow>
-			<SettingRow label="添加音乐位置"><SettingSelect value={addPos} onChange={setAddPos} options={[
-				{ value: 'top', label: '顶部' }, { value: 'bottom', label: '底部' },
+			<SettingRow label={tr('显示操作按钮', 'Show Action Buttons')}><SettingSwitch value={actionBtns} onChange={setActionBtns} /></SettingRow>
+			<SettingRow label={tr('点击整行播放', 'Tap Row to Play')}><SettingSwitch value={clickPlay} onChange={setClickPlay} /></SettingRow>
+			<SettingRow label={tr('显示来源', 'Show Source')}><SettingSwitch value={showSource} onChange={setShowSource} /></SettingRow>
+			<SettingRow label={tr('记住滚动位置', 'Remember Scroll Position')}><SettingSwitch value={saveScroll} onChange={setSaveScroll} /></SettingRow>
+			<SettingRow label={tr('添加音乐位置', 'Add Music Position')}><SettingSelect value={addPos} onChange={setAddPos} options={[
+				{ value: 'top', label: tr('顶部', 'Top') }, { value: 'bottom', label: tr('底部', 'Bottom') },
 			]} /></SettingRow>
 		</>
 	)
@@ -242,31 +220,31 @@ const NetworkSection = () => {
 			<Text style={{ color: c.textMuted, fontSize: macFont.caption, paddingHorizontal: macSpace.pageX, paddingBottom: 10 }}>
 				iOS 端暂不支持系统级代理，配置会保存但不生效（仅桌面版可用）
 			</Text>
-			<SettingRow label="启用代理" hint="仅保存，不生效">
+			<SettingRow label={tr('启用代理', 'Enable Proxy')} hint={tr('仅保存，不生效', 'saved only, no effect')}>
 				<SettingSwitch value={proxyEnable} onChange={setProxyEnable} />
 			</SettingRow>
-			<SettingRow label="代理地址" hint="仅保存，不生效">
+			<SettingRow label={tr('代理地址', 'Proxy Host')} hint={tr('仅保存，不生效', 'saved only, no effect')}>
 				<SettingSelect
 					value={String(proxyHost || 'none')}
 					onChange={(v) => setProxyHost(v === 'none' ? '' : v)}
-					options={[{ value: 'none', label: '未设置' }, { value: '127.0.0.1', label: '127.0.0.1' }]}
+					options={[{ value: 'none', label: tr('未设置', 'Not set') }, { value: '127.0.0.1', label: '127.0.0.1' }]}
 				/>
 			</SettingRow>
-			<SettingRow label="代理端口" hint="仅保存，不生效">
+			<SettingRow label={tr('代理端口', 'Proxy Port')} hint={tr('仅保存，不生效', 'saved only, no effect')}>
 				<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{String(proxyPort)}</Text>
 			</SettingRow>
-			<SettingRow label="并发下载数" hint="影响下载/预取队列上限">
+			<SettingRow label={tr('并发下载数', 'Concurrent Downloads')} hint={tr('影响下载/预取队列上限', 'Caps download/prefetch queue')}>
 				<SettingSelect
 					value={String(maxDl)}
 					onChange={(v) => setMaxDl(Number(v))}
 					options={[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }]}
 				/>
 			</SettingRow>
-			<SettingRow label="请求超时" hint="影响音源解析与下载">
+			<SettingRow label={tr('请求超时', 'Request Timeout')} hint={tr('影响音源解析与下载', 'Affects source resolving and downloads')}>
 				<SettingSelect
 					value={String(timeoutMs)}
 					onChange={(v) => setTimeoutMs(Number(v))}
-					options={[{ value: '10000', label: '10 秒' }, { value: '15000', label: '15 秒' }, { value: '30000', label: '30 秒' }]}
+					options={[{ value: '10000', label: tr('10 秒', '10 s') }, { value: '15000', label: tr('15 秒', '15 s') }, { value: '30000', label: tr('30 秒', '30 s') }]}
 				/>
 			</SettingRow>
 			<Text style={{ color: c.textMuted, fontSize: macFont.badge, paddingHorizontal: macSpace.pageX, paddingTop: 12 }}>
@@ -292,25 +270,25 @@ const OtherSection = () => {
 			const cm = await import('@/player/CacheManager')
 			await cm.clearCache()
 			await FS.deleteAsync(`${FS.documentDirectory}mmkv`, { idempotent: true }).catch(() => undefined)
-			setStatus('已清空缓存与设置，请手动重启 App 生效')
+			setStatus(tr('已清空缓存与设置，请手动重启 App 生效', 'Cache and settings cleared. Restart the app to apply.'))
 		} catch (err: any) {
-			setStatus(`清空失败：${err?.message ?? err}`)
+			setStatus(`${tr('清空失败', 'Failed')}: ${err?.message ?? err}`)
 		}
 		setConfirm(false)
 	}
 
 	return (
 		<>
-			<SettingRow label="App 版本"><Text style={{ color: c.textMuted, fontSize: macFont.body }}>{version} ({build})</Text></SettingRow>
-			<SettingRow label="播放引擎"><Text style={{ color: c.textMuted, fontSize: macFont.body }}>RNTP + JSC</Text></SettingRow>
-			<SettingRow label="查看日志">
+			<SettingRow label={tr('App Version', 'App Version')}><Text style={{ color: c.textMuted, fontSize: macFont.body }}>{version} ({build})</Text></SettingRow>
+			<SettingRow label={tr('播放引擎', 'Playback Engine')}><Text style={{ color: c.textMuted, fontSize: macFont.body }}>RNTP + JSC</Text></SettingRow>
+			<SettingRow label={tr('查看日志', 'View Logs')}>
 				<Pressable onPress={() => router.push('/logScreen' as any)}>
-					<Text style={{ color: c.primary, fontSize: macFont.body }}>打开 ›</Text>
+					<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('打开', 'Open')} ›</Text>
 				</Pressable>
 			</SettingRow>
 			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 16 }}>
 				<Pressable onPress={() => setConfirm(true)} style={({ pressed }) => ({ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-					<Text style={{ color: c.danger, fontSize: macFont.body }}>清空所有数据</Text>
+					<Text style={{ color: c.danger, fontSize: macFont.body }}>{tr('清空所有数据', 'Erase All Data')}</Text>
 				</Pressable>
 				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
 
@@ -318,11 +296,11 @@ const OtherSection = () => {
 			{confirm ? (
 				<View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
 					<View style={{ backgroundColor: c.bg, borderRadius: 12, padding: 20, width: '100%' }}>
-						<Text style={{ color: c.textStrong, fontSize: macFont.body, marginBottom: 8 }}>确认清空所有数据？</Text>
-						<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginBottom: 16 }}>将删除缓存与全部设置，不可撤销。</Text>
+						<Text style={{ color: c.textStrong, fontSize: macFont.body, marginBottom: 8 }}>{tr('确认清空所有数据？', 'Erase all data?')}</Text>
+						<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginBottom: 16 }}>{tr('将删除缓存与全部设置，不可撤销。', 'Caches and all settings will be deleted. This cannot be undone.')}</Text>
 						<View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
-							<Pressable onPress={() => setConfirm(false)}><Text style={{ color: c.textMuted, fontSize: macFont.body }}>取消</Text></Pressable>
-							<Pressable onPress={wipeAll}><Text style={{ color: c.danger, fontSize: macFont.body }}>确认清空</Text></Pressable>
+							<Pressable onPress={() => setConfirm(false)}><Text style={{ color: c.textMuted, fontSize: macFont.body }}>{tr('取消', 'Cancel')}</Text></Pressable>
+							<Pressable onPress={wipeAll}><Text style={{ color: c.danger, fontSize: macFont.body }}>{tr('确认清空', 'Erase')}</Text></Pressable>
 						</View>
 					</View>
 				</View>
@@ -337,9 +315,9 @@ const SearchSection = () => {
 	const [focus, setFocus] = useSetting('search.isFocusSearchBox', false)
 	return (
 		<>
-			<SettingRow label="显示热门搜索"><SettingSwitch value={hot} onChange={setHot} /></SettingRow>
-			<SettingRow label="显示历史搜索"><SettingSwitch value={history} onChange={setHistory} /></SettingRow>
-			<SettingRow label="进入时聚焦搜索框"><SettingSwitch value={focus} onChange={setFocus} /></SettingRow>
+			<SettingRow label={tr('显示热门搜索', 'Show Trending Searches')}><SettingSwitch value={hot} onChange={setHot} /></SettingRow>
+			<SettingRow label={tr('显示历史搜索', 'Show Search History')}><SettingSwitch value={history} onChange={setHistory} /></SettingRow>
+			<SettingRow label={tr('进入时聚焦搜索框', 'Focus Search on Enter')}><SettingSwitch value={focus} onChange={setFocus} /></SettingRow>
 		</>
 	)
 }
@@ -349,10 +327,10 @@ const OdcSection = () => {
 	const [clearList, setClearList] = useSetting('odc.isAutoClearSearchList', false)
 	return (
 		<>
-			<SettingRow label="离开搜索页清空输入" hint="回到搜索页时输入框为空">
+			<SettingRow label={tr('离开搜索页清空输入', 'Clear Input on Leave')} hint={tr('回到搜索页时输入框为空', 'Input is empty when you come back')}>
 				<SettingSwitch value={clearInput} onChange={setClearInput} />
 			</SettingRow>
-			<SettingRow label="离开搜索页清空结果" hint="回到搜索页时结果列表为空">
+			<SettingRow label={tr('离开搜索页清空结果', 'Clear Results on Leave')} hint={tr('回到搜索页时结果列表为空', 'Results are empty when you come back')}>
 				<SettingSwitch value={clearList} onChange={setClearList} />
 			</SettingRow>
 		</>
@@ -366,18 +344,18 @@ const PlayDetailSection = () => {
 	const [delay, setDelay] = useSetting('playDetail.isDelayScroll', false)
 	return (
 		<>
-			<SettingRow label="背景模糊" hint="0 = 无模糊，1 = 最强">
+			<SettingRow label={tr('背景模糊', 'Background Blur')} hint={tr('0 = 无模糊，1 = 最强', '0 = none, 1 = strongest')}>
 				<SettingSlider value={Number(blur)} min={0} max={1} step={0.05} onChange={setBlur} format={v => `${Math.round(v * 100)}%`} />
 			</SettingRow>
-			<SettingRow label="歌词字号" hint="影响紧凑歌词与全屏歌词">
+			<SettingRow label={tr('歌词字号', 'Lyric Font Size')} hint={tr('影响紧凑歌词与全屏歌词', 'Affects compact and full-screen lyrics')}>
 				<SettingSelect
 					value={String(fontSizeKey)}
 					onChange={(v) => setFontSizeKey(Number(v))}
-					options={[{ value: '0', label: '小' }, { value: '1', label: '标准' }, { value: '2', label: '大' }, { value: '3', label: '特大' }]}
+					options={[{ value: '0', label: tr('小', 'Small') }, { value: '1', label: tr('标准', 'Standard') }, { value: '2', label: tr('大', 'Large') }, { value: '3', label: tr('特大', 'X-Large') }]}
 				/>
 			</SettingRow>
-			<SettingRow label="歌词当前行放大"><SettingSwitch value={zoom} onChange={setZoom} /></SettingRow>
-			<SettingRow label="歌词滚动延迟"><SettingSwitch value={delay} onChange={setDelay} /></SettingRow>
+			<SettingRow label={tr('歌词当前行放大', 'Enlarge Current Lyric Line')}><SettingSwitch value={zoom} onChange={setZoom} /></SettingRow>
+			<SettingRow label={tr('歌词滚动延迟', 'Lyric Scroll Delay')}><SettingSwitch value={delay} onChange={setDelay} /></SettingRow>
 		</>
 	)
 }
@@ -419,10 +397,10 @@ const DownloadSection = () => {
 				try { await FS.deleteAsync(`${cm.cacheDir}${n}`, { idempotent: true }); await cm.removeCacheIndexEntry(n); removed++ } catch { /* ignore */ }
 			}
 			await refresh()
-			setStatus(`已清理缓存 ${removed} 个（保留手动下载）`)
+			setStatus(`${tr('已清理缓存', 'Cleared')} ${removed} ${tr('个（保留手动下载）', 'items (downloads kept)')}`)
 			logInfo('[cache] cleared auto count=', removed)
 		} catch (err: any) {
-			setStatus(`清理失败：${err?.message ?? err}`)
+			setStatus(`${tr('清理失败', 'Clear failed')}: ${err?.message ?? err}`)
 		}
 	}
 
@@ -433,9 +411,9 @@ const DownloadSection = () => {
 			const cm = await import('@/player/CacheManager')
 			await cm.clearCache()
 			await refresh()
-			setStatus('已清理缓存')
+			setStatus(tr('已清理缓存', 'Cache cleared'))
 		} catch (err: any) {
-			setStatus(`清理失败：${err?.message ?? err}`)
+			setStatus(`${tr('清理失败', 'Clear failed')}: ${err?.message ?? err}`)
 		}
 	}
 
@@ -443,10 +421,10 @@ const DownloadSection = () => {
 
 	return (
 		<>
-			<SettingRow label="缓存占用" hint={`${count} 个文件`}>
+			<SettingRow label={tr('缓存占用', 'Cache Usage')} hint={`${count} ${tr('个文件', 'files')}`}>
 				<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{mb} MB</Text>
 			</SettingRow>
-			<SettingRow label="缓存上限" hint="超出后按最久未使用淘汰">
+			<SettingRow label={tr('缓存上限', 'Cache Limit')} hint={tr('超出后按最久未使用淘汰', 'Evicts least recently used first')}>
 				<SettingSelect
 					value={String(limitMb)}
 					onChange={(v) => setLimitMb(Number(v))}
@@ -456,15 +434,15 @@ const DownloadSection = () => {
 					]}
 				/>
 			</SettingRow>
-			<SettingRow label="dev 标志" hint={`forceBadUrl=${String(useSetting('_dev.forceBadUrl', false)[0])} slowBufferMs=${String(useSetting('_dev.slowBufferMs', 0)[0])}`}>
+			<SettingRow label={tr('dev 标志', 'dev flags')} hint={`forceBadUrl=${String(useSetting('_dev.forceBadUrl', false)[0])} slowBufferMs=${String(useSetting('_dev.slowBufferMs', 0)[0])}`}>
 				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>—</Text>
 			</SettingRow>
 			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 12 }}>
 				<Pressable onPress={clearAuto} style={({ pressed }) => ({ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-					<Text style={{ color: c.text, fontSize: macFont.body }}>清理缓存（保留下载）</Text>
+					<Text style={{ color: c.text, fontSize: macFont.body }}>{tr('清理缓存（保留下载）', 'Clear cache (keep downloads)')}</Text>
 				</Pressable>
 				<Pressable onPress={clearAll} style={({ pressed }) => ({ marginTop: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-					<Text style={{ color: c.danger, fontSize: macFont.body }}>全部清理（含手动下载）</Text>
+					<Text style={{ color: c.danger, fontSize: macFont.body }}>{tr('全部清理（含手动下载）', 'Clear all (incl. manual downloads)')}</Text>
 				</Pressable>
 				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
 			</View>
@@ -491,9 +469,9 @@ const BackupSection = () => {
 			const obj = await exportSetting()
 			const uri = await writeBackupFile('lx_setting_v2', obj)
 			setLastPath(uri)
-			setStatus(`已导出 ${Object.keys(obj.data).length} 项 → ${uri}`)
+			setStatus(`${tr('已导出', 'Exported')} ${Object.keys(obj.data).length} ${tr('项', 'items')} → ${uri}`)
 		} catch (err: any) {
-			setStatus(`导出失败：${err?.message ?? err}`)
+			setStatus(`${tr('导出失败', 'Export failed')}: ${err?.message ?? err}`)
 		}
 	}
 
@@ -503,9 +481,9 @@ const BackupSection = () => {
 			const obj = await exportAllData()
 			const uri = await writeBackupFile('lx_datas_v2', obj)
 			setLastPath(uri)
-			setStatus(`已导出全部数据 → ${uri}`)
+			setStatus(`${tr('已导出全部数据', 'All data exported')} → ${uri}`)
 		} catch (err: any) {
-			setStatus(`导出失败：${err?.message ?? err}`)
+			setStatus(`${tr('导出失败', 'Export failed')}: ${err?.message ?? err}`)
 		}
 	}
 
@@ -515,9 +493,9 @@ const BackupSection = () => {
 			const obj = await exportPlayList()
 			const uri = await writeBackupFile('lx_list_v2', obj)
 			setLastPath(uri)
-			setStatus(`已导出 ${obj.data.length} 个歌单 → ${uri}`)
+			setStatus(`${tr('已导出', 'Exported')} ${obj.data.length} ${tr('个歌单', 'playlists')} → ${uri}`)
 		} catch (err: any) {
-			setStatus(`导出失败：${err?.message ?? err}`)
+			setStatus(`${tr('导出失败', 'Export failed')}: ${err?.message ?? err}`)
 		}
 	}
 
@@ -532,16 +510,16 @@ const BackupSection = () => {
 			if (kind === 'playlist') {
 				if (obj.type !== 'playList_v2') throw new Error(`类型不匹配：${obj.type}`)
 				const r = importPlayList(obj.data)
-				setStatus(`导入歌单：新增 ${r.lists} 个，合并 ${r.merged} 个，新增歌曲 ${r.songs} 首`)
+				setStatus(`${tr('导入歌单', 'Playlists imported')}: +${r.lists} / ${tr('合并', 'merged')} ${r.merged} / ${tr('新增歌曲', 'songs')} ${r.songs}`)
 			} else if (kind === 'setting') {
 				if (obj.type !== 'setting_v2') throw new Error(`类型不匹配：${obj.type}`)
 				const r = importSetting(obj.data)
-				setStatus(`导入设置：成功 ${r.applied} 项，跳过 ${r.skipped} 项`)
+				setStatus(`${tr('导入设置', 'Settings imported')}: ${r.applied} ${tr('项', 'items')}, ${tr('跳过', 'skipped')} ${r.skipped}`)
 			} else {
 				const r = importAllData(obj)
 				const pl: any = (r as any).playListResult ?? { lists: 0, merged: 0, songs: 0 }
 				if (!r.playListCount) {
-					setStatus(`备份中没有歌单。设置 ${r.setting.applied} 项（跳过 ${r.setting.skipped}）`)
+					setStatus(`${tr('备份中没有歌单。设置', 'No playlists in backup. Settings')} ${r.setting.applied} (${tr('跳过', 'skipped')} ${r.setting.skipped})`)
 				} else {
 					setStatus(`设置 ${r.setting.applied} 项（跳过 ${r.setting.skipped}），歌单 ${r.playListCount} 个（新增 ${pl.lists} / 合并 ${pl.merged}），歌曲 ${pl.songs} 首`)
 					setShowGoFavorites(true)
@@ -550,7 +528,7 @@ const BackupSection = () => {
 			const m = await import('@/jk/settingsStore')
 			setTotal(Object.keys(m.getAllSettings()).length)
 		} catch (err: any) {
-			setStatus(`导入失败：${err?.message ?? err}`)
+			setStatus(`${tr('导入失败', 'Import failed')}: ${err?.message ?? err}`)
 		}
 	}
 
@@ -568,22 +546,22 @@ const BackupSection = () => {
 
 	return (
 		<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 12 }}>
-			{btn('导出设置', doExportSetting)}
-			{btn('导入设置', () => pickAndImport('setting'))}
-			{btn('导出全部数据', doExportAll)}
-			{btn('导入全部数据', () => pickAndImport('all'))}
-			{btn('导出歌单', doExportPlayList)}
-			{btn('导入歌单', () => pickAndImport('playlist'))}
+			{btn(tr('导出设置', 'Export Settings'), doExportSetting)}
+			{btn(tr('导入设置', 'Import Settings'), () => pickAndImport('setting'))}
+			{btn(tr('导出全部数据', 'Export All Data'), doExportAll)}
+			{btn(tr('导入全部数据', 'Import All Data'), () => pickAndImport('all'))}
+			{btn(tr('导出歌单', 'Export Playlists'), doExportPlayList)}
+			{btn(tr('导入歌单', 'Import Playlists'), () => pickAndImport('playlist'))}
 			<View style={{ marginTop: 16, gap: 4 }}>
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>当前设置项总数：{total}</Text>
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>上次导出：{lastPath || '—'}</Text>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('当前设置项总数：', 'Total settings: ')}{total}</Text>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('上次导出：', 'Last export: ')}{lastPath || '—'}</Text>
 				{status ? <Text style={{ color: c.primary, fontSize: macFont.caption, marginTop: 8 }}>{status}</Text> : null}
 				{showGoFavorites ? (
 					<Pressable
 						onPress={() => router.push('/(tabs)/favorites' as any)}
 						style={({ pressed }) => ({ marginTop: 10, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}
 					>
-						<Text style={{ color: c.text, fontSize: macFont.body }}>查看我的列表</Text>
+						<Text style={{ color: c.text, fontSize: macFont.body }}>{tr('查看我的列表', 'View My Lists')}</Text>
 					</Pressable>
 				) : null}
 			</View>
@@ -1021,8 +999,8 @@ const SettingsSectionScreen = () => {
 		})()
 	}, [paramsKey])
 	const section = String(params.section ?? 'basic')
-	const title = SECTION_TITLES[section] ?? section
-	const note = DESKTOP_ONLY[section]
+	const title = getSectionTitle(section)
+	const note = getSectionNote(section)
 
 	const content = (() => {
 		if (section === 'basic') return <BasicSection />
@@ -1042,7 +1020,7 @@ const SettingsSectionScreen = () => {
 		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
 			<View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: macSpace.pageX, paddingVertical: 10 }}>
 				<Pressable onPress={() => router.back()} hitSlop={8}>
-					<Text style={{ color: c.primary, fontSize: macFont.body }}>‹ 返回</Text>
+					<Text style={{ color: c.primary, fontSize: macFont.body }}>‹ {tr('返回', 'Back')}</Text>
 				</Pressable>
 				<Text style={{ color: c.textStrong, fontSize: macFont.pageTitle, fontWeight: '600' }}>{title}</Text>
 			</View>
@@ -1059,7 +1037,7 @@ const SettingsSectionScreen = () => {
 			<ScrollView>
 				{content ?? (
 					<Text style={{ color: c.textMuted, fontSize: macFont.body, padding: macSpace.pageX }}>
-						该分区将在后续版本提供
+						{tr('该分区将在后续版本提供', 'This section is coming in a later version')}
 					</Text>
 				)}
 			</ScrollView>

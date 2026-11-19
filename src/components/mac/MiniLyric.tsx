@@ -14,6 +14,7 @@ import myTrackPlayer, { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { macFont, macPalette } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { useSetting } from '@/jk/settingsStore'
+import { tr } from '@/utils/i18n'
 import { nowLxLyricState } from '@/player/PlayerStore'
 import { parseKaraokeLine, buildKaraokeMap, findKaraokeSegs } from '@/jk/karaoke'
 import { fetchLyric } from '@/jk/lyric'
@@ -158,7 +159,7 @@ const MiniLyric = () => {
 	if (!lyrics.length) {
 		return (
 			<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-				<Text style={{ textAlign: 'center', color: c.textMuted, fontSize: 12 }}>暂无歌词</Text>
+				<Text style={{ textAlign: 'center', color: c.textMuted, fontSize: 12 }}>{tr('暂无歌词', 'No lyrics')}</Text>
 			</View>
 		)
 	}

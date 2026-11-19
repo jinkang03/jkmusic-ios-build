@@ -6,6 +6,7 @@ import { useUtilsStyles } from '@/styles'
 import { isSameMediaItem } from '@/utils/mediaItem'
 import { FlashList, type FlashListRef } from '@shopify/flash-list'
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import { tr } from '@/utils/i18n'
 import { StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 import type { Track } from '@/player/types'
@@ -104,7 +105,7 @@ export const NowPlayList = React.memo(({ tracks }: TracksListProps) => {
 		() => (
 			<View style={styles.dismissPlayerSymbol}>
 				<View style={styles.dismissPlayerBar} />
-				<Text style={styles.header}>播放列表</Text>
+				<Text style={styles.header}>{tr('播放列表', 'Queue')}</Text>
 			</View>
 		),
 		[styles.dismissPlayerBar, styles.dismissPlayerSymbol, styles.header],

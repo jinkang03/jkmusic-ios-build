@@ -13,6 +13,7 @@ import { bindMusicApi } from '@/jk/sourceRegistry'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import PersistStatus from '@/store/PersistStatus'
 import { showToast } from '@/utils/utils'
+import { tr } from '@/utils/i18n'
 import { File } from 'expo-file-system'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as DocumentPicker from 'expo-document-picker'
@@ -28,7 +29,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-const TITLE = '音源管理'
+const TITLE = tr('音源管理', 'Sources')
 const PLATFORM_ORDER = ['kw', 'kg', 'tx', 'wy', 'mg']
 
 const formatPlatforms = (sources?: string[]) => {
@@ -99,7 +100,7 @@ const SourceManageScreen = () => {
 
 	const commitScript = useCallback(async(script: string, srcUrl?: string) => {
 		setBusy(true)
-		setBanner('正在导入…')
+		setBanner(tr('正在导入…', 'Importing…'))
 		setBannerOk(false)
 		try {
 			const musicApi = await createMusicApiFromScript(script)
@@ -110,21 +111,21 @@ const SourceManageScreen = () => {
 			await myTrackPlayer.setMusicApiAsSelectedById(musicApi.id)
 			const selectedNow = musicApiSelectedStore.getValue()
 			if (!selectedNow || selectedNow.id !== musicApi.id) {
-				throw new Error('音源未进入选中态')
+				throw new Error(tr('音源未进入选中态', 'Source was not activated'))
 			}
 			const sources = formatPlatforms(
 				(musicApi as any).supportedSources ?? (selectedNow as any).supportedSources,
 			)
 			const line = `IMPORT_OK name=${musicApi.name} version=${musicApi.version} sources=${sources || '(none)'}`
-			setBanner(`导入成功：${musicApi.name}`)
+			setBanner(`${tr('导入成功', 'Imported')}: ${musicApi.name}`)
 			setBannerOk(true)
-			showToast('导入成功', `${musicApi.name} ${sources}`, 'success')
+			showToast(tr('导入成功', 'Imported'), `${musicApi.name} ${sources}`, 'success')
 			appendEvidence(line)
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
-			setBanner(`导入失败：${msg}`)
+			setBanner(`${tr('导入失败', 'Import failed')}: ${msg}`)
 			setBannerOk(false)
-			showToast('导入失败', msg.slice(0, 80), 'error')
+			showToast(tr('导入失败', 'Import failed'), msg.slice(0, 80), 'error')
 			appendEvidence(`IMPORT_FAIL ${msg}`)
 		} finally {
 			setBusy(false)
@@ -166,7 +167,7 @@ const SourceManageScreen = () => {
 		importedToken.current = token
 		setUrlText(urlParam)
 		setBusy(true)
-		setBanner('正在导入…')
+		setBanner(tr('正在导入…', 'Importing…'))
 		setBannerOk(false)
 		void (async() => {
 			try {
@@ -175,10 +176,10 @@ const SourceManageScreen = () => {
 			} catch (err) {
 				if (importedToken.current !== token) return
 				const msg = err instanceof Error ? err.message : String(err)
-				setBanner(`导入失败：${msg}`)
+				setBanner(`${tr('导入失败', 'Import failed')}: ${msg}`)
 				setBannerOk(false)
 				setBusy(false)
-				showToast('导入失败', msg.slice(0, 80), 'error')
+				showToast(tr('导入失败', 'Import failed'), msg.slice(0, 80), 'error')
 				appendEvidence(`IMPORT_FAIL ${msg}`)
 			}
 		})()
@@ -187,7 +188,7 @@ const SourceManageScreen = () => {
 	const onImportUrl = () => {
 		const target = urlText.trim()
 		if (!target) {
-			setBanner('导入失败：链接为空')
+			setBanner(tr('导入失败：链接为空', 'Import failed: empty link'))
 			setBannerOk(false)
 			return
 		}
@@ -197,9 +198,9 @@ const SourceManageScreen = () => {
 				await commitScript(script, target)
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : String(err)
-				setBanner(`导入失败：${msg}`)
+				setBanner(`${tr('导入失败', 'Import failed')}: ${msg}`)
 				setBannerOk(false)
-				showToast('导入失败', msg.slice(0, 80), 'error')
+				showToast(tr('导入失败', 'Import failed'), msg.slice(0, 80), 'error')
 				appendEvidence(`IMPORT_FAIL ${msg}`)
 			}
 		})()
@@ -216,9 +217,9 @@ const SourceManageScreen = () => {
 			await commitScript(script, result.assets[0].uri)
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
-			setBanner(`导入失败：${msg}`)
+			setBanner(`${tr('导入失败', 'Import failed')}: ${msg}`)
 			setBannerOk(false)
-			showToast('导入失败', msg.slice(0, 80), 'error')
+			showToast(tr('导入失败', 'Import failed'), msg.slice(0, 80), 'error')
 			appendEvidence(`IMPORT_FAIL ${msg}`)
 		}
 	}
@@ -232,15 +233,15 @@ const SourceManageScreen = () => {
 		try {
 			await myTrackPlayer.setMusicApiAsSelectedById(id)
 			const now = musicApiSelectedStore.getValue()
-			if (!now || now.id !== id) throw new Error('音源未进入选中态')
+			if (!now || now.id !== id) throw new Error(tr('音源未进入选中态', 'Source was not activated'))
 			bindMusicApi(now)
 			const sources = formatPlatforms((now as any).supportedSources)
-			setBanner(`已使用：${now.name}`)
+			setBanner(`${tr('已使用', 'Active')}: ${now.name}`)
 			setBannerOk(true)
 			appendEvidence(`SELECT name=${now.name} id=${now.id} sources=${sources || '(none)'}`)
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
-			setBanner(`切换失败：${msg}`)
+			setBanner(`${tr('切换失败', 'Switch failed')}: ${msg}`)
 			setBannerOk(false)
 		} finally {
 			setBusy(false)
@@ -260,33 +261,33 @@ const SourceManageScreen = () => {
 			bindMusicApi(null)
 		}
 		setPendingDelete(null)
-		setBanner('已删除')
+		setBanner(tr('已删除', 'Deleted'))
 		setBannerOk(true)
-		showToast('已删除', '音源已移除', 'success')
+		showToast(tr('已删除', 'Deleted'), tr('音源已移除', 'Source removed'), 'success')
 		appendEvidence(`DELETE id=${id}`)
 	}
 
 	const onTest = async(api: IMusic.MusicApi) => {
-		setTestNote(prev => ({ ...prev, [api.id]: '测试中…' }))
+		setTestNote(prev => ({ ...prev, [api.id]: tr('测试中…', 'Testing…') }))
 		const previousId = musicApiSelectedStore.getValue()?.id
 		try {
 			const reloaded = await myTrackPlayer.reloadMusicApi({ ...api, isSelected: true }, true)
 			const sources = formatPlatforms((reloaded as any).supportedSources ?? (api as any).supportedSources)
 			const platform = ((reloaded as any).supportedSources?.[0] as string | undefined) || 'kw'
-			if (typeof reloaded.getMusicUrl !== 'function') throw new Error('getMusicUrl 不可用')
+			if (typeof reloaded.getMusicUrl !== 'function') throw new Error(tr('getMusicUrl 不可用', 'getMusicUrl unavailable'))
 			const url = await Promise.race([
 				reloaded.getMusicUrl('稻香', '周杰伦', '228908', '128k', { requestType: 'test' }, platform),
-				new Promise<string>((_, reject) => setTimeout(() => reject(new Error('测试超时')), 12000)),
+				new Promise<string>((_, reject) => setTimeout(() => reject(new Error(tr('测试超时', 'Test timed out'))), 12000)),
 			])
-			const note = url ? `测试通过 ${platform}` : '测试失败：空地址'
+			const note = url ? `${tr('测试通过', 'Passed')} ${platform}` : tr('测试失败：空地址', 'Failed: empty url')
 			setTestNote(prev => ({ ...prev, [api.id]: note }))
 			appendEvidence(`TEST ${note} sources=${sources || '(none)'}`)
-			showToast(url ? '测试通过' : '测试失败', note, url ? 'success' : 'error')
+			showToast(url ? tr('测试通过', 'Passed') : tr('测试失败', 'Failed'), note, url ? 'success' : 'error')
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
-			setTestNote(prev => ({ ...prev, [api.id]: `测试失败：${msg}` }))
+			setTestNote(prev => ({ ...prev, [api.id]: `${tr('测试失败', 'Failed')}: ${msg}` }))
 			appendEvidence(`TEST_FAIL ${msg}`)
-			showToast('测试失败', msg.slice(0, 80), 'error')
+			showToast(tr('测试失败', 'Failed'), msg.slice(0, 80), 'error')
 		} finally {
 			if (previousId) {
 				await myTrackPlayer.setMusicApiAsSelectedById(previousId).catch(() => undefined)
@@ -303,7 +304,7 @@ const SourceManageScreen = () => {
 		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
 			<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 8, flexDirection: 'row', alignItems: 'center' }}>
 				<Pressable onPress={goBack} hitSlop={12} style={{ marginRight: 12 }}>
-					<Text style={{ color: c.primary, fontSize: macFont.body }}>返回</Text>
+					<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('返回', 'Back')}</Text>
 				</Pressable>
 				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700', flex: 1 }}>{TITLE}</Text>
 			</View>
@@ -322,13 +323,13 @@ const SourceManageScreen = () => {
 					</View>
 				) : null}
 
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: macSpace.section }}>从 URL 导入</Text>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: macSpace.section }}>{tr('从 URL 导入', 'Import from URL')}</Text>
 				<TextInput
 					value={urlText}
 					onChangeText={setUrlText}
 					autoCapitalize="none"
 					autoCorrect={false}
-					placeholder="https:// 或 http:// 脚本地址"
+					placeholder={tr('https:// 或 http:// 脚本地址', 'https:// or http:// script url')}
 					placeholderTextColor={c.textMuted}
 					style={{
 						marginTop: 8,
@@ -354,11 +355,11 @@ const SourceManageScreen = () => {
 					}}
 				>
 					{busy ? <ActivityIndicator color="#fff" /> : (
-						<Text style={{ color: '#fff', fontSize: macFont.body, fontWeight: '600' }}>从 URL 导入</Text>
+						<Text style={{ color: '#fff', fontSize: macFont.body, fontWeight: '600' }}>{tr('从 URL 导入', 'Import from URL')}</Text>
 					)}
 				</Pressable>
 
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: macSpace.section }}>从文件导入</Text>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: macSpace.section }}>{tr('从文件导入', 'Import from File')}</Text>
 				<Pressable
 					onPress={() => { void onImportFile() }}
 					disabled={busy}
@@ -371,17 +372,17 @@ const SourceManageScreen = () => {
 						justifyContent: 'center',
 					}}
 				>
-					<Text style={{ color: c.text, fontSize: macFont.body }}>选择 .js 文件</Text>
+					<Text style={{ color: c.text, fontSize: macFont.body }}>{tr('选择 .js 文件', 'Choose a .js file')}</Text>
 				</Pressable>
 
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: macSpace.section }}>粘贴文本导入</Text>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: macSpace.section }}>{tr('粘贴文本导入', 'Paste Script Text')}</Text>
 				<TextInput
 					value={pasteText}
 					onChangeText={setPasteText}
 					multiline
 					autoCapitalize="none"
 					autoCorrect={false}
-					placeholder="把音源脚本全文粘贴到这里"
+					placeholder={tr('把音源脚本全文粘贴到这里', 'Paste the full script here')}
 					placeholderTextColor={c.textMuted}
 					style={{
 						marginTop: 8,
@@ -407,14 +408,14 @@ const SourceManageScreen = () => {
 						justifyContent: 'center',
 					}}
 				>
-					<Text style={{ color: c.text, fontSize: macFont.body }}>从文本导入</Text>
+					<Text style={{ color: c.text, fontSize: macFont.body }}>{tr('从文本导入', 'Import from Text')}</Text>
 				</Pressable>
 
 				<Text style={{ color: c.textStrong, fontSize: macFont.cardTitle, fontWeight: '600', marginTop: macSpace.section }}>
-					已导入 {apis.length}
+					{tr('已导入', 'Imported')} {apis.length}
 				</Text>
 				{apis.length === 0 ? (
-					<Text style={{ color: c.textMuted, fontSize: macFont.body, marginTop: 8 }}>还没有音源。导入后即可播放。</Text>
+					<Text style={{ color: c.textMuted, fontSize: macFont.body, marginTop: 8 }}>{tr('还没有音源。导入后即可播放。', 'No sources yet. Import one to start playing.')}</Text>
 				) : apis.map(api => {
 					const active = selected?.id === api.id
 					const sources = formatPlatforms((api as any).supportedSources)
@@ -430,13 +431,13 @@ const SourceManageScreen = () => {
 								borderColor: c.primary,
 							}}
 						>
-							<Text style={{ color: c.textStrong, fontSize: macFont.cardTitle }}>{api.name || '未命名音源'}</Text>
+							<Text style={{ color: c.textStrong, fontSize: macFont.cardTitle }}>{api.name || tr('未命名音源', 'Untitled source')}</Text>
 							<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: 4 }}>
-								{api.version || '未知版本'}
+								{api.version || tr('未知版本', 'Unknown version')}
 								{api.author ? ` · ${api.author}` : ''}
 							</Text>
 							<Text style={{ color: c.text, fontSize: macFont.body, marginTop: 6 }}>
-								支持平台 {sources || '未上报'}
+								{tr('支持平台', 'Platforms')} {sources || tr('未上报', 'n/a')}
 							</Text>
 							{testNote[api.id] ? (
 								<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: 4 }}>{testNote[api.id]}</Text>
@@ -465,20 +466,20 @@ const SourceManageScreen = () => {
 									}}>
 										{active ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' }} /> : null}
 									</View>
-									<Text style={{ color: active ? '#fff' : c.primary, fontSize: macFont.caption }}>使用</Text>
+									<Text style={{ color: active ? '#fff' : c.primary, fontSize: macFont.caption }}>{tr('使用', 'Use')}</Text>
 								</Pressable>
 								<Pressable
 									onPress={() => { void onTest(api) }}
 									style={{ paddingHorizontal: 12, height: 36, borderRadius: macRadius.pill, backgroundColor: c.bg, justifyContent: 'center' }}
 								>
-									<Text style={{ color: c.text, fontSize: macFont.caption }}>测试</Text>
+									<Text style={{ color: c.text, fontSize: macFont.caption }}>{tr('测试', 'Test')}</Text>
 								</Pressable>
 								<Pressable
 									onPress={() => onDelete(api.id)}
 									style={{ paddingHorizontal: 12, height: 36, borderRadius: macRadius.pill, backgroundColor: c.bg, justifyContent: 'center' }}
 								>
 									<Text style={{ color: c.danger, fontSize: macFont.caption }}>
-										{pendingDelete === api.id ? '确认删除' : '删除'}
+										{pendingDelete === api.id ? tr('确认删除', 'Confirm') : tr('删除', 'Delete')}
 									</Text>
 								</Pressable>
 							</View>
