@@ -1,3 +1,49 @@
+## v1.2.2（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.2-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `b30298b6d8b5aba393851c0248ca0374e007c59de1c2c3320605d1554f5119c3` |
+| 版本 / build | 1.2.2 / 6 |
+| 架构 | arm64 + JKMUSICWidget.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.2` |
+
+### 1.2.2 修复（真机反馈）
+
+1. **腾讯源连续跳曲（1.2.x 回归）**：URL 校验把 403/416 误判为坏链，导致腾讯 CDN 被判死。
+   现在只过滤 400/404/410，其余放行；并新增「下载失败 → 换源重下」。
+2. **手动下载不显示**：下载页订阅任务表，完成即刷新；下载完成后兜底校正 `manual=true`。
+3. **部分歌曲无歌词**：歌词兜底在索引未命中时增加实时搜索（kw/wy/tx）。
+4. **设置里语言/主题不生效**：原来写的是 `common.langId` / `theme.id`（无人消费）。
+   改为 `app.language`（i18n）与 `app.macTheme`（themeStore），选项改为四套主题。
+5. **进度数字贴进度条**：迷你条时间移到进度条下方左右两端。
+6. **灵动岛边缘进度**：紧凑态改为环形细进度（跨岛横线受 iOS 限制无法实现）。
+7. **自动跳过错误曲目**：`player.autoSkipOnError` 已接线，关闭后播放失败不再连续跳。
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.2.2 / build 6 / minos 16.4 / arm64
+jsbundle 6.0M / preload 3 处 / dev 残留 0 / size 17.x MB
+sha256 b30298b6d8b5aba393851c0248ca0374e007c59de1c2c3320605d1554f5119c3
+widget PlugIns/JKMUSICWidget.appex present / NSSupportsLiveActivities true
+```
+
+### 设置项体检结果（33 项）
+
+**已生效**：音质、音量、倍速、歌词翻译、字号（歌词）、缓存上限、并发下载数、清空搜索、搜索历史/热搜、详情页背景模糊/逐字/延迟滚动。
+
+**仍无效（仅保存不生效）**：
+- `common.fontSize` 全局字号、`common.glassBlur` 玻璃模糊、`common.sourceNameType` 显示源名
+- `list.*`（操作按钮/点击整行/记住滚动/添加位置/显示来源）
+- `player.isSavePlayTime`（保存播放进度）、`player.isShowLyricRoma`（音译）、`player.playbackRate`（设置里改倍速不生效，播放页可调）
+- `network.proxy.*`（iOS 不走该代理）
+
+这些会在后续版本逐步接线或在设置页标注「暂不支持」。
+
+---
+
 ## v1.2.1（2026-11-19）
 
 | 项 | 值 |
