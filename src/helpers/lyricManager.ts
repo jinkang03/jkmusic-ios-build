@@ -99,7 +99,7 @@ function requestRefresh() {
  * 桌面版不会把「作词：… / 作曲：…」这类制作信息当成歌词行显示，
  * 但源里经常带这些行（且会导致翻译/逐字按 index 对齐时错位）。
  */
-const META_LINE = /^\s*(作词|作曲|编曲|词|曲|制作人|出品|监制|混音|母带|录音|和声|吉他|贝斯|鼓|弦乐|OP|SP)\s*[:：]/
+const META_LINE = /^\s*(作词|作曲|编曲|词|曲|制作人|出品|监制|混音|母带|录音|合声|和声|和音|配唱|吉他|贝斯|鼓|键盘|弦乐|人声|统筹|企划|发行|OP|SP)[^\n]{0,10}[:：]/
 
 const stripMetaLines = <T extends { lrc?: string }>(lines: T[]): T[] =>
 	lines.filter(line => !META_LINE.test(String(line?.lrc ?? '')))

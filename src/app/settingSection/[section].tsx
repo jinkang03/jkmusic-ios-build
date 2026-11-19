@@ -1,11 +1,11 @@
 import { nowLanguage, changeLanguage } from '@/utils/i18n'
-import { MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore, setMacTheme, setAccentColor, setWallpaper, getWallpaperUri, themeName, type MacThemeId } from '@/jk/themeStore'
+import { MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, setMacTheme, setAccentColor, themeName, type MacThemeId } from '@/jk/themeStore'
 /**
  * 设置分区页：键名与桌面版一致（点分格式），值由 settingsStore 持久化。
  * 桌面版专有分区只做说明，控件照常可读写（配置会保存，只是 iOS 不生效）。
  */
 import React from 'react'
-import { Image, Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, ScrollView, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -22,11 +22,10 @@ import { getSectionTitle, getSectionNote } from '@/jk/settingsSections'
 import { tr } from '@/utils/i18n'
 
 const BasicSection = () => {
-	// 语言/主题写真正被消费的键；强调色与壁纸独立于主题
+	// 语言/主题写真正被消费的键；强调色独立于主题（壁纸能力已下线，播放页固定用封面背景）
 	const lang = nowLanguage.useValue()
 	const macTheme = macThemeStore.useValue()
 	const accent = accentStore.useValue()
-	const wallpaper = wallpaperStore.useValue()
 	const { themeMode, setThemeMode } = useThemeMode()
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
@@ -34,27 +33,6 @@ const BasicSection = () => {
 	const [fontSize, setFontSize] = useSetting('common.fontSize', 16)
 	const [glass, setGlass] = useSetting('common.glassBlur', 0)
 	const [sourceName, setSourceName] = useSetting('common.sourceNameType', 'alias')
-
-	const pickWallpaper = async() => {
-		try {
-			const ImagePicker = await import('expo-image-picker')
-			const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-			if (!perm.granted) {
-				showToast(tr('提示', 'Notice'), tr('需要相册权限才能选择壁纸', 'Photo library permission is required'), 'error')
-				return
-			}
-			const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as any, quality: 0.9 })
-			if (res.canceled || !res.assets?.[0]?.uri) return
-			const FS = await import('expo-file-system/legacy')
-			const dest = `${(FS as any).documentDirectory}wallpaper.jpg`
-			await (FS as any).copyAsync({ from: res.assets[0].uri, to: dest })
-			// 只存文件名：绝对路径在重装后会指向旧容器
-			setWallpaper({ uri: 'wallpaper.jpg' })
-			showToast(tr('已设置', 'Done'), tr('主题壁纸已更新', 'Wallpaper updated'), 'success')
-		} catch (err) {
-			showToast(tr('设置失败', 'Failed'), String((err as any)?.message ?? err).slice(0, 60), 'error')
-		}
-	}
 
 	return (
 		<>
@@ -118,36 +96,11 @@ const BasicSection = () => {
 					</Text>
 				</Pressable>
 			</View>
-			<SettingRow label={tr('主题壁纸', 'Wallpaper')} hint={wallpaper.uri ? tr('仅播放页生效', 'Now Playing page only') : tr('选择一张图片作为播放页背景', 'Pick an image for the Now Playing background')}>
-				<View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-					{wallpaper.uri ? (
-						<Image source={{ uri: getWallpaperUri(wallpaper.uri) }} style={{ width: 46, height: 28, borderRadius: 6, borderWidth: 0.5, borderColor: c.divider }} />
-					) : null}
-					<Pressable onPress={() => { void pickWallpaper() }}>
-						<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('选择图片', 'Choose Image')}</Text>
-					</Pressable>
-					{wallpaper.uri ? (
-						<Pressable onPress={() => setWallpaper({ uri: '' })}>
-							<Text style={{ color: c.danger, fontSize: macFont.body }}>{tr('清除', 'Clear')}</Text>
-						</Pressable>
-					) : null}
-				</View>
-			</SettingRow>
-			{wallpaper.uri ? (
-				<>
-					<SettingRow label={tr('壁纸磨砂', 'Wallpaper Blur')}>
-						<SettingSlider value={wallpaper.blur} min={0} max={40} step={1} onChange={(v) => setWallpaper({ blur: v })} format={(v) => `${Math.round(v)}`} />
-					</SettingRow>
-					<SettingRow label={tr('壁纸不透明度', 'Wallpaper Opacity')}>
-						<SettingSlider value={wallpaper.opacity} min={10} max={100} step={1} onChange={(v) => setWallpaper({ opacity: v })} format={(v) => `${Math.round(v)}%`} />
-					</SettingRow>
-				</>
-			) : null}
-			<SettingRow label={tr('字号', 'Font Size')}><SettingSelect value={String(Number(fontSize) || 16)} onChange={(v) => setFontSize(Number(v) as any)} options={[
+			<SettingRow label={tr('字号', 'Font Size')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSelect value={String(Number(fontSize) || 16)} onChange={(v) => setFontSize(Number(v) as any)} options={[
 				{ value: '14', label: tr('小', 'Small') }, { value: '16', label: tr('标准', 'Standard') }, { value: '18', label: tr('大', 'Large') },
 			]} /></SettingRow>
-			<SettingRow label={tr('玻璃模糊', 'Glass Blur')}><SettingSwitch value={Number(glass) > 0} onChange={(v) => setGlass((v ? 1 : 0) as any)} /></SettingRow>
-			<SettingRow label={tr('显示源名', 'Source Name Type')}><SettingSelect value={sourceName === 'real' ? 'real' : 'alias'} onChange={(v) => setSourceName(v as any)} options={[
+			<SettingRow label={tr('玻璃模糊', 'Glass Blur')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={Number(glass) > 0} onChange={(v) => setGlass((v ? 1 : 0) as any)} /></SettingRow>
+			<SettingRow label={tr('显示源名', 'Source Name Type')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSelect value={sourceName === 'real' ? 'real' : 'alias'} onChange={(v) => setSourceName(v as any)} options={[
 				{ value: 'real', label: tr('原名', 'Full') }, { value: 'alias', label: tr('缩写', 'Alias') },
 			]} /></SettingRow>
 		</>
@@ -178,12 +131,12 @@ const PlayerSection = () => {
 				{ value: '128k', label: '128k' }, { value: '320k', label: '320k' }, { value: 'flac', label: 'flac' },
 			]} /></SettingRow>
 			<SettingRow label={tr('音量', 'Volume')}><SettingSlider value={Number(volume)} min={0} max={1} step={0.01} onChange={setVolume} format={v => `${Math.round(v * 100)}%`} /></SettingRow>
-			<SettingRow label={tr('播放倍速', 'Playback Speed')}><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
-			<SettingRow label={tr('保存播放进度', 'Save Playback Position')}><SettingSwitch value={saveTime} onChange={setSaveTime} /></SettingRow>
+			<SettingRow label={tr('播放倍速', 'Playback Speed')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
+			<SettingRow label={tr('保存播放进度', 'Save Playback Position')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={saveTime} onChange={setSaveTime} /></SettingRow>
 			<SettingRow label={tr('自动跳过错误曲目', 'Auto-skip Failed Tracks')}><SettingSwitch value={autoSkip} onChange={setAutoSkip} /></SettingRow>
 			<SettingRow label={tr('播放结束停止', 'Stop When Finished')}><SettingSwitch value={stopEnd} onChange={setStopEnd} /></SettingRow>
 			<SettingRow label={tr('显示歌词翻译', 'Show Lyric Translation')}><SettingSwitch value={showTrans} onChange={setShowTrans} /></SettingRow>
-			<SettingRow label={tr('显示歌词音译', 'Show Lyric Romanization')}><SettingSwitch value={showRoma} onChange={setShowRoma} /></SettingRow>
+			<SettingRow label={tr('显示歌词音译', 'Show Lyric Romanization')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={showRoma} onChange={setShowRoma} /></SettingRow>
 		</>
 	)
 }
@@ -196,11 +149,11 @@ const ListSection = () => {
 	const [addPos, setAddPos] = useSetting('list.addMusicLocationType', 'top')
 	return (
 		<>
-			<SettingRow label={tr('显示操作按钮', 'Show Action Buttons')}><SettingSwitch value={actionBtns} onChange={setActionBtns} /></SettingRow>
-			<SettingRow label={tr('点击整行播放', 'Tap Row to Play')}><SettingSwitch value={clickPlay} onChange={setClickPlay} /></SettingRow>
-			<SettingRow label={tr('显示来源', 'Show Source')}><SettingSwitch value={showSource} onChange={setShowSource} /></SettingRow>
-			<SettingRow label={tr('记住滚动位置', 'Remember Scroll Position')}><SettingSwitch value={saveScroll} onChange={setSaveScroll} /></SettingRow>
-			<SettingRow label={tr('添加音乐位置', 'Add Music Position')}><SettingSelect value={addPos} onChange={setAddPos} options={[
+			<SettingRow label={tr('显示操作按钮', 'Show Action Buttons')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={actionBtns} onChange={setActionBtns} /></SettingRow>
+			<SettingRow label={tr('点击整行播放', 'Tap Row to Play')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={clickPlay} onChange={setClickPlay} /></SettingRow>
+			<SettingRow label={tr('显示来源', 'Show Source')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={showSource} onChange={setShowSource} /></SettingRow>
+			<SettingRow label={tr('记住滚动位置', 'Remember Scroll Position')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={saveScroll} onChange={setSaveScroll} /></SettingRow>
+			<SettingRow label={tr('添加音乐位置', 'Add Music Position')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSelect value={addPos} onChange={setAddPos} options={[
 				{ value: 'top', label: tr('顶部', 'Top') }, { value: 'bottom', label: tr('底部', 'Bottom') },
 			]} /></SettingRow>
 		</>
@@ -220,17 +173,17 @@ const NetworkSection = () => {
 			<Text style={{ color: c.textMuted, fontSize: macFont.caption, paddingHorizontal: macSpace.pageX, paddingBottom: 10 }}>
 				iOS 端暂不支持系统级代理，配置会保存但不生效（仅桌面版可用）
 			</Text>
-			<SettingRow label={tr('启用代理', 'Enable Proxy')} hint={tr('仅保存，不生效', 'saved only, no effect')}>
+			<SettingRow label={tr('启用代理', 'Enable Proxy')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}>
 				<SettingSwitch value={proxyEnable} onChange={setProxyEnable} />
 			</SettingRow>
-			<SettingRow label={tr('代理地址', 'Proxy Host')} hint={tr('仅保存，不生效', 'saved only, no effect')}>
+			<SettingRow label={tr('代理地址', 'Proxy Host')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}>
 				<SettingSelect
 					value={String(proxyHost || 'none')}
 					onChange={(v) => setProxyHost(v === 'none' ? '' : v)}
 					options={[{ value: 'none', label: tr('未设置', 'Not set') }, { value: '127.0.0.1', label: '127.0.0.1' }]}
 				/>
 			</SettingRow>
-			<SettingRow label={tr('代理端口', 'Proxy Port')} hint={tr('仅保存，不生效', 'saved only, no effect')}>
+			<SettingRow label={tr('代理端口', 'Proxy Port')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}>
 				<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{String(proxyPort)}</Text>
 			</SettingRow>
 			<SettingRow label={tr('并发下载数', 'Concurrent Downloads')} hint={tr('影响下载/预取队列上限', 'Caps download/prefetch queue')}>
@@ -833,14 +786,6 @@ const SettingsSectionScreen = () => {
 					const { setAccentColor } = await import('@/jk/themeStore')
 					setAccentColor(String((params as any).color ?? ''))
 					logInfo('[dev] accent', String((params as any).color ?? '(follow theme)'))
-				} else if (action === 'wallpaper') {
-					const { setWallpaper } = await import('@/jk/themeStore')
-					const next: any = {}
-					if ((params as any).uri !== undefined) next.uri = String((params as any).uri)
-					if ((params as any).blur !== undefined) next.blur = Number((params as any).blur)
-					if ((params as any).opacity !== undefined) next.opacity = Number((params as any).opacity)
-					setWallpaper(next)
-					logInfo('[dev] wallpaper', JSON.stringify(next))
 				} else if (action === 'themeMode') {
 					const mode = String((params as any).mode ?? 'system')
 					const { themeModeStore } = await import('@/hooks/useAppTheme')

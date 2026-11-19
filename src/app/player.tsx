@@ -9,7 +9,6 @@ import { PlayerVolumeBar } from '@/components/PlayerVolumeBar'
 import { ShowPlayerListToggle } from '@/components/ShowPlayerListToggle'
 import { unknownTrackImageUri } from '@/constants/images'
 import { macPalette } from '@/constants/macTokens'
-import { wallpaperStore, getWallpaperUri } from '@/jk/themeStore'
 import { bufferingStore } from '@/player/PlayerStore'
 import { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { fetchLyric } from '@/jk/lyric'
@@ -315,7 +314,6 @@ const PlayerScreenContent = () => {
 
 	const artworkSource = useMemo(() => ({ uri: artworkUri }), [artworkUri])
 	const { backgroundColor } = usePlayerBackground(artworkUri)
-	const wallpaper = wallpaperStore.useValue()
 	const artworkFade = useMemo(
 		() =>
 			[
@@ -564,25 +562,14 @@ const PlayerScreenContent = () => {
 		<>
 			<StatusBar style="light" />
 			<View style={[styles.screen, { backgroundColor: 'transparent' }]}>
-				{/* 背景：封面铺满 + 模糊 + 压暗，保证文字对比度 */}
+				{/* 背景：封面铺满 + 模糊 + 压暗，保证文字对比度（保持原样，不叠自定义壁纸） */}
 				<View style={StyleSheet.absoluteFill} pointerEvents="none">
-					{wallpaper.uri ? (
-						<>
-							{/* 自定义主题壁纸：磨砂强度与不透明度可调 */}
-							<Image source={{ uri: getWallpaperUri(wallpaper.uri) }} contentFit="cover" style={StyleSheet.absoluteFill} />
-							<BlurView intensity={Math.round(Number(wallpaper.blur) * 2.5)} tint="dark" style={StyleSheet.absoluteFill} />
-							<View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: (100 - Number(wallpaper.opacity)) / 100 }]} />
-						</>
+					{artworkUri ? (
+						<Image source={{ uri: artworkUri }} contentFit="cover" style={StyleSheet.absoluteFill} />
 					) : (
-						<>
-							{artworkUri ? (
-								<Image source={{ uri: artworkUri }} contentFit="cover" style={StyleSheet.absoluteFill} />
-							) : (
-								<View style={[StyleSheet.absoluteFill, { backgroundColor: mac.bg }]} />
-							)}
-							<BlurView intensity={Math.round(Number(bgBlur) * 100)} tint="dark" style={StyleSheet.absoluteFill} />
-						</>
+						<View style={[StyleSheet.absoluteFill, { backgroundColor: mac.bg }]} />
 					)}
+					<BlurView intensity={Math.round(Number(bgBlur) * 100)} tint="dark" style={StyleSheet.absoluteFill} />
 				</View>
 				{/* 顶部栏：收起 / 收藏 / 更多（更多沿用右侧原菜单，此处只放收起与收藏） */}
 				<View style={[styles.topBar, { paddingTop: top, height: top + 48 }]} pointerEvents="box-none">
