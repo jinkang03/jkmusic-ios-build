@@ -580,6 +580,22 @@ const SettingsSectionScreen = () => {
 					}
 					const verdict = !finalUrl ? 'empty' : finalUrl.includes('fake') ? 'fake' : 'ok'
 					logInfo(`[probe] ${source} pooled=${pooled} final=${verdict} name=${name}`)
+				} else if (action === 'playSearch') {
+					// 搜索某源第一首并播放（用于验证换源兜底，无需点击）
+					const src = String((params as any).source ?? 'kg')
+					const q = String((params as any).q ?? '牡丹亭')
+					const { searchBySource } = await import('@/jk/musicSdk')
+					const { jkToTrack } = await import('@/jk/adapt')
+					const { default: tp } = await import('@/helpers/trackPlayerIndex')
+					const list: any[] = await searchBySource(src as any, q, 1, 3)
+					if (!list.length) throw new Error('搜索结果为空')
+					const track: any = jkToTrack(list[0])
+					logInfo('[dev] playSearch', src, 'title=', String(track?.title ?? ''), 'id=', String(track?.id ?? ''))
+					await tp.playWithReplacePlayList(track, [track])
+				} else if (action === 'clearxsource') {
+					const idx = await import('@/jk/crossSourceIndex')
+					idx.clear()
+					logInfo('[dev] clearxsource ok')
 				} else if (action === 'smoke') {
 					const q = String((params as any).q ?? '周杰伦')
 					const { searchBySource, resolveMusicSource } = await import('@/jk/musicSdk').then(async(m) => {

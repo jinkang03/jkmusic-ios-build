@@ -79,6 +79,9 @@ const wyFallback = async<T>(op: string, sdkFn: () => Promise<T>, fallbackFn: () 
 /** 全源搜索：返回每个源的一页结果 */
 export const searchAllSources = async(name: string, page = 1, limit = 20) => {
 	const lists = await musicSdk.searchMusic({ name, singer: '', source: '', limit })
+	void import('./crossSourceIndex').then(m => {
+		for (const g of lists ?? []) m.remember(g?.list ?? [])
+	}).catch(() => undefined)
 	return lists
 		.filter(item => Array.isArray(item?.list) && item.list.length)
 		.map(item => ({
@@ -121,7 +124,9 @@ export const searchBySource = async(source: JKSource, name: string, page = 1, li
 		}
 		throw err
 	}
-	return (res?.list ?? []).map((music: any) => normalizeMusic(music, source))
+	const normalized = (res?.list ?? []).map((music: any) => normalizeMusic(music, source))
+	void import('./crossSourceIndex').then(m => m.remember(normalized)).catch(() => undefined)
+	return normalized
 }
 
 /** 榜单列表 */
@@ -226,9 +231,11 @@ export const getSongListDetail = async(source: JKSource, id: string, page = 1) =
 	}
 	if (!mod?.songList?.getListDetail) throw new Error(`${source} 不支持歌单详情`)
 	const res: any = await mod.songList.getListDetail(id, page)
+	const normalizedList = (res?.list ?? res?.musicList ?? []).map((music: any) => normalizeMusic(music, source))
+	void import('./crossSourceIndex').then(m => m.remember(normalizedList)).catch(() => undefined)
 	return {
 		...res,
-		list: (res?.list ?? res?.musicList ?? []).map((music: any) => normalizeMusic(music, source)),
+		list: normalizedList,
 		total: res?.total ?? res?.list?.length ?? 0,
 		page,
 	}

@@ -83,6 +83,32 @@ const findPlayableAlt = async (
 	const { searchBySource } = await import('@/jk/musicSdk')
 	const { jkToTrack } = await import('@/jk/adapt')
 
+	// 先查同曲多源索引：命中就直接取流，省掉实时搜索的 3-10 秒
+	try {
+		const idx = await import('@/jk/crossSourceIndex')
+		const hits = idx.lookup(title, artist).filter(e => e.source !== musicItem?.platform)
+		if (hits.length) {
+			const tries = hits.map(e => (async() => {
+				const url = await Promise.race([
+					api.getMusicUrl(title, artist, e.id, quality, { requestType }, e.source, { title, artist, id: e.id, platform: e.source }),
+					createTimeoutPromise(6000),
+				]) as string
+				if (typeof url !== 'string' || !/^https?:/.test(url)) throw new Error(`${e.source} 无地址`)
+				logInfo('[resolve] cross-source index-hit', e.source, title)
+				return { url, source: e.source as any, label: String(e.source), title, at: Date.now() }
+			})().catch(() => { throw new Error('miss') }))
+			try {
+				const found = await Promise.any(tries)
+				altCache.set(cacheKey, found)
+				logInfo('[resolve] switched', String(musicItem?.platform ?? ''), '->', found.source, title)
+				void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: String(musicItem?.platform ?? ''), to: String(found.source), title })).catch(() => undefined)
+				return found
+			} catch { /* 索引全部失败，走实时搜索 */ }
+		} else {
+			logInfo('[resolve] cross-source index miss', title)
+		}
+	} catch { /* ignore */ }
+
 	const targetTitle = normalizeMatchKey(title)
 	const targetArtist = normalizeMatchKey(artist)
 
@@ -118,6 +144,8 @@ const findPlayableAlt = async (
 	try {
 		const found = await Promise.any(attempts)
 		altCache.set(cacheKey, found)
+		logInfo('[resolve] switched', String(musicItem?.platform ?? ''), '->', found.source, title)
+		void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: String(musicItem?.platform ?? ''), to: String(found.source), title })).catch(() => undefined)
 		logInfo('[resolve] cross-source', found.source, found.title, 'from', String(musicItem?.platform ?? ''))
 		return found
 	} catch {

@@ -14,6 +14,7 @@ import { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { fetchLyric } from '@/jk/lyric'
 import { resolveArtwork } from '@/jk/artwork'
 import { currentArtworkStore } from '@/jk/artworkStore'
+import { resolvedFromStore } from '@/player/PlayerStore'
 import { logError, logInfo } from '@/helpers/logger'
 import { useSetting } from '@/jk/settingsStore'
 import { ThemeColors, fontSize, screenPadding } from '@/constants/tokens'
@@ -135,6 +136,8 @@ const ArtistDisplay = React.memo(({ artists, onViewArtist }: ArtistDisplayProps)
 	)
 })
 
+const SRC_LABEL: Record<string, string> = { kw: '酷我', kg: '酷狗', tx: '企鹅', wy: '网易', mg: '咪咕' }
+
 const PlayerScreenContent = () => {
 	const colors = useThemeColors()
 	const defaultStyles = useDefaultStyles()
@@ -168,6 +171,7 @@ const PlayerScreenContent = () => {
 
 	const mac = macPalette(!!useAppTheme().isDark)
 	// 封面固定正方形：屏宽 62% 与可用高度 50% 取小，避免被 flex 拉伸或裁切
+	const resolvedFrom = resolvedFromStore.useValue()
 	const coverSize = Math.min(width * 0.62, Math.max(160, (height - 320) * 0.5))
 	const [fallbackArt, setFallbackArt] = React.useState('')
 	React.useEffect(() => {
