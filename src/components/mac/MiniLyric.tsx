@@ -8,7 +8,6 @@
  * 这里只做「当前行 ± 2」五行纯 map 渲染，不用 FlatList，不引入新依赖。
  */
 import React, { useMemo } from 'react'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Animated, Easing, Pressable, Text, View } from 'react-native'
 import LyricManager from '@/helpers/lyricManager'
 import myTrackPlayer, { nowLyricState } from '@/helpers/trackPlayerIndex'
@@ -158,17 +157,7 @@ const MiniLyric = () => {
 		<View style={{ flex: 1, justifyContent: 'center', overflow: 'hidden' }}>
 			<Animated.View style={{ transform: [{ translateY: shiftY }] }}>
 
-			{/* 上下渐隐 */}
-			<LinearGradient
-				pointerEvents="none"
-				style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 24, zIndex: 2 }}
-				colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0)']}
-			/>
-			<LinearGradient
-				pointerEvents="none"
-				style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 24, zIndex: 2 }}
-				colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']}
-			/>
+			{/* 上下渐隐改为纯透明度（原来是一层黑色遮罩，视觉上像一条黑边） */}
 
 			{rows.map((item: any, idx: number) => {
 				const absoluteIndex = start + idx

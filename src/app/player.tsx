@@ -176,7 +176,7 @@ const PlayerScreenContent = () => {
 	const mac = macPalette(!!useAppTheme().isDark)
 	// 封面固定正方形：屏宽 62% 与可用高度 50% 取小，避免被 flex 拉伸或裁切
 	const resolvedFrom = resolvedFromStore.useValue()
-	const coverSize = Math.min(width * 0.62, Math.max(160, (height - 320) * 0.5))
+	const coverSize = Math.min(width * 0.52, Math.max(150, (height - 420) * 0.46))
 	const [fallbackArt, setFallbackArt] = React.useState('')
 	React.useEffect(() => {
 		let cancelled = false
@@ -902,8 +902,11 @@ const createStyles = (colors: ThemeColors, defaultStyles: ReturnType<typeof useD
 			paddingHorizontal: screenPadding.horizontal,
 		},
 		artworkRegion: {
-			flex: 1,
+			// 不参与 flex 分配：封面按自身尺寸占位，剩余高度全部留给歌词
+			alignItems: 'center',
 			justifyContent: 'center',
+			paddingTop: 12,
+			paddingBottom: 8,
 		},
 		artworkCanvas: {
 			// 流式布局：封面在文档流里居中，不再 absolute 撑满（原来会在下方留大块空白）
