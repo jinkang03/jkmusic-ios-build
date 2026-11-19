@@ -14,6 +14,8 @@ import { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { fetchLyric } from '@/jk/lyric'
 import { resolveArtwork } from '@/jk/artwork'
 import { syncCurrentArtwork } from '@/jk/artworkSync'
+import { setPendingMusic } from '@/jk/pendingMusic'
+import { trackToJk } from '@/jk/adapt'
 import { currentArtworkStore } from '@/jk/artworkStore'
 import { resolvedFromStore } from '@/player/PlayerStore'
 import { logError, logInfo } from '@/helpers/logger'
@@ -396,9 +398,11 @@ const PlayerScreenContent = () => {
 	const handleAddToPlaylist = useCallback(() => {
 		const track = trackToDisplay
 		if (!track) return
-		router.push(
-			`/(modals)/addToPlaylist?title=${track.title}&album=${track.album}&artwork=${track.artwork}&artist=${track.artist}&id=${track.id}&url=${track.url}&platform=${track.platform}&duration=${track.duration}`,
-		)
+		// 走模块级 pending 传完整对象：URL 参数会丢掉 meta.songmid，加进歌单后无法取流
+		setPendingMusic(trackToJk(track as any) as any)
+		logInfo('[player] addToPlaylist pending=',
+			String((track as any).id ?? ''), 'source=', String((track as any).platform ?? ''))
+		router.push('/(modals)/addToPlaylist' as any)
 	}, [trackToDisplay])
 
 	const handleDownload = useCallback(async () => {

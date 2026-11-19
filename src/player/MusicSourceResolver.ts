@@ -60,6 +60,10 @@ const ALT_SOURCES: Array<{ id: 'kw' | 'wy' | 'tx', label: string }> = [
 const ALT_CACHE_TTL_MS = 5 * 60 * 1000
 const altCache = new Map<string, { url: string, source: string, label: string, title: string, at: number }>()
 
+const readFromSource = (m: any) => String(
+	m?.platform ?? m?.source ?? m?.lxMusic?.source ?? '',
+)
+
 const normalizeMatchKey = (value: any) =>
 	String(value ?? '').toLowerCase().replace(/[\s\-_·・,，.。()（）]/g, '')
 
@@ -103,7 +107,10 @@ const findPlayableAlt = async (
 			try {
 				const found = await Promise.any(tries)
 				altCache.set(cacheKey, found)
-				logInfo('[resolve] switched', String(musicItem?.platform ?? ''), '->', found.source, title)
+				const fromSrc = readFromSource(musicItem)
+				logInfo('[resolve] switched', fromSrc, '->', found.source, title)
+				;(globalThis as any).__jkActualSource = String(found.source ?? '')
+				void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: fromSrc, to: String(found.source), toId: String((found as any).id ?? ''), title })).catch(() => undefined)
 				return found
 			} catch { /* 索引全部失败，走实时搜索 */ }
 		} else {
@@ -146,8 +153,11 @@ const findPlayableAlt = async (
 	try {
 		const found = await Promise.any(attempts)
 		altCache.set(cacheKey, found)
-		logInfo('[resolve] switched', String(musicItem?.platform ?? ''), '->', found.source, title)
-		logInfo('[resolve] cross-source', found.source, found.title, 'from', String(musicItem?.platform ?? ''))
+		const fromSrc2 = readFromSource(musicItem)
+		logInfo('[resolve] switched', fromSrc2, '->', found.source, title)
+		logInfo('[resolve] cross-source', found.source, found.title, 'from', fromSrc2)
+		;(globalThis as any).__jkActualSource = String(found.source ?? '')
+		void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: fromSrc2, to: String(found.source), toId: String((found as any).id ?? ''), title })).catch(() => undefined)
 		return found
 	} catch {
 		return null
@@ -255,9 +265,10 @@ export const resolveSource = async (
 					const base = String(localPath).split('/').pop() ?? ''
 					const actualSource = idx?.[base]?.actualSource
 					const actualId = idx?.[base]?.actualId
-					if (actualSource && actualSource !== musicItem.platform) {
-						logInfo('[resolve] cached-source', String(musicItem.platform ?? ''), '->', String(actualSource), 'id=', String(actualId ?? '-'))
-						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: String(musicItem.platform ?? ''), to: String(actualSource), toId: actualId ? String(actualId) : undefined, title: String(musicItem.title ?? '') })).catch(() => undefined)
+					const cachedFrom = readFromSource(musicItem)
+					if (actualSource && actualSource !== cachedFrom) {
+						logInfo('[resolve] cached-source', cachedFrom, '->', String(actualSource), 'id=', String(actualId ?? '-'))
+						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: cachedFrom, to: String(actualSource), toId: actualId ? String(actualId) : undefined, title: String(musicItem.title ?? '') })).catch(() => undefined)
 					} else if (isCurrentSourceRequest(requestType)) {
 						// 缓存来自原源（或老条目无字段）：清掉上一首残留的换源提示
 						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue(null)).catch(() => undefined)
