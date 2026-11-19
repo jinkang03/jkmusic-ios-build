@@ -54,7 +54,9 @@ type CacheIndexEntry = {
 	title?: string, artist?: string, album?: string, quality?: string,
 	size?: number, mtime?: number, songmid?: string, source?: string,
 	/** true = 用户手动下载；false/undefined = 播放产生的缓存 */
-	manual?: boolean
+	manual?: boolean,
+	/** 这个文件实际由哪个源提供（换源下载时与曲目源不同） */
+	actualSource?: string
 }
 type CacheIndex = Record<string, CacheIndexEntry>
 
@@ -94,7 +96,7 @@ export const removeCacheIndexEntry = (basename: string) => {
 export const downloadToCache = async (
 	musicItem: IMusic.IMusicItem,
 	onProgress?: (percent: number) => void,
-	opts?: { manual?: boolean, quality?: string },
+	opts?: { manual?: boolean, quality?: string, actualSource?: string },
 ): Promise<string> => {
 	try {
 		await ensureCacheDirExists()
@@ -120,6 +122,7 @@ export const downloadToCache = async (
 				album: (musicItem as any).album,
 				// manual=true 表示用户主动下载；播放产生的缓存是 false
 				manual: opts?.manual === true,
+				actualSource: String(opts?.actualSource ?? (musicItem as any).platform ?? '') || undefined,
 				quality: String(opts?.quality ?? (globalThis as any).__jkActualQuality ?? '') || 'unknown',
 				size: Number(st?.size ?? 0),
 				mtime: Date.now(),

@@ -589,9 +589,34 @@ const SettingsSectionScreen = () => {
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
 					const list: any[] = await searchBySource(src as any, q, 1, 3)
 					if (!list.length) throw new Error('搜索结果为空')
+					if (String((params as any).force ?? '') === '1') {
+						try { await (tp as any).stop?.() } catch { /* ignore */ }
+						logInfo('[dev] playSearch force=1 source=', src, 'id=', String((list[0] as any)?.id ?? ''))
+					}
 					const track: any = jkToTrack(list[0])
 					logInfo('[dev] playSearch', src, 'title=', String(track?.title ?? ''), 'id=', String(track?.id ?? ''))
 					await tp.playWithReplacePlayList(track, [track])
+				} else if (action === 'evict') {
+					const src = String((params as any).source ?? 'kg')
+					const sid = String((params as any).id ?? '')
+					const cm = await import('@/player/CacheManager')
+					const FS = await import('expo-file-system/legacy')
+					let fileState = 'none'
+					try {
+						const p = cm.getLocalFilePath({ id: sid, platform: src } as any)
+						const uri = String(p).startsWith('file://') ? String(p) : `file://${p}`
+						const info: any = await FS.getInfoAsync(uri)
+						if (info?.exists) {
+							await FS.deleteAsync(uri, { idempotent: true })
+							fileState = 'deleted'
+						}
+						const base = String(p).split('/').pop() ?? ''
+						if (base) await cm.removeCacheIndexEntry(base).catch(() => undefined)
+					} catch { fileState = 'error' }
+					const { clearAltCache, clearPreloadCache } = await import('@/player/MusicSourceResolver')
+					clearAltCache()
+					clearPreloadCache()
+					logInfo('[dev] evict source=', src, 'id=', sid, 'file=', fileState, 'alt=cleared preload=cleared')
 				} else if (action === 'clearxsource') {
 					const idx = await import('@/jk/crossSourceIndex')
 					idx.clear()

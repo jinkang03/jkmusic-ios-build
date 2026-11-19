@@ -64,6 +64,7 @@ const normalizeMatchKey = (value: any) =>
 	String(value ?? '').toLowerCase().replace(/[\s\-_·・,，.。()（）]/g, '')
 
 export const clearAltCache = () => { altCache.clear() }
+export const clearPreloadCache = () => { preloadCache.clear() }
 
 const findPlayableAlt = async (
 	musicItem: IMusic.IMusicItem,
@@ -249,6 +250,17 @@ export const resolveSource = async (
 				preloadCache.delete(preloadKey)
 				logInfo('使用缓存的音频路径播放:', uri, `size=${size}`)
 				logInfo('[jk/play] resolved url = file:', uri.slice(0, 160), `size=${size}`)
+				// 缓存文件可能是换源下载来的：读出 actualSource，供 UI 显示「音源：A → B」
+				try {
+					const { readCacheIndex } = await import('./CacheManager')
+					const idx: any = await readCacheIndex()
+					const base = String(localPath).split('/').pop() ?? ''
+					const actualSource = idx?.[base]?.actualSource
+					if (actualSource && actualSource !== musicItem.platform) {
+						logInfo('[resolve] cached-source', String(musicItem.platform ?? ''), '->', String(actualSource))
+						void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({ from: String(musicItem.platform ?? ''), to: String(actualSource), title: String(musicItem.title ?? '') })).catch(() => undefined)
+					}
+				} catch { /* ignore */ }
 				return { url: uri, wasCached: true }
 			}
 			logError('[jk/play] 缓存文件不可用，回退远程', uri, `exists=${info?.exists} size=${size}`)
@@ -410,9 +422,11 @@ export const resolveSource = async (
 					bufferingShown = true
 					bufferingStore.setValue({ title: String(musicItem.title ?? ''), percent: 0 })
 				}
+				const actualSource = String((globalThis as any).__jkActualSource ?? musicItem.platform ?? '')
 				const localPath = await downloadToCache(
 					{ ...(musicItem as any), url: resp_url } as any,
 					recordProgress,
+					{ actualSource } as any,
 				)
 				if (slowMs > 0) {
 					// dev 专用：人为拉长缓冲窗口，便于截图与边界验收
