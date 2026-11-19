@@ -58,6 +58,7 @@ import {
 	importedLocalMusicStore,
 	nowLyricState,
 	nowLxLyricState,
+	nowTlyricState,
 	trackSkipLoadingStore,
 	trackSourceLoadingStore,
 	playbackIntentStore,
@@ -94,6 +95,7 @@ export {
 	songsNumsToLoadStore,
 	importedLocalMusicStore,
 	nowLyricState,
+	nowTlyricState,
 	trackSkipLoadingStore,
 	trackSourceLoadingStore,
 	playbackIntentStore,
@@ -1071,6 +1073,7 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 				if (isCurrentMusic(musicItem)) {
 					nowLyricState.setValue(lyc.lyric)
 					nowLxLyricState.setValue(String((lyc as any).lxlyric ?? ''))
+					nowTlyricState.setValue(String((lyc as any).tlyric ?? ''))
 					// 写入后主动请求一次重建（链路 B），避免只等 progress 事件
 					void LyricManager.requestRefresh?.()
 				}

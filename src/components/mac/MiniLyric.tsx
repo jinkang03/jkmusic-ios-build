@@ -50,6 +50,17 @@ const MiniLyric = () => {
 	}, [currentTrack?.platform, currentTrack?.id])
 	const lyrics: any[] = state?.lyrics ?? []
 	const transLyrics: any[] = (showTrans && state?.translationLyrics) ? state.translationLyrics : []
+	const findTrans = (time: any) => {
+		if (!transLyrics.length) return undefined
+		const t = Number(time ?? 0)
+		let best: any = null
+		let bestDiff = 0.08
+		for (const item of transLyrics) {
+			const diff = Math.abs(Number(item?.time ?? 0) - t)
+			if (diff <= bestDiff) { best = item; bestDiff = diff }
+		}
+		return best?.lrc || undefined
+	}
 
 	const { position: karaokePos } = myTrackPlayer.useProgress(0.1)
 	const karaokeMs = Math.max(0, Math.round(Number(karaokePos ?? 0) * 1000))
@@ -218,9 +229,9 @@ const MiniLyric = () => {
 								{item?.lrc ?? item?.content ?? ''}
 							</Text>
 						)}
-						{isCurrent && transLyrics[absoluteIndex] ? (
+						{isCurrent && findTrans(item?.time) ? (
 							<Text numberOfLines={1} style={{ textAlign: 'center', color: c.textMuted, fontSize: Math.max(11, curSize - 4), marginTop: 2 }}>
-								{transLyrics[absoluteIndex]?.lrc ?? ''}
+								{findTrans(item?.time)}
 							</Text>
 						) : null}
 					</Pressable>

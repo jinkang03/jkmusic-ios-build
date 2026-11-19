@@ -10,12 +10,27 @@ import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import useDelayFalsy from '@/hooks/useDelayFalsy'
 import PersistStatus from '@/store/PersistStatus'
+import { useSetting } from '@/jk/settingsStore'
+import { logInfo } from '@/helpers/logger'
 import delay from '@/utils/delay'
 import { musicIsPaused } from '@/utils/trackUtils'
 import { useIsPlaying } from '@rntp/player'
 import { FlatList } from 'react-native-gesture-handler'
 import rpx from '../../utils/rpx'
 import LyricItemComponent from './lyricItem'
+/** 翻译行按时间匹配：直接按 index 会因「作词/作曲」这类无翻译行而整体错位 */
+const findTranslation = (list: any[] | undefined, time: any): string | undefined => {
+	if (!list?.length) return
+	const t = Number(time ?? 0)
+	let best: any = null
+	let bestDiff = 0.08
+	for (const item of list) {
+		const diff = Math.abs(Number(item?.time ?? 0) - t)
+		if (diff <= bestDiff) { best = item; bestDiff = diff }
+	}
+	return best?.lrc || undefined
+}
+
 const LyricFlatList = FlatList as React.ForwardRefExoticComponent<
 	FlatListProps<ILyric.IParsedLrcItem> & React.RefAttributes<NativeFlatList<ILyric.IParsedLrcItem>>
 >
@@ -51,7 +66,13 @@ export default function Lyric(_props: IProps) {
 	// const lyrics = parser.getLyric()
 	// console.log('lyrics', lyrics)
 	const [loading] = useState(false)
-	const { meta, lyrics } = LyricManager.useLyricState()
+	const { meta, lyrics, translationLyrics } = LyricManager.useLyricState()
+	const [showTrans] = useSetting('player.isShowLyricTranslation', false)
+	React.useEffect(() => {
+		logInfo('[lyric] translation debug', 'showTrans=', String(showTrans),
+			'hasT=', String(!!translationLyrics), 'len=', String((translationLyrics as any)?.length ?? 0),
+			'sample=', JSON.stringify((translationLyrics as any)?.[1] ?? null))
+	}, [showTrans, translationLyrics])
 	// console.log('lyrics', lyrics)
 	const currentLrcItem = LyricManager.useCurrentLyric()
 	// 逐字歌词：全屏视图复用 MiniLyric 的 lxlyric 解析（之前只有紧凑视图支持）
@@ -262,6 +283,7 @@ export default function Lyric(_props: IProps) {
 					? findKaraokeSegs(karaokeMap, Number(item?.time ?? 0) * 1000)
 					: undefined}
 				karaokeNowMs={currentLrcItem?.index === index ? karaokeMs : undefined}
+				translation={showTrans ? findTranslation(translationLyrics, item?.time) : undefined}
 				onPress={() => handleLyricItemPress(index)}
 			/>
 		)

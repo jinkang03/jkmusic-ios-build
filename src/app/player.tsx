@@ -414,10 +414,25 @@ const PlayerScreenContent = () => {
 		router.push('/(modals)/addToPlaylist' as any)
 	}, [trackToDisplay])
 
-	const handleDownload = useCallback(async () => {
-		if (trackToDisplay) {
-			myTrackPlayer.cacheAndImportMusic(trackToDisplay as IMusic.IMusicItem)
+	const handleDownload = useCallback(() => {
+		const track = trackToDisplay
+		if (!track) return
+		// 手动下载要写进「下载页」（manual 索引），并且可选择音质。
+		// 旧实现走 cacheAndImportMusic：只缓存 + 导入本地，下载页看不到。
+		const run = async(quality: string) => {
+			try {
+				const { downloadTrack } = await import('@/jk/downloader')
+				await downloadTrack(track, { quality })
+			} catch (err) {
+				logError('[player] download failed', String((err as any)?.message ?? err))
+			}
 		}
+		Alert.alert('下载音质', `选择「${String((track as any).title ?? '')}」的下载音质`, [
+			{ text: '128k', onPress: () => { void run('128k') } },
+			{ text: '320k', onPress: () => { void run('320k') } },
+			{ text: 'flac', onPress: () => { void run('flac') } },
+			{ text: '取消', style: 'cancel' },
+		])
 	}, [trackToDisplay])
 
 	const handleShare = useCallback(async () => {

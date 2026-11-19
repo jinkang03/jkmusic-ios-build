@@ -271,7 +271,8 @@ export default songmid => {
   const requestObj = eapiRequest('/api/song/lyric/v1', {
     id: songmid,
     cp: false,
-    tv: 0,
+    // tv: 0 不会返回翻译，改为 -1（请求翻译歌词）
+    tv: -1,
     lv: 0,
     rv: 0,
     kv: 0,

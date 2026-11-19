@@ -8,7 +8,7 @@ import { isSameMediaItem } from '@/utils/mediaItem'
 import { GlobalState } from '@/utils/stateMapper'
 import LyricParser from '@/utils/lrcParser'
 import ReactNativeTrackPlayer, { Event } from '@rntp/player'
-import myTrackPlayer, { nowLyricState } from './trackPlayerIndex'
+import myTrackPlayer, { nowLyricState, nowTlyricState } from './trackPlayerIndex'
 const lyricStateStore = new GlobalState<{
 	loading: boolean
 	lyricParser?: LyricParser
@@ -54,6 +54,8 @@ function resetLyricState() {
 function getLyricSource(): ILyric.ILyricSource {
 	return {
 		rawLrc: nowLyricState.getValue() || DEFAULT_LYRIC,
+		// 翻译数据：之前只返回 rawLrc，导致「歌词翻译」开关永远拿不到翻译
+		translation: nowTlyricState.getValue() || undefined,
 	}
 }
 

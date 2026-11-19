@@ -21,10 +21,12 @@ interface ILyricItemComponentProps {
 	karaokeSegs?: Array<{ start: number, text: string }>
 	/** 当前播放位置（毫秒），用于判断已唱/未唱 */
 	karaokeNowMs?: number
+	/** 翻译行（设置里开启「歌词翻译」时传入） */
+	translation?: string
 }
 
 function _LyricItemComponent(props: ILyricItemComponentProps) {
-	const { highlight, text, onLayout, index, fontSize, onPress, karaokeSegs, karaokeNowMs } = props
+	const { highlight, text, onLayout, index, fontSize, onPress, karaokeSegs, karaokeNowMs, translation } = props
 	const hasKaraoke = !!(highlight && karaokeSegs && karaokeSegs.length)
 	const colors = useThemeColors()
 	const lyricStyles = useMemo(() => createStyles(colors), [colors])
@@ -106,6 +108,11 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 						{text}
 					</Text>
 				)}
+				{translation ? (
+					<Text style={[lyricStyles.translation, { fontSize: Math.max(12, (fontSize || rpx(28)) - 6) }]}>
+						{translation}
+					</Text>
+				) : null}
 			</View>
 		</TouchableWithoutFeedback>
 	)
@@ -138,6 +145,14 @@ const createStyles = (colors: ThemeColors) =>
 		width: '100%',
 		textAlign: 'center',
 		textAlignVertical: 'center',
+	},
+	translation: {
+		color: colors.text,
+		opacity: 0.55,
+		paddingHorizontal: rpx(64),
+		marginTop: 2,
+		textAlign: 'center',
+		width: '100%',
 	},
 	draggingItem: {
 		opacity: 1,
