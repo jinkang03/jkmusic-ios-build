@@ -1,3 +1,41 @@
+## v1.4.1（2026-11-21）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.1-unsigned-20261121.ipa` |
+| 大小 | 18.x MB |
+| sha256 | `e680c65f2dde081ebd8d1b55059359c1737f7d87505c5121c0a609033d866570` |
+| 版本 / build | 1.4.1 / 25 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.4.1` |
+
+### 1.4.1 液态玻璃风格（第 2 批）
+
+1. 新增 `src/constants/glass.ts`：`fill / fillStrong / stroke / highlight / shadow`，
+   全局透明度 `glassAlphaStore`（默认 0.55，持久化 `app.glassAlpha`）；
+2. 设置 → 基本设置 新增「玻璃透明度」滑块（10%–95%），全局即时生效；
+3. TabBar：高度 58→54、内边距 4、圆角 27、图标 20、**选中项 34pt 圆形底**（强调色 14%）；
+4. 迷你播放条：玻璃 fill + stroke；
+5. 各页胶囊/卡片玻璃化：搜索框、源胶囊、排序胶囊、歌曲/歌手分段、
+   热门/历史卡片、排行榜源/榜单胶囊、下载筛选/音质胶囊、下载任务卡片；
+6. 我的列表色差：`getStackScreenWithSearchBar` 导航栏改透明（`headerTransparent`），
+   搜索栏改玻璃色 —— 顶部不再多叠一层半透明白。
+
+### 实测（模拟器截图）
+
+- 我的列表：顶部与列表区色差消失，搜索框玻璃；
+- 搜索页：源胶囊/卡片玻璃、选中实心、分段控件玻璃；
+- 歌单/排行榜/下载：胶囊全部玻璃化，TabBar 选中项圆形底；
+- 设置：玻璃透明度 55% 滑块生效。
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.4.1 / build 25 / minos 16.4 / arm64
+jsbundle 6.4M / dev 残留 0 / size 18.x MB
+sha256 e680c65f2dde081ebd8d1b55059359c1737f7d87505c5121c0a609033d866570
+```
+
 ## v1.4.0（2026-11-20）
 
 | 项 | 值 |
