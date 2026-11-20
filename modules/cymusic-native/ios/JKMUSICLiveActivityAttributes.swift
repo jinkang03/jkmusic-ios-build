@@ -14,4 +14,6 @@ struct JKMUSICLiveActivityAttributes: ActivityAttributes {
     var artist: String
     var primaryHex: String
     var duration: Double
+    /// 封面：96x96 JPEG 的 base64（与 Widget 侧同名字段保持一致）
+    var artworkBase64: String
 }

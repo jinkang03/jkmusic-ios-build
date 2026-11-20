@@ -9,6 +9,7 @@ type LiveActivityNative = {
 		duration: number,
 		progress: number,
 		isPlaying: boolean,
+		artworkBase64: string,
 	) => Promise<void>
 	update: (progress: number, isPlaying: boolean) => Promise<void>
 	end: () => Promise<void>
@@ -32,6 +33,8 @@ export const startLiveActivity = async(params: {
 	duration: number
 	progress: number
 	isPlaying: boolean
+	/** 96x96 JPEG 的 base64；空则灵动岛显示占位图标 */
+	artworkBase64?: string
 }) => {
 	if (!mod) return
 	try {
@@ -42,6 +45,7 @@ export const startLiveActivity = async(params: {
 			params.duration,
 			Math.max(0, Math.min(1, params.progress)),
 			params.isPlaying,
+			String(params.artworkBase64 ?? ''),
 		)
 	} catch { /* 不支持时静默 */ }
 }

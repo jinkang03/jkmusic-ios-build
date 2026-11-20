@@ -19,4 +19,6 @@ struct JKMUSICLiveActivityAttributes: ActivityAttributes {
     var primaryHex: String
     /// 总时长（秒）
     var duration: Double
+    /// 封面：96x96 JPEG 的 base64（灵动岛/锁屏直接解码，不依赖网络）
+    var artworkBase64: String
 }
