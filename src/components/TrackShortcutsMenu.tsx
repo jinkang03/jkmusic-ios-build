@@ -1,4 +1,5 @@
 import { setPendingMusic } from '@/jk/pendingMusic'
+import { setPendingChangeSource } from '@/jk/pendingChangeSource'
 import { logInfo } from '@/helpers/logger'
 import { trackToJk } from '@/jk/adapt'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
@@ -143,6 +144,11 @@ export const TrackShortcutsMenu = ({
 						.catch(() => undefined)
 				},
 			)
+			.with('change-source', async () => {
+				// 与 mac 一致：打开换源弹窗（按平台搜索同曲并替换）
+				setPendingChangeSource(trackToJk(track as any) as any)
+				router.push('/(modals)/changeSource' as any)
+			})
 			.with('copy-song-name', async () => {
 				// 与 mac 一致：按「下载文件名格式」（download.fileName，默认「歌名 - 歌手」）格式化
 				const { getSetting } = await import('@/jk/settingsStore')
@@ -208,6 +214,11 @@ export const TrackShortcutsMenu = ({
 					id: 'add-to-storedPlayList',
 					title: i18n.t('menu.addToPlaylist'),
 					image: 'text.badge.plus',
+				},
+				{
+					id: 'change-source',
+					title: tr('歌曲换源', 'Change Source'),
+					image: 'arrow.triangle.swap',
 				},
 				{
 					id: 'copy-song-name',

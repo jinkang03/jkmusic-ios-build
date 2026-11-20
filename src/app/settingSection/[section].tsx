@@ -935,6 +935,42 @@ const SettingsSectionScreen = () => {
 					const target = tracks[Math.min(idx, tracks.length - 1)]
 					logInfo(`[jk/play] playnow src=${src} idx=${idx} title=${target?.title ?? ''}`)
 					await (tp as any).playWithReplacePlayList(target, tracks)
+				} else if (action === 'applyChangeSource') {
+					// 数据层验证换源：搜索目标平台 → 取第 N 条 → replaceSong → 打印替换条数
+					const want = String((params as any).title ?? '')
+					const targetPlatform = String((params as any).source ?? 'kw')
+					const idx = Math.max(0, Number((params as any).index ?? 0) || 0)
+					const lib = await import('@/jk/libraryStore')
+					const all: any[] = [
+						{ name: '试听列表', list: lib.getDefaultList() },
+						{ name: '我的收藏', list: lib.getLoveList() },
+						...lib.getUserLists().map((l: any) => ({ name: l.name, list: l.list })),
+					]
+					const hit = all.flatMap(l => l.list ?? []).find((m: any) => !want || String(m?.name ?? '').includes(want))
+					if (!hit) throw new Error('找不到原曲目')
+					const { searchBySource } = await import('@/jk/musicSdk')
+					const list: any[] = await searchBySource(targetPlatform as any, `${String(hit.name ?? '')} ${String(hit.singer ?? '')}`.trim(), 1)
+					const target = (list ?? [])[idx]
+					if (!target) throw new Error('目标平台没有搜索结果')
+					const count = lib.replaceSong(hit, target)
+					logInfo('[dev] applyChangeSource', String(hit.name ?? ''), String(hit.source ?? ''), '->', String(target.source ?? ''), 'count=', count)
+				} else if (action === 'openChangeSource') {
+					// 打开换源弹窗（按歌名在「我的列表」里找第一首匹配）
+					const want = String((params as any).title ?? '')
+					const listName = String((params as any).list ?? 'just do it')
+					const lib = await import('@/jk/libraryStore')
+					const all: any[] = [
+						{ name: '试听列表', list: lib.getDefaultList() },
+						{ name: '我的收藏', list: lib.getLoveList() },
+						...lib.getUserLists().map((l: any) => ({ name: l.name, list: l.list })),
+					]
+					const targetList = all.find(l => l.name === listName) ?? all.find(l => l.name.includes(listName))
+					const hit = (targetList?.list ?? []).find((m: any) => !want || String(m?.name ?? '').includes(want))
+					if (!hit) throw new Error('列表里找不到该歌曲')
+					const { setPendingChangeSource } = await import('@/jk/pendingChangeSource')
+					setPendingChangeSource(hit)
+					logInfo('[dev] openChangeSource title=', String(hit?.name ?? ''), 'source=', String(hit?.source ?? ''))
+					router.push('/(modals)/changeSource' as any)
 				} else if (action === 'playUserList') {
 					// 从「我的列表」里的某个歌单播放（诊断连跳问题用）
 					const name = String((params as any).name ?? '')

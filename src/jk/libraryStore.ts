@@ -127,6 +127,28 @@ export const removeFromList = (listId: string, ids: string[]) => {
 	return next
 }
 
+/**
+ * 换源：把「试听列表 / 我的收藏 / 所有自建歌单」里 source+id 匹配的曲目替换成新曲目。
+ * 返回替换的条数（同一首可能被加到多个列表）。
+ */
+export const replaceSong = (oldMusic: JKMusic, newMusic: JKMusic): number => {
+	let count = 0
+	const mapList = (list: JKMusic[]) => list.map(item => {
+		if (!sameMusic(item, oldMusic)) return item
+		count++
+		return newMusic
+	})
+	const nextDefault = mapList(state.defaultList)
+	const nextLove = mapList(state.loveList)
+	const nextUserLists = state.userLists.map(list => ({ ...list, list: mapList(list.list) }))
+	if (count > 0) {
+		setDefaultList(nextDefault)
+		setLoveList(nextLove)
+		setUserLists(nextUserLists)
+	}
+	return count
+}
+
 export const isInLoveList = (music: JKMusic) => state.loveList.some(item => sameMusic(item, music))
 
 export const toggleLove = (music: JKMusic) => {

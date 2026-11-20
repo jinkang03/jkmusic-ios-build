@@ -191,6 +191,15 @@ const RootNavigation = () => {
 				}}
 			/>
 			<Stack.Screen
+				name="(modals)/changeSource"
+				options={{
+					presentation: 'modal',
+					headerShown: false,
+					gestureEnabled: true,
+					gestureDirection: 'vertical',
+				}}
+			/>
+			<Stack.Screen
 				name="(modals)/addToPlaylist"
 				options={{
 					presentation: 'modal',
