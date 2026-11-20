@@ -171,7 +171,7 @@ export const SearchList: React.FC<SearchListProps> = ({
 				extraData={listExtraData}
 				contentContainerStyle={{
 					paddingTop: 60,
-					paddingBottom: 128 + insets.bottom,
+					paddingBottom: 176 + insets.bottom,
 					paddingHorizontal: screenPadding.horizontal,
 				}}
 				ItemSeparatorComponent={ItemDivider}

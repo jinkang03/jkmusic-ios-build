@@ -57,7 +57,7 @@ export const RadioList = ({
 
 	return (
 		<FlatList
-			contentContainerStyle={{ paddingTop: 10, paddingBottom: 128 }}
+			contentContainerStyle={{ paddingTop: 10, paddingBottom: 176 }}
 			ItemSeparatorComponent={itemDivider}
 			ListFooterComponent={itemDivider}
 			ListEmptyComponent={emptyListComponent}

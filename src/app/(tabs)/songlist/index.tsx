@@ -206,6 +206,7 @@ const SongListScreen = () => {
 				data={list}
 				keyExtractor={item => item.id}
 				style={{ flex: 1 }}
+				contentContainerStyle={{ paddingBottom: 176 }}
 				onEndReachedThreshold={0.4}
 				onEndReached={onEndReached}
 				removeClippedSubviews

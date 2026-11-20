@@ -259,6 +259,7 @@ const DownloadsScreen = () => {
 					data={shown}
 					keyExtractor={item => item.name}
 					style={{ flex: 1, marginTop: 8 }}
+					contentContainerStyle={{ paddingBottom: 176 }}
 					renderItem={({ item }) => (
 						<View style={{ flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: macSpace.pageX / 2, borderBottomWidth: 0.5, borderBottomColor: c.divider }}>
 							<View style={{ flex: 1 }}>

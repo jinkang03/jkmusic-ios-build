@@ -8,27 +8,31 @@ import { BlurView } from 'expo-blur'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { useMemo } from 'react'
 import { useLiveActivity } from '@/hooks/useLiveActivity'
-import { StyleSheet } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 // 首页固定为「我的列表」（不再落到搜索页/歌曲页）
 export const unstable_settings = { initialRouteName: 'favorites' }
 
-const TAB_BAR_HEIGHT = 49
+// iOS 26/27 Apple Music 风格：底部导航是悬浮胶囊（左右留边、离底留白）
+const TAB_BAR_HEIGHT = 58
+const TAB_BAR_SIDE = 12
+const TAB_BAR_BOTTOM = 8
 
-const TabBarBackground = ({ tint }: { tint: BlurTint }) => (
-	<BlurView
-		intensity={90}
-		tint={tint}
+const TabBarBackground = ({ tint, isDark }: { tint: BlurTint, isDark: boolean }) => (
+	<View
 		style={[
 			StyleSheet.absoluteFill,
 			{
+				borderRadius: 29,
 				overflow: 'hidden',
-				borderTopLeftRadius: 20,
-				borderTopRightRadius: 20,
+				borderWidth: StyleSheet.hairlineWidth,
+				borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
 			},
 		]}
-	/>
+	>
+		<BlurView intensity={95} tint={tint} style={StyleSheet.absoluteFill} />
+	</View>
 )
 
 const TabsNavigation = () => {
@@ -40,9 +44,10 @@ const TabsNavigation = () => {
 
 	const floatingPlayerStyle = useMemo(() => ({
 		position: 'absolute' as const,
-		left: 8,
-		right: 8,
-		bottom: TAB_BAR_HEIGHT + bottom + 8,
+		left: TAB_BAR_SIDE,
+		right: TAB_BAR_SIDE,
+		// 悬浮在导航胶囊上方，两者之间留 10pt
+		bottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM + Math.max(bottom, 8) + 10,
 	}), [bottom])
 
 	return (
@@ -61,13 +66,24 @@ const TabsNavigation = () => {
 					headerShown: false,
 					tabBarStyle: {
 						position: 'absolute',
-						borderTopLeftRadius: 20,
-						borderTopRightRadius: 20,
+						left: TAB_BAR_SIDE,
+						right: TAB_BAR_SIDE,
+						bottom: Math.max(bottom, TAB_BAR_BOTTOM),
+						height: TAB_BAR_HEIGHT,
+						borderRadius: 29,
 						borderTopWidth: 0,
-						paddingTop: 6,
+						paddingTop: 7,
+						paddingBottom: 7,
 						backgroundColor: 'transparent',
+						elevation: 0,
+						// 悬浮胶囊的投影（iOS 用 shadow，Android 用 elevation=0 + 背景模糊）
+						shadowColor: '#000',
+						shadowOpacity: isDark ? 0.45 : 0.18,
+						shadowRadius: 18,
+						shadowOffset: { width: 0, height: 8 },
 					},
-					tabBarBackground: () => <TabBarBackground tint={blurTint} />,
+					tabBarItemStyle: { paddingVertical: 2 },
+					tabBarBackground: () => <TabBarBackground tint={blurTint} isDark={!!isDark} />,
 				}}
 			>
 				{/* 顺序严格照桌面版：搜索 / 歌单 / 排行榜 / 我的列表 / 下载 / 设置 */}

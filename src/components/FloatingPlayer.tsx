@@ -148,11 +148,17 @@ const createStyles = (
 	timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 },
 	trackArtist: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
 	container: {
-		borderRadius: 14,
+		// 与底部导航胶囊统一的悬浮玻璃样式
+		borderRadius: 22,
 		borderCurve: 'continuous',
-		borderColor: colors.border,
+		borderColor: 'rgba(255,255,255,0.16)',
 		borderWidth: StyleSheet.hairlineWidth,
 		overflow: 'hidden',
+		backgroundColor: 'transparent',
+		shadowColor: '#000',
+		shadowOpacity: 0.22,
+		shadowRadius: 16,
+		shadowOffset: { width: 0, height: 6 },
 	},
 	blurContainer: {
 		flexDirection: 'row',

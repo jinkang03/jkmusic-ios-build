@@ -112,7 +112,7 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress,
 			initialNumToRender={14}
 			windowSize={7}
 			maxToRenderPerBatch={14}
-			contentContainerStyle={{ paddingBottom: 96 }}
+			contentContainerStyle={{ paddingBottom: 176 }}
 		/>
 	)
 }
