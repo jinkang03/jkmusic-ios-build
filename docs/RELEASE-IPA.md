@@ -1,3 +1,48 @@
+## v1.3.0（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.3.0-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `60c44a5cba493833f8579bdca548df584767d94c558ad9e0d98b20b5e4fe5630` |
+| 版本 / build | 1.3.0 / 14 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.3.0` |
+
+### 1.3.0 歌曲换源（对齐 mac 弹窗）
+
+mac 端交互（按截图复刻）：
+
+- 二级菜单「歌曲换源」→ 弹窗；
+- 顶部 5 个平台 tab（酷我/酷狗/企鹅/网易/咪咕），切 tab 用「歌名 歌手」搜索该平台；
+- 列表：歌名 / 歌手·专辑 / 时长 + 试听 + 选择；
+- 选中后底部显示 `原 歌名 tx 02:54 → 新 歌名 kw 02:54` + 确认；
+- 确认后把这一首替换成新源的曲目。
+
+iOS 实现：
+
+1. `src/app/(modals)/changeSource.tsx`：弹窗页面（原曲目卡片 + 搜索框 + 平台 tab + 结果列表 + 底部对比/确认）；
+2. `pendingChangeSource`：用模块级变量传完整对象（URL 参数会丢 meta.songmid，导致换源后取不到流）；
+3. `libraryStore.replaceSong(old, new)`：在「试听列表 / 我的收藏 / 所有自建歌单」里按 `source+id` 匹配替换，
+   位置不变；返回替换条数；
+4. 若正在播放这首歌：确认后用新源重新播放；
+5. 试听按钮：播放该结果（会切换当前播放，toast 提示）。
+
+### 实测
+
+```
+[dev] applyChangeSource Something to Hope For tx -> kw count= 1   ← 数据层替换成功
+弹窗截图：企鹅 tab、20 条结果、底部对比条与列表不再重叠
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.3.0 / build 14 / minos 16.4 / arm64
+jsbundle 6.3M / dev 残留 0 / size 17.x MB
+sha256 60c44a5cba493833f8579bdca548df584767d94c558ad9e0d98b20b5e4fe5630
+```
+
 ## v1.2.9（2026-11-20）
 
 | 项 | 值 |
