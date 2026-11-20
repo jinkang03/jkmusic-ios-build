@@ -1,3 +1,61 @@
+## v1.2.8（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.8-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `94ca62e5090111976bacf1e740ca164a4a0dfe67a598c22764e92b2f16a1f0c5` |
+| 版本 / build | 1.2.8 / 12 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.8` |
+
+### 1.2.8 修复：跨源兜底漏掉「能播的版本」
+
+真机现象：第 16 / 18 / 25 首仍提示「所有平台均不可用」，但手动搜索酷我、网易都能播。
+
+根因（匹配太严 + 搜索退化缺失）：
+
+- 歌手是多值字段（`KAROL G、Bruno Mars`），旧逻辑用整串做包含判断，顿号直接导致不匹配；
+- 标题带装饰（`Spring Day (made popular by BTS) (backing version) - Party Tyme`），
+  kw 对超长 query 返回空 → 该平台没有候选；
+- 偶发搜索/取流超时，第二次重试就通。
+
+修复：
+
+1. 标题先去装饰（圆括号/方括号/` - 后缀`），再用「主标题」匹配；
+2. 歌手按 `, 、 & / ;` 拆分，任一歌手有交集即通过；
+3. 候选打分：标题精确 3 分 + 歌手命中 5 分，取最高分；
+4. 搜索词三级退化：`完整标题+歌手` → `主标题+首位歌手` → `仅主标题`；
+5. 搜索超时 5s→6.5s、取流 6s→7s；无候选 / 全失败各再重试一次；
+6. 片段判定改为「时长优先」：能解析时长就不看文件大小，
+   避免 320k 文件（26MB）与 flac 标称（48MB）比对误判；
+7. preload 只查同曲索引，不再每首歌都打 5 个平台搜索。
+
+### 实测（模拟器，同一歌单）
+
+```
+第16首 Spring Day (made popular by BTS) (backing version)
+  matrix search hit platform=kg score=35 / kw score=35 / mg score=30
+  matrix ok platform=kw → live start total=274.83   ← 4:34 完整
+
+第18首 Still - KAROL G, Bruno Mars
+  matrix search hit platform=mg/kg/kw/wy score=35
+  matrix ok platform=kw → live start total=220.68   ← 3:40 完整
+
+第25首 Something to Hope For - Phoebe Ryan
+  matrix ok platform=kw/wy/kg/mg → live start total=174.34   ← 2:54 完整
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.2.8 / build 12 / minos 16.4 / arm64
+jsbundle 6.0M / dev 残留 0 / size 17.x MB
+sha256 94ca62e5090111976bacf1e740ca164a4a0dfe67a598c22764e92b2f16a1f0c5
+widget PlugIns/JKMUSICWidget.appex present / NSSupportsLiveActivities true
+PlugIns/ShareExtension.appex present
+```
+
 ## v1.2.7（2026-11-20）
 
 | 项 | 值 |
