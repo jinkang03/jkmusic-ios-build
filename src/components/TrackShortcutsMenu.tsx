@@ -4,8 +4,8 @@ import { logInfo } from '@/helpers/logger'
 import { trackToJk } from '@/jk/adapt'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { getSingerMidBySingerName } from '@/helpers/userApi/getMusicSource'
-import { useFavorites } from '@/store/library'
 import { isInPlayList } from '@/store/playList'
+import { isInLoveList, libraryVersionStore, toggleLove } from '@/jk/libraryStore'
 import { useQueue } from '@/store/queue'
 import i18n, { tr } from '@/utils/i18n'
 import { MenuAction, MenuView } from '@react-native-menu/menu'
@@ -31,8 +31,10 @@ export const TrackShortcutsMenu = ({
 	onDeleteTrack,
 }: TrackShortcutsMenuProps) => {
 	const router = useRouter()
-	const { favorites, toggleTrackFavorite } = useFavorites()
-	const isFavorite = favorites.find((trackItem) => trackItem.id === track?.id)
+	// 收藏状态来自 JKMUSIC 列表模型（旧 favorites store 已移除）
+	libraryVersionStore.useValue()
+	const jkTrackForLove = trackToJk(track as any)
+	const isFavorite = isInLoveList(jkTrackForLove)
 	const { activeQueueId } = useQueue()
 
 	const [isInPlaylist, setIsInPlaylist] = useState(false)
@@ -99,13 +101,13 @@ export const TrackShortcutsMenu = ({
 	const handlePressAction = async (id: string) => {
 		await match(id)
 			.with('add-to-favorites', async () => {
-				toggleTrackFavorite(track)
+				toggleLove(jkTrackForLove)
 				if (activeQueueId?.startsWith('favorites')) {
 					//await TrackPlayer.add(track)
 				}
 			})
 			.with('remove-from-favorites', async () => {
-				toggleTrackFavorite(track)
+				toggleLove(jkTrackForLove)
 				if (activeQueueId?.startsWith('favorites')) {
 					// const queue = await TrackPlayer.getQueue()
 					// const trackToRemove = queue.findIndex((queueTrack) => queueTrack.url === track.url)

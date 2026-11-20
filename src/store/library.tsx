@@ -10,11 +10,9 @@ import PersistStatus from '@/store/PersistStatus'
 interface LibraryState {
 	allTracks: TrackWithPlaylist[]
 	tracks: TrackWithPlaylist[]
-	favorites: IMusic.IMusicItem[]
 	nowLyric: string
 	playlists: Playlist[]
 	isLoading: boolean
-	toggleTrackFavorite: (track: Track) => void
 	addToPlaylist: (track: Track, playlistName: string) => void
 	fetchTracks: (refresh?: boolean) => Promise<void>
 	setNowLyric: (lyric: string) => void
@@ -58,28 +56,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 	isLoading: false,
 	page: 1,
 	hasMore: true,
-	favorites: PersistStatus.get('music.favorites') || [],
 	nowLyric: '当前无歌词',
 	playlists: [],
-	toggleTrackFavorite: (track: Track) => {
-		set((state) => {
-			const favorites = [...state.favorites]
-			const index = favorites.findIndex((fav) => fav.id === track.id)
-
-			if (index !== -1) {
-				// 如果存在，则从数组中删除
-				favorites.splice(index, 1)
-			} else {
-				// 如果不存在，则添加到数组中
-				favorites.push(track as IMusic.IMusicItem)
-			}
-			// 更新持久化存储中的favorites
-			PersistStatus.set('music.favorites', favorites)
-
-			// 返回新的状态
-			return { favorites }
-		})
-	},
 	addToPlaylist: (track, playlistName) =>
 		set((state) => ({
 			tracks: state.tracks.map((currentTrack) => {
@@ -191,14 +169,6 @@ export const useAllTracks = () => {
 //   return tracks
 // }
 
-export const useFavorites = () => {
-	const favorites = useLibraryStore((state) => state.favorites)
-	const toggleTrackFavorite = useLibraryStore((state) => state.toggleTrackFavorite)
-	return {
-		favorites,
-		toggleTrackFavorite,
-	}
-}
 export const useNowLyric = () => {
 	const nowLyric = useLibraryStore((state) => state.nowLyric)
 	const setNowLyric = useLibraryStore((state) => state.setNowLyric)

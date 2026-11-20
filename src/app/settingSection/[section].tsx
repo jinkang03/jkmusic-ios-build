@@ -243,53 +243,6 @@ const ListSection = () => {
 	)
 }
 
-const NetworkSection = () => {
-	const { isDark } = useAppTheme()
-	const c = macPalette(!!isDark)
-	const [proxyEnable, setProxyEnable] = useSetting('network.proxy.enable', false)
-	const [proxyHost, setProxyHost] = useSetting('network.proxy.host', '')
-	const [proxyPort, setProxyPort] = useSetting('network.proxy.port', 8080)
-	const [maxDl, setMaxDl] = useSetting('download.maxDownloadNum', 3)
-	const [timeoutMs, setTimeoutMs] = useSetting('_ios.requestTimeoutMs', 15000)
-	return (
-		<>
-			<Text style={{ color: c.textMuted, fontSize: macFont.caption, paddingHorizontal: macSpace.pageX, paddingBottom: 10 }}>
-				iOS 端暂不支持系统级代理，配置会保存但不生效（仅桌面版可用）
-			</Text>
-			<SettingRow label={tr('启用代理', 'Enable Proxy')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}>
-				<SettingSwitch value={proxyEnable} onChange={setProxyEnable} />
-			</SettingRow>
-			<SettingRow label={tr('代理地址', 'Proxy Host')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}>
-				<SettingSelect
-					value={String(proxyHost || 'none')}
-					onChange={(v) => setProxyHost(v === 'none' ? '' : v)}
-					options={[{ value: 'none', label: tr('未设置', 'Not set') }, { value: '127.0.0.1', label: '127.0.0.1' }]}
-				/>
-			</SettingRow>
-			<SettingRow label={tr('代理端口', 'Proxy Port')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}>
-				<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{String(proxyPort)}</Text>
-			</SettingRow>
-			<SettingRow label={tr('并发下载数', 'Concurrent Downloads')} hint={tr('影响下载/预取队列上限', 'Caps download/prefetch queue')}>
-				<SettingSelect
-					value={String(maxDl)}
-					onChange={(v) => setMaxDl(Number(v))}
-					options={[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }]}
-				/>
-			</SettingRow>
-			<SettingRow label={tr('请求超时', 'Request Timeout')} hint={tr('影响音源解析与下载', 'Affects source resolving and downloads')}>
-				<SettingSelect
-					value={String(timeoutMs)}
-					onChange={(v) => setTimeoutMs(Number(v))}
-					options={[{ value: '10000', label: tr('10 秒', '10 s') }, { value: '15000', label: tr('15 秒', '15 s') }, { value: '30000', label: tr('30 秒', '30 s') }]}
-				/>
-			</SettingRow>
-			<Text style={{ color: c.textMuted, fontSize: macFont.badge, paddingHorizontal: macSpace.pageX, paddingTop: 12 }}>
-				当前：并发 {String(maxDl)} · 超时 {String(timeoutMs)}ms
-			</Text>
-		</>
-	)
-}
-
 const OtherSection = () => {
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
@@ -1019,6 +972,16 @@ const SettingsSectionScreen = () => {
 					setPendingChangeSource(hit)
 					logInfo('[dev] openChangeSource title=', String(hit?.name ?? ''), 'source=', String(hit?.source ?? ''))
 					router.push('/(modals)/changeSource' as any)
+				} else if (action === 'toggleLove') {
+					// 验证播放页收藏：对当前曲目 toggle 我的收藏
+					const { default: tp } = await import('@/helpers/trackPlayerIndex')
+					const { trackToJk } = await import('@/jk/adapt')
+					const lib = await import('@/jk/libraryStore')
+					const cur: any = (tp as any).getCurrentMusic?.()
+					if (!cur) throw new Error('当前没有播放曲目')
+					const jk = trackToJk(cur)
+					lib.toggleLove(jk)
+					logInfo('[dev] toggleLove', String(jk.name ?? ''), 'inLove=', lib.isInLoveList(jk), 'count=', lib.getLoveList().length)
 				} else if (action === 'resume') {
 					// 继续播放当前曲目（验证「保存播放进度」恢复位置）
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
@@ -1135,7 +1098,6 @@ const SettingsSectionScreen = () => {
 		if (section === 'search') return <SearchSection />
 		if (section === 'ocd') return <OdcSection />
 		if (section === 'other') return <OtherSection />
-		if (section === 'network') return <NetworkSection />
 		return null
 	})()
 

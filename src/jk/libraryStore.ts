@@ -4,6 +4,7 @@ import { logInfo } from '@/helpers/logger'
  * 持久化到 MMKV，键名与桌面版语义一致。
  */
 import getOrCreateMMKV from '@/store/getOrCreateMMKV'
+import { GlobalState } from '@/utils/stateMapper'
 import type { JKMusic, JKSource } from './musicSdk'
 
 export const LIST_IDS = {
@@ -53,6 +54,10 @@ const writeJSON = (key: string, value: unknown) => {
 	store.set(key, JSON.stringify(value))
 }
 
+/** 列表数据版本号：写入后递增，UI 用它触发重渲染（收藏图标等） */
+export const libraryVersionStore = new GlobalState<number>(0)
+const bumpLibraryVersion = () => libraryVersionStore.setValue(libraryVersionStore.getValue() + 1)
+
 const state = {
 	defaultList: readJSON<JKMusic[]>(`${KEY_LISTS}:default`, []),
 	loveList: readJSON<JKMusic[]>(`${KEY_LISTS}:love`, []),
@@ -67,16 +72,19 @@ export const getDislikeRules = () => state.dislike
 
 export const setDefaultList = (list: JKMusic[]) => {
 	state.defaultList = list
+	bumpLibraryVersion()
 	writeJSON(`${KEY_LISTS}:default`, list)
 }
 
 export const setLoveList = (list: JKMusic[]) => {
 	state.loveList = list
+	bumpLibraryVersion()
 	writeJSON(`${KEY_LISTS}:love`, list)
 }
 
 export const setUserLists = (lists: JkUserList[]) => {
 	state.userLists = lists
+	bumpLibraryVersion()
 	writeJSON(`${KEY_LISTS}:user`, lists)
 }
 

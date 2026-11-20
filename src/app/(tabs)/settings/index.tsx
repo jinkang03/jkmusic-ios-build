@@ -22,8 +22,6 @@ const SettingsScreen = () => {
 	const selectedSource = musicApiSelectedStore.useValue()
 	const sourceLabel = selectedSource?.name ? String(selectedSource.name) : tr('未导入', 'Not imported')
 	const mainSections = SETTINGS_SECTIONS.filter(section => !section.desktopOnly)
-	const desktopSections = SETTINGS_SECTIONS.filter(section => section.desktopOnly)
-	const [desktopOpen, setDesktopOpen] = React.useState(false)
 
 	return (
 		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
@@ -71,34 +69,6 @@ const SettingsScreen = () => {
 						</View>
 					</Pressable>
 				))}
-				{/* 桌面专属：折叠，避免首屏出现不能用的项 */}
-				<Pressable
-					onPress={() => setDesktopOpen(v => !v)}
-					style={({ pressed }) => ({
-						flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-						paddingHorizontal: macSpace.pageX, height: 44,
-						backgroundColor: pressed ? c.fillSubtle : 'transparent',
-					})}
-				>
-					<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('桌面专属（仅保存）', 'Desktop only (saved)')}</Text>
-					<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{desktopOpen ? tr('收起', 'Hide') : tr('展开', 'Show')}</Text>
-				</Pressable>
-				{desktopOpen ? desktopSections.map(section => (
-					<Pressable
-						key={section.id}
-						onPress={() => router.push(`/settingSection/${section.id}` as any)}
-						style={({ pressed }) => ({
-							flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-							paddingHorizontal: macSpace.pageX, height: 48,
-							backgroundColor: pressed ? c.fillSubtle : 'transparent',
-							borderBottomWidth: 0.5, borderBottomColor: c.divider,
-						})}
-					>
-						<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{tr(section.zh, section.en)}</Text>
-						<Text style={{ color: c.textMuted, fontSize: macFont.body }}>›</Text>
-					</Pressable>
-				)) : null}
-
 			</ScrollView>
 		</View>
 	)
