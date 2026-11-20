@@ -49,18 +49,8 @@ const preloadCache = new Map<string, string>()
 const CURRENT_SOURCE_REQUEST_TIMEOUT_MS = 5000
 const PRELOAD_SOURCE_REQUEST_TIMEOUT_MS = 12000
 
-/**
- * 跨源兜底：某个源整体取流失败（脚本后端停服、版权限制）时，
- * 用「歌名 + 歌手」去其它可用源找同一首并取流，保证点歌能出声。
- * 结果按歌曲缓存 5 分钟（URL 有时效，不宜久留）。
- */
-const ALT_SOURCES: Array<{ id: 'kw' | 'wy' | 'tx', label: string }> = [
-	{ id: 'kw', label: '酷我' },
-	{ id: 'wy', label: '网易云' },
-	{ id: 'tx', label: 'QQ音乐' },
-]
 const ALT_CACHE_TTL_MS = 5 * 60 * 1000
-const altCache = new Map<string, { url: string, source: string, label: string, title: string, at: number }>()
+const altCache = new Map<string, { url: string, source: string, label: string, title: string, id?: string, at: number }>()
 
 const readFromSource = (m: any) => String(
 	m?.platform ?? m?.source ?? m?.lxMusic?.source ?? '',
@@ -71,6 +61,31 @@ const normalizeMatchKey = (value: any) =>
 
 export const clearAltCache = () => { altCache.clear() }
 export const clearPreloadCache = () => { preloadCache.clear() }
+
+/**
+ * 跨源兜底：当前平台取流失败时，把「歌名 + 歌手」拿到**所有其它平台**找同曲，
+ * 每个候选曲目都用「脚本池」取流（同一平台会并发尝试所有支持它的脚本），
+ * 全部尝试完仍失败才返回 null（由调用方暂停并提示）。
+ */
+/** 全部平台：兜底时逐个平台找同曲（顺序只影响日志，实际并发竞速） */
+const ALL_PLATFORMS: Array<{ id: 'kw' | 'kg' | 'tx' | 'wy' | 'mg', label: string }> = [
+	{ id: 'kw', label: '酷我' },
+	{ id: 'kg', label: '酷狗' },
+	{ id: 'tx', label: 'QQ音乐' },
+	{ id: 'wy', label: '网易云' },
+	{ id: 'mg', label: '咪咕' },
+]
+
+type AltCandidate = {
+	platform: string
+	id: string
+	name: string
+	singer: string
+	meta?: Record<string, any>
+	fromIndex: boolean
+}
+
+const platformLabel = (id: string) => ALL_PLATFORMS.find(p => p.id === id)?.label ?? id
 
 const findPlayableAlt = async (
 	musicItem: IMusic.IMusicItem,
@@ -87,77 +102,119 @@ const findPlayableAlt = async (
 		return cached
 	}
 
-	const api: any = musicApiSelectedStore.getValue()
-	if (!api?.getMusicUrl) return null
-	const { searchBySource } = await import('@/jk/musicSdk')
-	const { jkToTrack } = await import('@/jk/adapt')
+	const currentPlatform = readFromSource(musicItem)
+	const platforms = ALL_PLATFORMS.filter(p => p.id !== currentPlatform)
+	if (!platforms.length) return null
 
-	// 先查同曲多源索引：命中就直接取流，省掉实时搜索的 3-10 秒
-	try {
-		const idx = await import('@/jk/crossSourceIndex')
-		const hits = idx.lookup(title, artist).filter(e => e.source !== musicItem?.platform)
-		if (hits.length) {
-			const tries = hits.map(e => (async() => {
-				const url = await Promise.race([
-					api.getMusicUrl(title, artist, e.id, quality, { requestType }, e.source, { title, artist, id: e.id, platform: e.source }),
-					createTimeoutPromise(6000),
-				]) as string
-				if (typeof url !== 'string' || !/^https?:/.test(url)) throw new Error(`${e.source} 无地址`)
-				logInfo('[resolve] cross-source index-hit', e.source, title)
-				return { url, source: e.source as any, id: String(e.id ?? ''), label: String(e.source), title, at: Date.now() }
-			})().catch(() => { throw new Error('miss') }))
-			try {
-				const found = await Promise.any(tries)
-				altCache.set(cacheKey, found)
-				const fromSrc = readFromSource(musicItem)
-				logInfo('[resolve] switched', fromSrc, '->', found.source, title)
-				return found
-			} catch { /* 索引全部失败，走实时搜索 */ }
-		} else {
-			logInfo('[resolve] cross-source index miss', title)
-		}
-	} catch { /* ignore */ }
+	const { getPooledMusicUrl } = await import('@/jk/sourceRegistry')
+	const { searchBySource } = await import('@/jk/musicSdk')
 
 	const targetTitle = normalizeMatchKey(title)
 	const targetArtist = normalizeMatchKey(artist)
+	const matches = (item: any) => {
+		const itemTitle = normalizeMatchKey(item?.name)
+		const itemArtist = normalizeMatchKey(item?.singer)
+		const titleOk = !!itemTitle && (itemTitle.includes(targetTitle) || targetTitle.includes(itemTitle))
+		const artistOk = !targetArtist || !itemArtist || itemArtist.includes(targetArtist) || targetArtist.includes(itemArtist)
+		return titleOk && artistOk
+	}
 
-	// 并行找源：三个候选源同时搜索+取流，哪个先给出可用地址就用哪个。
-	// 串行时「kw 搜索超时 6s」会直接拖慢整个兜底，用户点歌要等 30s。
-	const attempts = ALT_SOURCES
-		.filter(alt => alt.id !== musicItem?.platform)
-		.map(alt => (async() => {
-			const list = await Promise.race([
-				searchBySource(alt.id, `${title} ${artist}`.trim(), 1, 5),
-				createTimeoutPromise(6000),
-			]) as any[]
-			const hit = (list || []).find((item: any) => {
-				const itemTitle = normalizeMatchKey(item?.name)
-				const itemArtist = normalizeMatchKey(item?.singer)
-				const titleOk = !!itemTitle && (itemTitle.includes(targetTitle) || targetTitle.includes(itemTitle))
-				const artistOk = !targetArtist || !itemArtist || itemArtist.includes(targetArtist) || targetArtist.includes(itemArtist)
-				return titleOk && artistOk
+	// 1) 候选收集：同曲多源索引（快） + 其它平台实时搜索（并行）
+	const candidates: AltCandidate[] = []
+	try {
+		const idx = await import('@/jk/crossSourceIndex')
+		for (const e of idx.lookup(title, artist)) {
+			if (!e?.id || e.source === currentPlatform) continue
+			if (!platforms.some(p => p.id === e.source)) continue
+			candidates.push({
+				platform: String(e.source),
+				id: String(e.id),
+				name: String(e.name || title),
+				singer: String(e.singer || artist),
+				meta: { songmid: String(e.id), id: String(e.id), source: e.source, hash: String(e.id) },
+				fromIndex: true,
 			})
-			if (!hit) throw new Error(`${alt.id} 无匹配`)
-			const track: any = jkToTrack(hit)
-			const url = await Promise.race([
-				api.getMusicUrl(track.title, track.artist, track.id, quality, { requestType }, alt.id, track),
-				createTimeoutPromise(8000),
-			]) as string
-			if (typeof url !== 'string' || !/^https?:/.test(url)) throw new Error(`${alt.id} 无地址`)
-			return { url, source: alt.id, id: String(track.id ?? ''), label: alt.label, title: String(hit.name ?? ''), at: Date.now() }
-		})().catch((err) => {
-			logInfo('[resolve] cross-source miss', alt.id, String((err as any)?.message ?? err).slice(0, 80))
-			throw err
-		}))
+		}
+		if (candidates.length) logInfo('[resolve] matrix 索引候选', candidates.length)
+	} catch { /* ignore */ }
+
+	const searched = await Promise.allSettled(
+		platforms.map(async(p) => {
+			const list = await Promise.race([
+				searchBySource(p.id as any, `${title} ${artist}`.trim(), 1, 5),
+				createTimeoutPromise(5000),
+			]) as any[]
+			const hit = (list ?? []).find(matches)
+			if (!hit) throw new Error('no match')
+			return {
+				platform: p.id,
+				id: String(hit.id),
+				name: String(hit.name ?? title),
+				singer: String(hit.singer ?? artist),
+				meta: hit,
+				fromIndex: false,
+			} as AltCandidate
+		}),
+	)
+	for (const r of searched) {
+		if (r.status === 'fulfilled') candidates.push(r.value)
+	}
+
+	// 同平台同 id 去重；索引命中优先
+	const seen = new Set<string>()
+	const uniq = candidates.filter(c => {
+		const key = `${c.platform}:${c.id}`
+		if (seen.has(key)) return false
+		seen.add(key)
+		return true
+	})
+	if (!uniq.length) {
+		logInfo('[resolve] matrix 无可用候选 title=', title, String(artist ?? ''))
+		return null
+	}
+	logInfo('[resolve] matrix 候选平台=', uniq.map(c => `${c.platform}${c.fromIndex ? '(idx)' : ''}`).join('/'))
+
+	// 2) 并发竞速：每个候选曲目 × 音质降级（当前 → 320k → 128k），
+	//    取流走脚本池（同一平台会并发尝试所有支持它的脚本）。
+	const qualities = Array.from(new Set([String(quality || '128k'), '320k', '128k']))
+	const attempts = uniq.map(c => (async() => {
+		for (const q of qualities) {
+			try {
+				const url = await Promise.race([
+					getPooledMusicUrl(
+						c.name,
+						c.singer,
+						c.id,
+						q,
+						c.platform,
+						{ ...(c.meta ?? {}), songmid: c.id, id: c.id, source: c.platform, hash: c.id },
+					),
+					createTimeoutPromise(6000),
+				]) as string
+				if (typeof url === 'string' && /^https?:/.test(url)) {
+					logInfo(`[resolve] matrix ok platform=${c.platform} quality=${q} id=${c.id} from=${c.fromIndex ? 'index' : 'search'}`)
+					return {
+						url,
+						source: c.platform as any,
+						id: c.id,
+						label: platformLabel(c.platform),
+						title: c.name,
+						at: Date.now(),
+					}
+				}
+			} catch { /* 换下一档音质 */ }
+		}
+		logInfo(`[resolve] matrix fail platform=${c.platform} id=${c.id}`)
+		throw new Error('miss')
+	})().catch((err) => { throw err }))
 
 	try {
 		const found = await Promise.any(attempts)
 		altCache.set(cacheKey, found)
-		const fromSrc2 = readFromSource(musicItem)
-		logInfo('[resolve] switched', fromSrc2, '->', found.source, title)
-		logInfo('[resolve] cross-source', found.source, found.title, 'from', fromSrc2)
+		logInfo('[resolve] switched', currentPlatform, '->', found.source, title)
 		return found
 	} catch {
+		logInfo('[resolve] matrix 所有平台均失败 title=', title, String(artist ?? ''), 'platforms=', platforms.map(p => p.id).join('/'))
 		return null
 	}
 }
@@ -216,6 +273,39 @@ export const preloadSource = async (item: IMusic.IMusicItem): Promise<void> => {
 	}
 }
 
+/**
+ * 缓存命中前的「片段校验」：只有 60 秒试听片段的缓存必须删掉重取，
+ * 否则片段播完会被当成正常结束自动切歌（歌单连跳的根源之一）。
+ */
+const isTruncatedCachedFile = async(
+	uri: string,
+	musicItem: IMusic.IMusicItem,
+	localPath: string,
+): Promise<boolean> => {
+	try {
+		const { parseIntervalSeconds, intervalOf, readAudioDuration, isTruncatedAudio, sizeHintBytes, isTruncatedBySize } = await import('./audioDuration')
+		const actual = await readAudioDuration(uri)
+		const expected = parseIntervalSeconds(intervalOf(musicItem))
+		const FS0 = await import('expo-file-system/legacy')
+		const info0: any = await (FS0 as any).getInfoAsync(uri)
+		const bytes = Number(info0?.size ?? 0)
+		const hint = sizeHintBytes(musicItem as any)
+		const truncated = isTruncatedAudio(actual, expected) || isTruncatedBySize(bytes, hint)
+		if (!truncated) return false
+		logError('[jk/play] 缓存为试听片段，删除重取:', uri.slice(0, 120),
+			`actual=${actual ? actual.toFixed(0) + 's' : '?'}/${expected}s`, `size=${bytes}/${hint || '-'}`)
+		const FS = await import('expo-file-system/legacy')
+		await (FS as any).deleteAsync(uri, { idempotent: true }).catch(() => undefined)
+		try {
+			const { removeCacheIndexEntry } = await import('./CacheManager')
+			await removeCacheIndexEntry(String(localPath).split('/').pop() ?? '')
+		} catch { /* ignore */ }
+		return true
+	} catch {
+		return false
+	}
+}
+
 const setQuality = (quality: IMusic.IQualityKey) => {
 	qualityStore.setValue(quality)
 	PersistStatus.set('music.quality', quality)
@@ -252,7 +342,10 @@ export const resolveSource = async (
 			const FS = await import('expo-file-system/legacy')
 			const info: any = await FS.getInfoAsync(uri)
 			const size = Number(info?.size ?? 0)
-			if (info?.exists && size > 0) {
+			const truncatedCache = info?.exists && size > 0
+				? await isTruncatedCachedFile(uri, musicItem, localPath)
+				: false
+			if (info?.exists && size > 0 && !truncatedCache) {
 				preloadCache.delete(preloadKey)
 				logInfo('使用缓存的音频路径播放:', uri, `size=${size}`)
 				logInfo('[jk/play] resolved url = file:', uri.slice(0, 160), `size=${size}`)
@@ -283,12 +376,20 @@ export const resolveSource = async (
 		}
 	}
 
-	// 只在本地与磁盘缓存都未命中时，才复用预加载的远端音源
+	// 只在本地与磁盘缓存都未命中时，才复用预加载的远端音源。
+	// 注意：本环境 AVPlayer 放不了网络流，current 请求拿到预取地址也要先下载，
+	// 不能直接把 http 地址交给播放器（否则必然 PlaybackError → 被判失败）。
+	let preloadedUrl: string | null = null
 	const preloaded = getPreloadedUrl(musicItem)
 	if (preloaded) {
-		logInfo(`[sourceResolver][${requestType}] 使用预加载的音源:`, preloaded)
 		preloadCache.delete(preloadKey)
-		return { url: preloaded, wasCached: false }
+		if (isCurrentSourceRequest(requestType)) {
+			preloadedUrl = preloaded
+			logInfo('[sourceResolver] 使用预取地址（将先下载再播放）:', String(preloaded).slice(0, 100))
+		} else {
+			logInfo(`[sourceResolver][${requestType}] 使用预加载的音源:`, preloaded)
+			return { url: preloaded, wasCached: false }
+		}
 	}
 
 	if (!musicItem.url || musicItem.url === 'Unknown' || musicItem.url.includes('fake')) {
@@ -366,6 +467,10 @@ export const resolveSource = async (
 			}
 
 			let switchedAlt: { source: string, id: string } | null = null
+			if (!resp_url && preloadedUrl) {
+				resp_url = preloadedUrl
+				logInfo('[jk/play] 预取地址可用，跳过重复取流，直接下载')
+			}
 			if (!resp_url) {
 				// 主源整条链路失败：换其它源播同一首（跨源兜底），避免点了没声音
 				const alt = await findPlayableAlt(musicItem, String(qualityStore.getValue() ?? '128k'), requestType)
@@ -516,12 +621,11 @@ export const resolveSource = async (
 					logError('[jk/play] 换源重下仍失败', String((retryErr as any)?.message ?? retryErr))
 				}
 			}
-			// 302 → 解析成最终地址；否则 AVPlayer 可能拿不到音频
-			resp_url = await followRedirect(resp_url as string)
-			if (isCurrentSourceRequest(requestType)) {
-				nowApiState.setValue('正常')
-			}
-			return { url: resp_url, wasCached: false }
+			// 走到这里 = 已经取到地址，但「下载失败 + 换源重下失败」。
+			// 本环境 AVPlayer 放不了网络流，回退远程 URL 等于判死，
+			// 而且会触发播放错误 → 自动下一首（连跳）。直接判本曲不可播。
+			logError('[jk/play] 下载与换源重下均失败，判定本曲不可播')
+			throw new Error('SOURCE_UNAVAILABLE')
 		} catch (error) {
 			if (isCurrentSourceRequest(requestType)) {
 				nowApiState.setValue('异常')
@@ -529,11 +633,9 @@ export const resolveSource = async (
 			const errMsg = error instanceof Error ? error.message : String(error)
 			if (isCurrentSourceRequest(requestType)) {
 				logError(`${logPrefix} 获取音乐 URL 失败: ${errMsg}`)
-				const errorMessage =
-					errMsg === '请求超时'
-						? '获取音乐超时，请稍后重试。'
-						: errMsg || '获取音乐失败，请稍后重试。'
-				showToast(errorMessage, '', 'error')
+				// 交给 play()：暂停当前曲目并提示「所有平台均不可用，点击播放重试」，
+				// 不在这里回退假音频（那会让播放器停在静音文件上，用户以为"没反应"）
+				throw new Error(errMsg === 'SOURCE_UNAVAILABLE' ? errMsg : 'SOURCE_UNAVAILABLE')
 			}
 			return { url: fakeAudioMp3Uri, wasCached: false }
 		}

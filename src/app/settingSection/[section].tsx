@@ -183,7 +183,12 @@ const PlayerSection = () => {
 			<SettingRow label={tr('音量', 'Volume')}><SettingSlider value={Number(volume)} min={0} max={1} step={0.01} onChange={setVolume} format={v => `${Math.round(v * 100)}%`} /></SettingRow>
 			<SettingRow label={tr('播放倍速', 'Playback Speed')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
 			<SettingRow label={tr('保存播放进度', 'Save Playback Position')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={saveTime} onChange={setSaveTime} /></SettingRow>
-			<SettingRow label={tr('自动跳过错误曲目', 'Auto-skip Failed Tracks')}><SettingSwitch value={autoSkip} onChange={setAutoSkip} /></SettingRow>
+			<SettingRow
+				label={tr('自动跳过错误曲目', 'Auto-skip Failed Tracks')}
+				hint={tr('默认关闭：失败会暂停并提示，点播放重试', 'Off by default: a failure pauses and waits for retry')}
+			>
+				<SettingSwitch value={autoSkip} onChange={setAutoSkip} />
+			</SettingRow>
 			<SettingRow label={tr('播放结束停止', 'Stop When Finished')}><SettingSwitch value={stopEnd} onChange={setStopEnd} /></SettingRow>
 			<SettingRow label={tr('显示歌词翻译', 'Show Lyric Translation')}><SettingSwitch value={showTrans} onChange={setShowTrans} /></SettingRow>
 			<SettingRow label={tr('显示歌词音译', 'Show Lyric Romanization')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={showRoma} onChange={setShowRoma} /></SettingRow>
@@ -929,6 +934,25 @@ const SettingsSectionScreen = () => {
 					if (!tracks.length) throw new Error('歌单为空')
 					const target = tracks[Math.min(idx, tracks.length - 1)]
 					logInfo(`[jk/play] playnow src=${src} idx=${idx} title=${target?.title ?? ''}`)
+					await (tp as any).playWithReplacePlayList(target, tracks)
+				} else if (action === 'playUserList') {
+					// 从「我的列表」里的某个歌单播放（诊断连跳问题用）
+					const name = String((params as any).name ?? '')
+					const idx = Math.max(0, Number((params as any).index ?? 0) || 0)
+					const lib = await import('@/jk/libraryStore')
+					const { jkToTrack } = await import('@/jk/adapt')
+					const { default: tp } = await import('@/helpers/trackPlayerIndex')
+					const all: any[] = [
+						{ name: '试听列表', list: lib.getDefaultList() },
+						{ name: '我的收藏', list: lib.getLoveList() },
+						...lib.getUserLists().map((l: any) => ({ name: l.name, list: l.list })),
+					]
+					const hit = all.find(l => l.name === name) ?? all.find(l => l.name.includes(name))
+					if (!hit) throw new Error(`找不到列表: ${name}`)
+					const tracks: any[] = (hit.list ?? []).map((m: any) => jkToTrack(m))
+					if (!tracks.length) throw new Error('列表为空')
+					const target = tracks[Math.min(idx, tracks.length - 1)]
+					logInfo(`[dev] playUserList name=${hit.name} idx=${idx} total=${tracks.length} title=${target?.title ?? ''}`)
 					await (tp as any).playWithReplacePlayList(target, tracks)
 				} else if (action === 'setdev') {
 					const k = String((params as any).key ?? '')

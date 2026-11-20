@@ -1,4 +1,5 @@
 import { logError, logInfo } from '@/helpers/logger'
+import { parseIntervalSeconds, intervalOf, readAudioDuration, isTruncatedAudio, sizeHintBytes, isTruncatedBySize } from './audioDuration'
 import { importedLocalMusicStore, qualityStore } from './PlayerStore'
 import PersistStatus from '@/store/PersistStatus'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -115,6 +116,20 @@ export const downloadToCache = async (
 		})
 		try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
 		await FileSystem.moveAsync({ from: partUri, to: finalUri })
+		// 完整性校验：脚本可能只返回「试听片段」（实测 60s 片段会被当完整曲目播放，
+		// 片段播完就当正常结束自动切歌 → 歌单连跳）。片段直接删掉并报错，交给换源。
+		const expectedSeconds = parseIntervalSeconds(intervalOf(musicItem))
+		const actualSeconds = await readAudioDuration(finalUri)
+		const fileInfo: any = await FileSystem.getInfoAsync(finalUri)
+		const actualBytes = Number(fileInfo?.size ?? 0)
+		const hintBytes = sizeHintBytes(musicItem as any, String(opts?.quality ?? (globalThis as any).__jkActualQuality ?? '') || undefined)
+		if (isTruncatedAudio(actualSeconds, expectedSeconds) || isTruncatedBySize(actualBytes, hintBytes)) {
+			try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
+			logError(`[cache] 试听片段已丢弃: ${String((musicItem as any).title ?? '')}`,
+				`actual=${actualSeconds ? actualSeconds.toFixed(0) + 's' : '?'}/${expectedSeconds}s`,
+				`size=${actualBytes}/${hintBytes || '-'}`)
+			throw new Error(`TRUNCATED_AUDIO:${actualSeconds?.toFixed(0) ?? '?'}/${expectedSeconds}`)
+		}
 		// 写索引：供下载页显示歌名
 		try {
 			const st: any = await FileSystem.getInfoAsync(finalUri)

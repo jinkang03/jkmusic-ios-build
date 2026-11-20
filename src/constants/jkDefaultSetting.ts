@@ -53,7 +53,7 @@ export const jkDefaultSetting = {
 	"player.audioVisualization": false,
 	"player.waitPlayEndStop": true,
 	"player.waitPlayEndStopTime": "",
-	"player.autoSkipOnError": true,
+	"player.autoSkipOnError": false,
 	"player.isAutoCleanPlayedList": false,
 	"player.soundEffect.convolution.fileName": "",
 	"player.soundEffect.convolution.mainGain": 10,

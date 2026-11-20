@@ -340,6 +340,16 @@ const getFakeNextTrack = (): Track => {
 	}
 }
 
+/**
+ * 所有平台都不可用：停住当前曲目并提示，等用户点播放重试。
+ * 与 mac 一致——失败不自动切歌，避免一次失败连锁跳掉半张歌单。
+ */
+async function haltWithNotice(message = '所有平台均不可用，点击播放重试') {
+	retireTrackSkip()
+	try { await ReactNativeTrackPlayer.pause() } catch { /* ignore */ }
+	showToast('播放失败', message, 'error')
+}
+
 /** 播放失败时的情况 */
 async function failToPlay() {
 	// 每次进入失败恢复都计一次；连续 3 次由 skipToNext 的硬保护拦下
@@ -360,16 +370,15 @@ async function failToPlay() {
 	if (revision !== controlRevision || !isCurrentMusic(failedMusic) ||
 		sourceToken !== trackSourceLoadingStore.getValue() ||
 		playbackIntentStore.getValue() !== 'play') return
-	// 设置里「自动跳过错误曲目」关闭时：停下来提示，不再连续跳
-	let autoSkip = true
+	// 默认不自动跳歌（对齐 mac）：只有用户显式开启 player.autoSkipOnError 才跳
+	let autoSkip = false
 	try {
 		const { getSetting } = await import('@/jk/settingsStore')
-		autoSkip = getSetting<boolean>('player.autoSkipOnError', true) !== false
-	} catch { /* 默认 true */ }
+		autoSkip = getSetting<boolean>('player.autoSkipOnError', false) === true
+	} catch { /* 默认 false */ }
 	if (!autoSkip) {
-		logInfo('[jk/play] autoSkipOnError=false，停在当前曲目')
-		showToast('播放失败', '已按设置停止自动切歌', 'error')
-		try { await ReactNativeTrackPlayer.pause() } catch { /* ignore */ }
+		logInfo('[jk/play] autoSkipOnError=false，停在当前曲目（可点播放重试）')
+		await haltWithNotice('播放失败，点击播放重试')
 		return
 	}
 	await skipToNext()
@@ -1117,9 +1126,10 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		const message = e?.message
 		if (message === PlayFailReason.FORBID_CELLUAR_NETWORK_PLAY) {
 			logInfo('移动网络')
-		} else if (message === PlayFailReason.INVALID_SOURCE) {
-			logError('音源为空，播放失败')
-			await failToPlay()
+		} else if (message === PlayFailReason.INVALID_SOURCE || message === 'SOURCE_UNAVAILABLE') {
+			// 取流/下载全部失败（所有平台 × 所有脚本都试过）：暂停并提示，不连跳
+			logError('[jk/play] 所有平台均不可用:', message)
+			await haltWithNotice()
 		} else if (message === PlayFailReason.PLAY_LIST_IS_EMPTY) {
 			// empty queue
 		} else {

@@ -62,6 +62,11 @@ export const ensureDefaults = () => {
 		setSetting(key, value)
 		written++
 	}
+	// 1.2.7：播放失败不再自动跳歌（对齐 mac：全部平台都不可用就暂停提示，点播放重试）
+	if (getSetting<boolean>('migrated.autoSkipOffV1', false) !== true) {
+		setSetting('player.autoSkipOnError', false)
+		setSetting('migrated.autoSkipOffV1', true)
+	}
 	if (written) logError(`[jk/settings] 写入默认值 ${written} 项`)
 	return written
 }
