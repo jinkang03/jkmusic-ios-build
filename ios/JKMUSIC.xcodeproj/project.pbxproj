@@ -564,7 +564,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = JKMUSIC/JKMUSIC.entitlements;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -577,7 +577,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.4;
-				MARKETING_VERSION = 1.3.6;
+				MARKETING_VERSION = 1.3.7;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -601,7 +601,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = JKMUSIC/JKMUSIC.entitlements;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				INFOPLIST_FILE = JKMUSIC/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -609,7 +609,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.4;
-				MARKETING_VERSION = 1.3.6;
+				MARKETING_VERSION = 1.3.7;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -766,7 +766,7 @@
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JKMUSICWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -774,7 +774,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.6;
+				MARKETING_VERSION = 1.3.7;
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jkmusic.ios.JKMUSICWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -790,7 +790,7 @@
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = JKMUSICWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -798,7 +798,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.6;
+				MARKETING_VERSION = 1.3.7;
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jkmusic.ios.JKMUSICWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -815,7 +815,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ShareExtension/ShareExtension-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -823,7 +823,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.6;
+				MARKETING_VERSION = 1.3.7;
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jkmusic.ios.share-extension";
 				PRODUCT_NAME = ShareExtension;
@@ -840,7 +840,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -852,7 +852,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.6;
+				MARKETING_VERSION = 1.3.7;
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jkmusic.ios.share-extension";
 				PRODUCT_NAME = ShareExtension;
