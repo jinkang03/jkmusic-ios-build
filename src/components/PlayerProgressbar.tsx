@@ -52,12 +52,24 @@ export const PlayerProgressBar = React.memo(({
 		isSliding.value = true
 	}, [])
 
+	// 拖动中把预览位置广播给歌词（松手才真正 seek）
+	const publishPreview = useCallback((ratio: number) => {
+		if (duration > 0) {
+			void import('@/player/seekPreview').then(m => m.setSeekPreview(ratio * duration)).catch(() => undefined)
+		}
+	}, [duration])
+
 	const handleSlidingComplete = useCallback((value: number) => {
 		isSliding.value = false
 		const clampedValue = Math.min(Math.max(value, 0), 1)
 		const newPosition = clampedValue * duration
 		progress.value = clampedValue
-		myTrackPlayer.seekTo(newPosition)
+		// seek 完成后再清预览位置：否则会闪回旧位置一帧
+		void Promise.resolve(myTrackPlayer.seekTo(newPosition))
+			.catch(() => undefined)
+			.then(() => import('@/player/seekPreview'))
+			.then(m => m.setSeekPreview(null))
+			.catch(() => undefined)
 		if (onSeek) {
 			onSeek(newPosition)
 		}
@@ -65,7 +77,8 @@ export const PlayerProgressBar = React.memo(({
 
 	const handleValueChange = useCallback((value: number) => {
 		progress.value = value
-	}, [progress])
+		publishPreview(value)
+	}, [progress, publishPreview])
 
 	const renderThumb = useCallback(() => <AnimatedThumb isSliding={isSliding} tint={mac.primary} />, [isSliding, mac.primary])
 	const renderBubble = useCallback(() => null, [])

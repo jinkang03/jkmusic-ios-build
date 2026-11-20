@@ -1,6 +1,8 @@
 import { ThemeColors } from '@/constants/tokens'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import rpx from '@/utils/rpx'
+import KaraokeFillText from '@/components/mac/KaraokeFillText'
+import { karaokeLineProgress } from '@/jk/karaoke'
 import * as Haptics from 'expo-haptics'
 import React, { memo, useCallback, useMemo, useRef } from 'react'
 import { Animated, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native'
@@ -18,7 +20,7 @@ interface ILyricItemComponentProps {
 	onPress: () => Promise<void>
 	onLayout?: (index: number, height: number) => void
 	/** 当前行的逐字分段（绝对毫秒 start），为空时回退整行高亮 */
-	karaokeSegs?: Array<{ start: number, text: string }>
+	karaokeSegs?: Array<{ start: number, dur?: number, text: string }>
 	/** 当前播放位置（毫秒），用于判断已唱/未唱 */
 	karaokeNowMs?: number
 	/** 翻译行（设置里开启「歌词翻译」时传入） */
@@ -69,23 +71,26 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 						},
 					]}
 				/>
-				{hasKaraoke ? (
-					// 逐字：单个 Text 内嵌多个 Text，颜色才能按分段生效（View+row 不行）
-					<Text
+				{highlight ? (
+					// 当前行：平滑填充（字内插值 + 120ms 宽度补间），比「逐字跳变」顺滑
+					<View
 						onLayout={({ nativeEvent }) => {
 							if (index !== undefined) onLayout?.(index, nativeEvent.layout.height)
 						}}
-						style={[lyricStyles.item, lyricStyles.highlightItem, { fontSize: fontSize || rpx(28), color: colors.primary }]}
+						style={[lyricStyles.item, { paddingVertical: rpx(10) }]}
 					>
-						{karaokeSegs!.map((seg, si) => (
-							<Text
-								key={`k${si}`}
-								style={{ color: (karaokeNowMs ?? 0) >= seg.start ? colors.primary : colors.textMuted }}
-							>
-								{seg.text}
-							</Text>
-						))}
-					</Text>
+						<KaraokeFillText
+							text={String(text ?? '')}
+							progress={karaokeSegs?.length
+								? karaokeLineProgress(karaokeSegs, karaokeNowMs ?? 0)
+								: 0}
+							activeColor={colors.primary}
+							inactiveColor={colors.text}
+							numberOfLines={2}
+							// 当前行稍微放大（mac 风格），填充效果更明显
+							textStyle={{ fontSize: Math.round((fontSize || rpx(28)) * 1.08), textAlign: 'center', fontWeight: '600' }}
+						/>
+					</View>
 				) : (
 					<Text
 						onLayout={({ nativeEvent }) => {
@@ -114,9 +119,25 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 					</Text>
 				)}
 				{translation ? (
-					<Text style={[lyricStyles.translation, { fontSize: Math.max(12, (fontSize || rpx(28)) - 6), opacity: highlight ? 0.7 : fadeOpacity * 0.7 }]}>
-						{translation}
-					</Text>
+					highlight ? (
+						<View style={{ paddingHorizontal: rpx(64) }}>
+							<KaraokeFillText
+								text={translation}
+								progress={karaokeSegs?.length
+									? karaokeLineProgress(karaokeSegs, karaokeNowMs ?? 0)
+									: 0}
+								activeColor={colors.primary}
+								inactiveColor={colors.text}
+								numberOfLines={1}
+								textStyle={{ fontSize: Math.max(12, (fontSize || rpx(28)) - 6), textAlign: 'center' }}
+								opacity={0.75}
+							/>
+						</View>
+					) : (
+						<Text style={[lyricStyles.translation, { fontSize: Math.max(12, (fontSize || rpx(28)) - 6), opacity: fadeOpacity * 0.7 }]}>
+							{translation}
+						</Text>
+					)
 				) : null}
 			</View>
 		</TouchableWithoutFeedback>

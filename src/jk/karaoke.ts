@@ -56,6 +56,29 @@ export const buildKaraokeMap = (lxlyric: string): Map<number, KaraokeSeg[]> => {
 }
 
 /** 允许 ±tolerance 的时间匹配（行时间可能有毫秒级误差） */
+/**
+ * 当前行的「已唱比例」（0..1），支持字内插值：
+ * 段内按 dur 线性推进，而不是「到点才整字变色」。
+ */
+export const karaokeLineProgress = (
+	segs: Array<{ start: number, dur?: number, text: string }>,
+	nowMs: number,
+): number => {
+	if (!segs?.length) return 0
+	let total = 0
+	let sung = 0
+	segs.forEach((seg, index) => {
+		const len = Math.max(1, String(seg.text ?? '').length)
+		total += len
+		const nextStart = Number(segs[index + 1]?.start ?? 0)
+		// 没有 dur 时用「到下一段开始」兜底，避免退化成整字跳变
+		const dur = Math.max(1, Number(seg.dur) || 0) || Math.max(1, nextStart - Number(seg.start ?? 0)) || 200
+		if (nowMs >= seg.start + dur) sung += len
+		else if (nowMs > seg.start) sung += len * ((nowMs - seg.start) / dur)
+	})
+	return total > 0 ? Math.min(1, sung / total) : 0
+}
+
 export const findKaraokeSegs = (map: Map<number, KaraokeSeg[]>, lineMs: number, tolerance = 30): KaraokeSeg[] => {
 	if (!map.size) return []
 	const direct = map.get(Math.round(lineMs))

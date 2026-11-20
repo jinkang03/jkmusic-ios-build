@@ -5,6 +5,7 @@ import type { FlatList as NativeFlatList, FlatListProps } from 'react-native'
 import { ThemeColors } from '@/constants/tokens'
 import LyricManager from '@/helpers/lyricManager'
 import { nowLxLyricState } from '@/player/PlayerStore'
+import { seekPreviewStore } from '@/player/seekPreview'
 import { buildKaraokeMap, findKaraokeSegs } from '@/jk/karaoke'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { useThemeColors } from '@/hooks/useAppTheme'
@@ -76,8 +77,9 @@ export default function Lyric(_props: IProps) {
 	// 逐字歌词：全屏视图复用 MiniLyric 的 lxlyric 解析（之前只有紧凑视图支持）
 	const lxRaw = nowLxLyricState.useValue()
 	const karaokeMap = useMemo(() => buildKaraokeMap(lxRaw), [lxRaw])
-	const { position } = myTrackPlayer.useProgress(0.1)
-	const karaokeMs = Math.max(0, Number(position ?? 0)) * 1000
+	const { position } = myTrackPlayer.useProgress(0.05)
+	const seekPreview = seekPreviewStore.useValue()
+	const karaokeMs = Math.max(0, Number(seekPreview ?? position ?? 0) * 1000)
 	// 当前行按播放位置二分查找：LyricManager 的 index 依赖 progress 事件，
 	// 暂停/seek 后会滞后，表现为「歌词不滚动 / 逐字不亮」。
 	const activeIndex = useMemo(() => {

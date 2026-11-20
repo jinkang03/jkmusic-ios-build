@@ -16,7 +16,9 @@ import { useAppTheme } from '@/hooks/useAppTheme'
 import { useSetting } from '@/jk/settingsStore'
 import { tr } from '@/utils/i18n'
 import { nowLxLyricState } from '@/player/PlayerStore'
-import { parseKaraokeLine, buildKaraokeMap, findKaraokeSegs } from '@/jk/karaoke'
+import { seekPreviewStore } from '@/player/seekPreview'
+import { parseKaraokeLine, buildKaraokeMap, findKaraokeSegs, karaokeLineProgress } from '@/jk/karaoke'
+import KaraokeFillText from './KaraokeFillText'
 import { fetchLyric } from '@/jk/lyric'
 import { logInfo } from '@/helpers/logger'
 
@@ -62,8 +64,10 @@ const MiniLyric = () => {
 		return best?.lrc || undefined
 	}
 
-	const { position: karaokePos } = myTrackPlayer.useProgress(0.1)
-	const karaokeMs = Math.max(0, Math.round(Number(karaokePos ?? 0) * 1000))
+	const { position: karaokePos } = myTrackPlayer.useProgress(0.05)
+	const seekPreview = seekPreviewStore.useValue()
+	// 拖动进度条时：歌词按预览位置走（松手后才真正 seek），避免「拉完对不上」
+	const karaokeMs = Math.max(0, Math.round(Number(seekPreview ?? karaokePos ?? 0) * 1000))
 	// 当前行改由「播放位置」计算：LyricManager 的 index 依赖 progress 事件，
 	// 暂停/seek 后会冻结在旧值（P127 实测：seek 到 14s 仍停在 line=0）。
 	const currentIndex = useMemo(() => {
@@ -150,6 +154,16 @@ const MiniLyric = () => {
 		[karaokeMap, lyrics, effectiveIndex],
 	)
 
+	// 当前行的已唱比例（0..1）：逐字数据优先，没有就按行时间线性推进
+	const lineProgress = React.useMemo(() => {
+		if (karaokeSegs.length > 0) return karaokeLineProgress(karaokeSegs, karaokeMs)
+		const lineTime = Number(lyrics[effectiveIndex]?.time ?? 0) * 1000
+		const nextTime = Number(lyrics[effectiveIndex + 1]?.time ?? 0) * 1000
+		if (!lineTime) return 0
+		const end = nextTime > lineTime ? nextTime : lineTime + 4000
+		return Math.min(1, Math.max(0, (karaokeMs - lineTime) / Math.max(1, end - lineTime)))
+	}, [karaokeSegs, karaokeMs, lyrics, effectiveIndex])
+
 	// 逐字诊断：仅在当前行变化时打一行（pos 变化不打）
 	const curLine: any = lyrics[effectiveIndex]
 	React.useEffect(() => {
@@ -217,20 +231,18 @@ const MiniLyric = () => {
 						}}
 						style={{ height: ROW_HEIGHT, justifyContent: 'center' }}
 					>
-						{isCurrent && karaokeSegs.length > 0 ? (
-							<Text
-								style={{
+						{isCurrent ? (
+							<KaraokeFillText
+								text={String(item?.lrc ?? item?.content ?? '')}
+								progress={lineProgress}
+								activeColor={c.primary}
+								inactiveColor={c.textMuted}
+								textStyle={{
 									textAlign: 'center',
 									fontSize: zoomActive ? curSize : otherSize,
 									fontWeight: zoomActive ? '700' : '400',
 								}}
-							>
-								{karaokeSegs.map((seg, si) => (
-									<Text key={`k${si}`} style={{ color: karaokeMs >= seg.start ? c.primary : c.textMuted }}>
-										{seg.text}
-									</Text>
-								))}
-							</Text>
+							/>
 						) : (
 							<Text
 								numberOfLines={1}
@@ -246,17 +258,18 @@ const MiniLyric = () => {
 							</Text>
 						)}
 						{isCurrent && findTrans(item?.time) ? (
-							// 翻译用绝对定位：行高固定，滚动动画才不会因翻译行忽高忽低而顿挫
-							<Text
-								numberOfLines={1}
-								style={{
-									position: 'absolute', left: 0, right: 0, top: ROW_HEIGHT - 8,
-									textAlign: 'center', color: c.textMuted,
-									fontSize: Math.max(11, curSize - 5),
-								}}
-							>
-								{findTrans(item?.time)}
-							</Text>
+							// 翻译用绝对定位：行高固定，滚动动画才不会因翻译行忽高忽低而顿挫。
+							// 进度与原文同一时间轴 → 逐字时翻译也一起向右推进。
+							<View style={{ position: 'absolute', left: 0, right: 0, top: ROW_HEIGHT - 8 }}>
+								<KaraokeFillText
+									text={String(findTrans(item?.time) ?? '')}
+									progress={lineProgress}
+									activeColor={c.primary}
+									inactiveColor={c.textMuted}
+									textStyle={{ textAlign: 'center', fontSize: Math.max(11, curSize - 5) }}
+									opacity={0.9}
+								/>
+							</View>
 						) : null}
 					</Pressable>
 				)
