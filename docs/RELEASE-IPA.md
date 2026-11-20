@@ -1,3 +1,47 @@
+## v1.3.9（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.3.9-unsigned-20261120.ipa` |
+| 大小 | 18.x MB |
+| sha256 | `c189264d6e18ac5673998e9012fb0bb9121a64cd44497767e581c6208ede57a0` |
+| 版本 / build | 1.3.9 / 23 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.3.9` |
+
+### 1.3.9 歌词上滑跟手展开 / 全屏下滑收起
+
+结构从「布尔开关 + 条件渲染」改为「两层叠放 + 共享进度 `lyricProgress`」：
+
+- 播放详情层：`opacity = 1 - progress`，上移 26pt
+- 全屏歌词层：`absoluteFill`，`opacity = progress`，从下方滑入（`height * 0.35`）
+- 全部走 reanimated UI 线程动画，拖动不触发 JS 重渲染
+
+手势：
+
+- 播放页迷你歌词区 `Pan`（`activeOffsetY ±14` / `failOffsetX ±26`）驱动 progress：
+  上滑半屏即全展开；松手按 35% 位移或 -800 速度 snap
+- 全屏歌词：列表在顶部继续下拉 > 55pt → 收起（`onScrollEndDrag` 检测 overscroll）
+- 跟手过程中 `scrollEnabled=false`，完成后启用并补一次定位到当前行
+
+**修复的关键 bug**：`scrollToLyricIndex` 的 `useCallback` 依赖数组漏了 `scrollEnabled`，
+闭包一直捕获初始 `false`，导致打开全屏歌词后不自动滚动（日志显示 `activeIndex` 正确但被跳过）。
+
+### 实测
+
+```
+全屏歌词打开 → 自动滚到当前行并高亮（《晴天》「还要多久我才能在你身边」）
+上下渐隐、逐字填充、工具栏全部正常
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.3.9 / build 23 / minos 16.4 / arm64
+jsbundle 6.4M / dev 残留 0 / size 18.x MB
+sha256 c189264d6e18ac5673998e9012fb0bb9121a64cd44497767e581c6208ede57a0
+```
+
 ## v1.3.8（2026-11-20）
 
 | 项 | 值 |
