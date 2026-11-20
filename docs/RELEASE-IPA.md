@@ -1,3 +1,66 @@
+## v1.2.7（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.7-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `49661b17a3573c3a3a54c218d27ddf2026f11929261cbf06a24ba53f6a5334c7` |
+| 版本 / build | 1.2.7 / 11 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.7` |
+
+### 1.2.7 修复：歌单连跳（最高优先级）
+
+**复现证据（模拟器）**
+
+- `tx_000n75W32Y8syY.flac`（Fractals）只有 960KB / 60s，元数据写 270s；
+- 旧逻辑把片段当完整曲目缓存并播放，`[live] start total=60.03`；
+  片段播完 = 正常播放结束 → 自动下一首，**不计入失败保护**，所以能一路跳；
+- 下载失败后回退远程 URL：本环境 AVPlayer 放不了网络流 → PlaybackError → `failToPlay`
+  → `skipToNext`，一首接一首；
+- 跨源兜底只用「当前选中的单个脚本」，单源场景几乎必失败。
+
+**修复**
+
+1. 新增 `src/player/audioDuration.ts`：解析 flac / mp3 / m4a 本地文件时长；
+   并配合元数据 `qualitys` 的文件大小做双判据（时长 < 80% 或大小 < 60% → 片段）。
+2. 下载完成即校验：片段删除、不写缓存索引；缓存命中前同样校验，坏缓存自动清除重取。
+3. 删除「下载失败回退远程 URL」：改为 `SOURCE_UNAVAILABLE`。
+4. 跨源兜底改为 **全平台（kw/kg/tx/wy/mg）× 脚本池**：
+   同曲多源索引 + 各平台实时搜索，候选并发竞速，音质逐档降级（flac → 320k → 128k）。
+5. 失败不再连跳：默认暂停并提示「所有平台均不可用，点击播放重试」，
+   点播放重新走完整取流；`player.autoSkipOnError` 默认改为 false（含老用户一次性迁移）。
+6. 预取地址只用于下载，不再直接交给播放器。
+
+**实测（模拟器）**
+
+```
+[ERROR] [jk/play] 缓存为试听片段，删除重取 ... actual=60s/270s size=960887/30995906
+[ERROR] [cache] 试听片段已丢弃: Fractals
+[resolve] matrix 候选平台= kw(idx)/kg/wy
+[resolve] matrix ok platform=kw quality=flac id=54270824 from=index
+[resolve] switched tx -> kw
+[live] start Fractals total= 270.46      ← 完整 4:30
+
+[resolve] matrix 候选平台= mg(idx)/kg(idx)/kw(idx)/wy
+[resolve] matrix ok platform=kg quality=flac
+[jk/play] 缓冲完成，改播本地
+[live] start bittersweet total= 202.85   ← 完整 3:22
+
+（人为制造播放失败）
+播放出错 → autoSkipOnError=false，停在当前曲目（可点播放重试）   ← 不再连跳
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.2.7 / build 11 / minos 16.4 / arm64
+jsbundle 6.0M / dev 残留 0 / size 17.x MB
+sha256 49661b17a3573c3a3a54c218d27ddf2026f11929261cbf06a24ba53f6a5334c7
+widget PlugIns/JKMUSICWidget.appex present / NSSupportsLiveActivities true
+PlugIns/ShareExtension.appex present
+```
+
 ## v1.2.6（2026-11-20）
 
 | 项 | 值 |
