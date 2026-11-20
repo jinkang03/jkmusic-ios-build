@@ -1,3 +1,44 @@
+## v1.2.6（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.6-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `b65e0b83907f6fb965c1c1f0776640dbadd4b7bae4fb5be4aa2996fbf94fbd9b` |
+| 版本 / build | 1.2.6 / 10 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.6` |
+
+### 1.2.6 修复：换壁纸提示成功但不生效
+
+**原因**：壁纸文件固定写 `Documents/wallpaper.jpg`，URI 始终不变。
+`expo-image` 以 URI 作为缓存键，文件内容换了但 URI 没变 → 直接用缓存里的旧图，
+表现为「提示设置成功，界面没变化」。第二次以后换图尤其明显。
+
+**修复**：
+
+1. 壁纸文件改用唯一名 `wallpaper-<timestamp>.jpg`，URI 变化才会真正重新加载；
+2. 保存后 `getInfoAsync` 校验文件存在且 `size > 0`，失败不再提示成功；
+3. 保存成功后删除上一张，避免文件越积越多；
+4. `WallpaperBackground` 的 `Image` 增加 `key={uri}` 与 `cachePolicy="none"` 双保险；
+5. 新增 dev 动作 `?action=wallpaperFile&path=<绝对路径>`，便于无点击环境验证换图链路。
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.2.6 / build 10 / minos 16.4 / arm64
+jsbundle 6.0M / dev 残留 0 / size 17.x MB
+sha256 b65e0b83907f6fb965c1c1f0776640dbadd4b7bae4fb5be4aa2996fbf94fbd9b
+widget PlugIns/JKMUSICWidget.appex present / NSSupportsLiveActivities true
+PlugIns/ShareExtension.appex present
+```
+
+### 验证方式
+
+- 用两张差异明显的测试图（蓝紫渐变 / 橙绿渐变）依次经 `saveWallpaperFrom` 保存：
+  界面立即切换（截图取样像素 `(182,166,224)` → 橙绿系 → 换回后仍为 `(182,166,224)`）；
+- `Documents` 目录始终只保留最新一张 `wallpaper-*.jpg`（旧文件被清理）。
+
 ## v1.2.5（2026-11-20）
 
 | 项 | 值 |
