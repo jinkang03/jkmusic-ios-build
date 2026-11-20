@@ -205,7 +205,12 @@ const PlayerSection = () => {
 			]} /></SettingRow>
 			<SettingRow label={tr('音量', 'Volume')}><SettingSlider value={Number(volume)} min={0} max={1} step={0.01} onChange={setVolume} format={v => `${Math.round(v * 100)}%`} /></SettingRow>
 			<SettingRow label={tr('播放倍速', 'Playback Speed')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
-			<SettingRow label={tr('保存播放进度', 'Save Playback Position')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={saveTime} onChange={setSaveTime} /></SettingRow>
+			<SettingRow
+				label={tr('保存播放进度', 'Save Playback Position')}
+				hint={tr('启动后恢复上次播放的曲目与位置', 'Restore last track and position on launch')}
+			>
+				<SettingSwitch value={saveTime} onChange={setSaveTime} />
+			</SettingRow>
 			<SettingRow
 				label={tr('自动跳过错误曲目', 'Auto-skip Failed Tracks')}
 				hint={tr('默认关闭：失败会暂停并提示，点播放重试', 'Off by default: a failure pauses and waits for retry')}
@@ -1014,6 +1019,11 @@ const SettingsSectionScreen = () => {
 					setPendingChangeSource(hit)
 					logInfo('[dev] openChangeSource title=', String(hit?.name ?? ''), 'source=', String(hit?.source ?? ''))
 					router.push('/(modals)/changeSource' as any)
+				} else if (action === 'resume') {
+					// 继续播放当前曲目（验证「保存播放进度」恢复位置）
+					const { default: tp } = await import('@/helpers/trackPlayerIndex')
+					await (tp as any).play()
+					logInfo('[dev] resume play')
 				} else if (action === 'playUserList') {
 					// 从「我的列表」里的某个歌单播放（诊断连跳问题用）
 					const name = String((params as any).name ?? '')

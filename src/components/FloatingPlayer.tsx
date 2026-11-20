@@ -7,7 +7,7 @@ import { macPalette } from '@/constants/macTokens'
 import { useLastActiveTrack } from '@/hooks/useLastActiveTrack'
 import { currentArtworkStore } from '@/jk/artworkStore'
 import { syncCurrentArtwork } from '@/jk/artworkSync'
-import { resolvedFromStore } from '@/player/PlayerStore'
+import { resolvedFromStore, pendingRestorePositionStore } from '@/player/PlayerStore'
 import { sourceLabel } from '@/jk/sourceLabels'
 import { useDefaultStyles } from '@/styles'
 import { Ionicons } from '@expo/vector-icons'
@@ -40,7 +40,14 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 	const router = useRouter()
 	const currentMusic = myTrackPlayer.useCurrentMusic()
 	const sharedArt = currentArtworkStore.useValue()
-	const { position, duration } = myTrackPlayer.useProgress(1)
+	const progressState = myTrackPlayer.useProgress(1)
+	const restorePos = pendingRestorePositionStore.useValue()
+	const currentTrack: any = myTrackPlayer.useCurrentMusic()
+	// 启动恢复：还没开始播时显示上次保存的位置
+	const position = restorePos > 0 && progressState.position < 1 ? restorePos : progressState.position
+	const duration = progressState.duration > 0
+		? progressState.duration
+		: (restorePos > 0 ? Number(currentTrack?.duration ?? 0) : 0)
 	const progress = duration > 0 ? Math.min(1, position / duration) : 0
 	const lastActiveTrack = useLastActiveTrack()
 	const isTrackSourceLoading = trackSourceLoadingStore.useValue() !== null

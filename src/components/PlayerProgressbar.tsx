@@ -8,6 +8,7 @@ import { StyleSheet, Text, View, ViewProps } from 'react-native'
 import { Slider } from 'react-native-awesome-slider'
 import Animated, { Reanimated3DefaultSpringConfig, SharedValue, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
+import { pendingRestorePositionStore } from '@/player/PlayerStore'
 
 const AnimatedThumb = React.memo(({ isSliding, tint }: { isSliding: SharedValue<boolean>, tint: string }) => {
 
@@ -32,7 +33,13 @@ export const PlayerProgressBar = React.memo(({
 	const mac = macPalette(!!useAppTheme().isDark)
 	const defaultStyles = useDefaultStyles()
 	const utilsStyles = useUtilsStyles()
-	const { position, duration } = myTrackPlayer.useProgress(0.25)
+	const progressState = myTrackPlayer.useProgress(0.25)
+	const restorePos = pendingRestorePositionStore.useValue()
+	const current: any = myTrackPlayer.useCurrentMusic()
+	// 启动恢复：还没开始播时，进度条显示上次保存的位置
+	const restoredDuration = Number(current?.duration ?? 0)
+	const position = restorePos > 0 && progressState.position < 1 ? restorePos : progressState.position
+	const duration = progressState.duration > 0 ? progressState.duration : (restorePos > 0 ? restoredDuration : 0)
 	const isSliding = useSharedValue(false)
 	const progress = useSharedValue(0)
 	const min = useSharedValue(0)

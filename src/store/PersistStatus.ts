@@ -9,6 +9,15 @@ const PersistConfig = {
 interface IPersistConfig {
 	'music.musicItem': IMusic.IMusicItem //当前播放
 	'music.progress': number
+	/** 上次播放状态（保存播放进度开关开启时写入） */
+	'music.progressInfo': {
+		trackId: string
+		platform: string
+		index: number
+		position: number
+		duration: number
+		savedAt: number
+	} | null
 	'music.repeatMode': string
 	//播放列表
 	'music.play-list': IMusic.IMusicItem[]

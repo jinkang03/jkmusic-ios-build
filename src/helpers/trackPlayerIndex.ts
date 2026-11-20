@@ -62,6 +62,7 @@ import {
 	trackSkipLoadingStore,
 	trackSourceLoadingStore,
 	playbackIntentStore,
+	pendingRestorePositionStore,
 } from '@/player/PlayerStore'
 
 import {
@@ -99,6 +100,7 @@ export {
 	trackSkipLoadingStore,
 	trackSourceLoadingStore,
 	playbackIntentStore,
+	pendingRestorePositionStore,
 }
 
 export function useCurrentQuality() {
@@ -114,6 +116,28 @@ let currentIndex = -1
 let playerSubscriptions: { remove(): void }[] = []
 let controlRevision = 0
 let activeTrackSkip: symbol | null = null
+// 播放进度保存（mac 的 player.isSavePlayTime）：5 秒节流，切歌/暂停时立即写
+const PROGRESS_SAVE_INTERVAL_MS = 5000
+let lastProgressSaveAt = 0
+
+const persistCurrentProgress = () => {
+	const music: any = currentMusicStore.getValue()
+	if (!music) return
+	let position = 0
+	let duration = 0
+	try {
+		const progress: any = ReactNativeTrackPlayer.getProgress?.() ?? {}
+		position = Number(progress?.position ?? 0)
+		duration = Number(progress?.duration ?? 0)
+	} catch { /* ignore */ }
+	void import('@/player/playProgress').then(m => m.savePlayProgress({
+		trackId: String(music.id ?? ''),
+		platform: String(music.platform ?? ''),
+		index: currentIndex,
+		position,
+		duration,
+	})).catch(() => undefined)
+}
 let nativeQueue: {
 	token: string
 	track: Track
@@ -292,6 +316,23 @@ async function setupTrackPlayer() {
 		const cleanedQueue = restoredQueue.map(sanitize)
 		logInfo(`[jk/queue] 恢复队列 ${cleanedQueue.length} 首，已清掉持久化 url`)
 		addAll(cleanedQueue, undefined, repeatMode === MusicRepeatMode.SHUFFLE)
+		// 保存播放进度：把上次播放的曲目设为当前（不播放），并记下待恢复位置
+		try {
+			const { loadPlayProgress, logSavedProgress } = await import('@/player/playProgress')
+			const saved = loadPlayProgress()
+			if (saved) {
+				const list = getPlayList()
+				const idx = list.findIndex((item: any) =>
+					String(item?.id ?? '') === saved.trackId &&
+					String(item?.platform ?? '') === saved.platform)
+				if (idx >= 0) {
+					currentIndex = idx
+					setCurrentMusic(list[idx] as any)
+					pendingRestorePositionStore.setValue(saved.position)
+					logSavedProgress(saved)
+				}
+			}
+		} catch { /* ignore */ }
 	}
 	if (autoCacheLocal == true || autoCacheLocal == false) {
 		autoCacheLocalStore.setValue(autoCacheLocal)
@@ -307,6 +348,21 @@ async function setupTrackPlayer() {
 	}
 	if (playerSubscriptions.length === 0) {
 		playerSubscriptions.push(
+			ReactNativeTrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (data) => {
+				if (!isCurrentProgressEvent(data)) return
+				const now = Date.now()
+				if (now - lastProgressSaveAt < PROGRESS_SAVE_INTERVAL_MS) return
+				lastProgressSaveAt = now
+				const music: any = currentMusicStore.getValue()
+				if (!music) return
+				void import('@/player/playProgress').then(m => m.savePlayProgress({
+					trackId: String(music.id ?? ''),
+					platform: String(music.platform ?? ''),
+					index: currentIndex,
+					position: Number(data.position ?? 0),
+					duration: Number(data.duration ?? 0),
+				})).catch(() => undefined)
+			}),
 			ReactNativeTrackPlayer.addEventListener(Event.MediaItemTransition, (event) => {
 				handleNativeTransition(event.item, event.index)
 			}),
@@ -582,6 +638,7 @@ const clearToBePlayed = async () => {
 /** 暂停 */
 const pause = () => {
 	setPlaybackIntent('pause')
+	persistCurrentProgress()
 	ReactNativeTrackPlayer.pause()
 }
 
@@ -1053,6 +1110,9 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		trackSourceLoadingToken = createTrackSourceLoadingToken(musicItem)
 		trackSourceLoadingStore.setValue(trackSourceLoadingToken)
 
+		// 切歌前保存上一首的进度（保存播放进度开关开启时）
+		persistCurrentProgress()
+
 		// 3. Update current music state immediately (UI updates instantly)
 		setCurrentMusic(musicItem)
 
@@ -1073,6 +1133,20 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		logInfo('获取音源成功：', track)
 		setTrackSource(track)
 		const appliedToken = nativeQueue.token
+		// 启动恢复：音源就绪后跳到上次播放位置（只应用一次）
+		const restorePos = pendingRestorePositionStore.getValue()
+		if (restorePos > 0) {
+			pendingRestorePositionStore.setValue(0)
+			const total = Number((track as any)?.duration ?? 0)
+			if (!total || restorePos < total - 10) {
+				setTimeout(() => {
+					try {
+						void (ReactNativeTrackPlayer as any).seekTo(restorePos)
+						logInfo('[progress] seek restored', Math.round(restorePos))
+					} catch { /* ignore */ }
+				}, 400)
+			}
+		}
 
 		// 7. Fetch lyrics in background (non-blocking)
 		fetchLyric(musicItem as any)
