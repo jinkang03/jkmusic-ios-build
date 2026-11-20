@@ -1,3 +1,72 @@
+## v1.4.2（2026-11-21）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.2-unsigned-20261121.ipa` |
+| 大小 | 18.x MB |
+| sha256 | `65c35b29cc2fb86f79ecb8b59fd3c739bf96ac468de1c3708e1242fd99879df2` |
+| 版本 / build | 1.4.2 / 26 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.4.2` |
+
+### 1.4.2 下载重构（第 3 批）
+
+**a) 命名 + 信息保留**
+
+- 文件名按 `download.fileName` 模板（默认「歌名 - 歌手」），非法字符替换，重名加 `(2)`；
+- 同名 sidecar：`.json`（title/artist/album/year/duration/source/id/quality/size/下载时间/歌单）、
+  `.lrc`（歌词）、`.tlrc`（翻译）、`.jpg`（封面）；
+- 文件本身不写 tag（iOS 无 ffmpeg/TagLib），App 内信息完整。
+
+**b) 播放下载的歌**
+
+- 歌词：`fetchLyric` 优先读同名 `.lrc`（日志 `[jk/lyric] local sidecar`）；
+- 封面：播放时读同名 `.jpg` 写入 `currentArtworkStore`；
+- 专辑/时长从 `.json` 补。
+
+**c) 音质区分（两个根因）**
+
+1. 下载请求命中播放缓存 → 拿到别的音质：`resolveSource` 对 `download` 跳过缓存；
+2. `resolveSource` 会「先下载到缓存」再返回本地路径 → 下载器复制的是缓存文件：
+   新增 `skipDownload` 选项，下载请求直接返回远程 URL；
+3. 扩展名按实际 URL（flac/mp3），JSON 记录真实音质。
+
+实测：128k → 4.1MB `.mp3`；320k → 10.3MB `.mp3`（修复前两者都是 55MB flac）。
+
+**d) 下载页精简**
+
+- 移除底部「已用/上限」「刷新信息」「清理全部」；
+- 设置 → 下载设置新增「已下载占用」+ 刷新；「全部清理」同时清 `downloads/`；
+- 下载页「下载音质」改名「筛选音质」。
+
+**e) 独立目录**
+
+```
+Documents/downloads/<歌单名>/  或  /试听/
+  歌名 - 歌手.flac|.mp3
+  歌名 - 歌手.json / .lrc / .tlrc / .jpg
+```
+- 与 `musicCache/` 完全分离，LRU 不删；
+- 旧版本遗留在 musicCache 的手动下载启动时一次性清理；
+- 菜单下载传 `listName`（我的列表详情传歌单名，搜索/排行榜 → 试听）。
+
+### 实测（模拟器）
+
+```
+[download] done 晴天 q=128k path=晴天 - 周杰伦.mp3
+[download] done 晴天 q=320k path=晴天 - 周杰伦 (2).mp3
+[dev] playDownload 晴天 cover= yes lrc= yes
+[jk/lyric] local sidecar ...
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.4.2 / build 26 / minos 16.4 / arm64
+jsbundle 6.5M / dev 残留 0 / size 18.x MB
+sha256 65c35b29cc2fb86f79ecb8b59fd3c739bf96ac468de1c3708e1242fd99879df2
+```
+
 ## v1.4.1（2026-11-21）
 
 | 项 | 值 |
