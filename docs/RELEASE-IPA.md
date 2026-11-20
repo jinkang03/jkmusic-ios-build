@@ -1,3 +1,46 @@
+## v1.3.8（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.3.8-unsigned-20261120.ipa` |
+| 大小 | 18.x MB |
+| sha256 | `1b6e9ccef4f60231d9fdfa2120046bd310d41e9dc92992ce9e7edb962ff5a970` |
+| 版本 / build | 1.3.8 / 22 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.3.8` |
+
+### 1.3.8 保存播放进度
+
+mac 行为（`usePlayProgress.ts` / `player/action.ts`）：保存「当前播放状态」
+`{time, maxTime, listId, index}`，启动时恢复到该位置并暂停；开关关闭则从头开始。
+
+实现：
+
+1. `src/player/playProgress.ts`：读写 `music.progressInfo`（7 天过期、已播完不恢复）；
+2. 播放中每 5 秒节流保存；暂停 / 切歌前立即保存；
+3. 启动恢复：队列恢复后按 `id + platform` 定位曲目，设为当前（**不自动播放**），
+   迷你条 / 播放页进度条显示上次位置；
+4. 用户点播放：音源就绪后 `seekTo(保存位置)`，只应用一次；
+5. 设置项去掉「暂不支持」，hint 改为「启动后恢复上次播放的曲目与位置」；
+6. 新增 dev action `resume` 便于无点击验证。
+
+### 实测（模拟器）
+
+```
+开启 player.isSavePlayTime → 播《晴天》→ seek 60s → 暂停 → 杀进程重启
+[progress] restore 228908 pos= 60 dur= 270
+迷你条：晴天 / 1:00 / 4:29（未自动播放）
+点播放 → [progress] seek restored 60 → 播放页 01:51 继续
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.3.8 / build 22 / minos 16.4 / arm64
+jsbundle 6.4M / dev 残留 0 / size 18.x MB
+sha256 1b6e9ccef4f60231d9fdfa2120046bd310d41e9dc92992ce9e7edb962ff5a970
+```
+
 ## v1.3.7（2026-11-20）
 
 | 项 | 值 |
