@@ -57,7 +57,23 @@ const readFromSource = (m: any) => String(
 )
 
 const normalizeMatchKey = (value: any) =>
-	String(value ?? '').toLowerCase().replace(/[\s\-_·・,，.。()（）]/g, '')
+	String(value ?? '').toLowerCase().replace(/[\s\-_·・,，.。()（）[\]【】'"“”]/g, '')
+
+/** 去掉标题里的括号说明与「 - 后缀」，用于跨源匹配（翻唱/伴奏版本标题经常很长） */
+const stripTitleDecor = (value: any): string => {
+	let text = String(value ?? '')
+	text = text.replace(/\([^)]*\)/g, ' ').replace(/（[^）]*）/g, ' ')
+	text = text.replace(/\[[^\]]*\]/g, ' ').replace(/【[^】]*】/g, ' ')
+	text = text.replace(/\s+-\s+.*$/, ' ')
+	return normalizeMatchKey(text)
+}
+
+/** 歌手字段常是「KAROL G、Bruno Mars」「A, B & C」这种多值，拆开逐段匹配 */
+const splitArtists = (value: any): string[] =>
+	String(value ?? '')
+		.split(/[,、&/;，；]/)
+		.map(part => normalizeMatchKey(part))
+		.filter(part => part.length > 0)
 
 export const clearAltCache = () => { altCache.clear() }
 export const clearPreloadCache = () => { preloadCache.clear() }
@@ -109,114 +125,171 @@ const findPlayableAlt = async (
 	const { getPooledMusicUrl } = await import('@/jk/sourceRegistry')
 	const { searchBySource } = await import('@/jk/musicSdk')
 
-	const targetTitle = normalizeMatchKey(title)
-	const targetArtist = normalizeMatchKey(artist)
-	const matches = (item: any) => {
-		const itemTitle = normalizeMatchKey(item?.name)
-		const itemArtist = normalizeMatchKey(item?.singer)
-		const titleOk = !!itemTitle && (itemTitle.includes(targetTitle) || targetTitle.includes(itemTitle))
-		const artistOk = !targetArtist || !itemArtist || itemArtist.includes(targetArtist) || targetArtist.includes(itemArtist)
-		return titleOk && artistOk
+	const targetTitleFull = normalizeMatchKey(title)
+	const targetTitleMain = stripTitleDecor(title)
+	const targetArtists = splitArtists(artist)
+
+	/**
+	 * 跨源匹配打分（不再要求歌手必须完全包含）：
+	 * 标题：完全一致 3 分 / 主标题一致或包含 2 分 / 部分包含 1 分；
+	 * 歌手：任一歌手有交集 +5 分（冷门翻唱版本歌手名不同时仍然可用）。
+	 */
+	const scoreOf = (item: any): number => {
+		const itemFull = normalizeMatchKey(item?.name)
+		const itemMain = stripTitleDecor(item?.name)
+		if (!itemFull) return 0
+		let titleScore = 0
+		if (itemFull === targetTitleFull || (!!itemMain && itemMain === targetTitleMain)) titleScore = 3
+		else if (itemMain && targetTitleMain && (itemMain.includes(targetTitleMain) || targetTitleMain.includes(itemMain))) titleScore = 2
+		else if (itemFull.includes(targetTitleFull) || targetTitleFull.includes(itemFull)) titleScore = 1
+		else if (targetTitleMain && itemFull.includes(targetTitleMain)) titleScore = 1
+		if (!titleScore) return 0
+		const itemArtists = splitArtists(item?.singer)
+		const artistHit = itemArtists.some(x => targetArtists.some(y => x.includes(y) || y.includes(x)))
+		return titleScore * 10 + (artistHit ? 5 : 0)
 	}
 
-	// 1) 候选收集：同曲多源索引（快） + 其它平台实时搜索（并行）
-	const candidates: AltCandidate[] = []
-	try {
-		const idx = await import('@/jk/crossSourceIndex')
-		for (const e of idx.lookup(title, artist)) {
-			if (!e?.id || e.source === currentPlatform) continue
-			if (!platforms.some(p => p.id === e.source)) continue
-			candidates.push({
-				platform: String(e.source),
-				id: String(e.id),
-				name: String(e.name || title),
-				singer: String(e.singer || artist),
-				meta: { songmid: String(e.id), id: String(e.id), source: e.source, hash: String(e.id) },
-				fromIndex: true,
-			})
-		}
-		if (candidates.length) logInfo('[resolve] matrix 索引候选', candidates.length)
-	} catch { /* ignore */ }
+	// 搜索词变体：完整标题 → 主标题 + 首位歌手 → 仅主标题
+	// （kw 等平台对超长标题经常返回空，需要退化查询）
+	const queries = Array.from(new Set([
+		`${title} ${artist}`.trim(),
+		`${stripTitleDecor(title) || title} ${splitArtists(artist)[0] ?? ''}`.trim(),
+		stripTitleDecor(title) || title,
+	].filter(Boolean)))
 
-	const searched = await Promise.allSettled(
-		platforms.map(async(p) => {
-			const list = await Promise.race([
-				searchBySource(p.id as any, `${title} ${artist}`.trim(), 1, 5),
-				createTimeoutPromise(5000),
-			]) as any[]
-			const hit = (list ?? []).find(matches)
-			if (!hit) throw new Error('no match')
-			return {
-				platform: p.id,
-				id: String(hit.id),
-				name: String(hit.name ?? title),
-				singer: String(hit.singer ?? artist),
-				meta: hit,
-				fromIndex: false,
-			} as AltCandidate
-		}),
-	)
-	for (const r of searched) {
-		if (r.status === 'fulfilled') candidates.push(r.value)
-	}
+	const collectCandidates = async(): Promise<AltCandidate[]> => {
+		const list: AltCandidate[] = []
+		try {
+			const idx = await import('@/jk/crossSourceIndex')
+			for (const e of idx.lookup(title, artist)) {
+				if (!e?.id || e.source === currentPlatform) continue
+				if (!platforms.some(p => p.id === e.source)) continue
+				list.push({
+					platform: String(e.source),
+					id: String(e.id),
+					name: String(e.name || title),
+					singer: String(e.singer || artist),
+					meta: { songmid: String(e.id), id: String(e.id), source: e.source, hash: String(e.id) },
+					fromIndex: true,
+				})
+			}
+			if (list.length) logInfo('[resolve] matrix 索引候选', list.length)
+		} catch { /* ignore */ }
 
-	// 同平台同 id 去重；索引命中优先
-	const seen = new Set<string>()
-	const uniq = candidates.filter(c => {
-		const key = `${c.platform}:${c.id}`
-		if (seen.has(key)) return false
-		seen.add(key)
-		return true
-	})
-	if (!uniq.length) {
-		logInfo('[resolve] matrix 无可用候选 title=', title, String(artist ?? ''))
-		return null
-	}
-	logInfo('[resolve] matrix 候选平台=', uniq.map(c => `${c.platform}${c.fromIndex ? '(idx)' : ''}`).join('/'))
+		// 预取（preload）只查索引：不然每切一首歌都会额外打 5 个平台的搜索接口
+		if (requestType === 'preload') return list
 
-	// 2) 并发竞速：每个候选曲目 × 音质降级（当前 → 320k → 128k），
-	//    取流走脚本池（同一平台会并发尝试所有支持它的脚本）。
-	const qualities = Array.from(new Set([String(quality || '128k'), '320k', '128k']))
-	const attempts = uniq.map(c => (async() => {
-		for (const q of qualities) {
-			try {
-				const url = await Promise.race([
-					getPooledMusicUrl(
-						c.name,
-						c.singer,
-						c.id,
-						q,
-						c.platform,
-						{ ...(c.meta ?? {}), songmid: c.id, id: c.id, source: c.platform, hash: c.id },
-					),
-					createTimeoutPromise(6000),
-				]) as string
-				if (typeof url === 'string' && /^https?:/.test(url)) {
-					logInfo(`[resolve] matrix ok platform=${c.platform} quality=${q} id=${c.id} from=${c.fromIndex ? 'index' : 'search'}`)
-					return {
-						url,
-						source: c.platform as any,
-						id: c.id,
-						label: platformLabel(c.platform),
-						title: c.name,
-						at: Date.now(),
+		const searched = await Promise.allSettled(
+			platforms.map(async(p) => {
+				let best: any = null
+				let bestScore = 0
+				let lastErr = ''
+				for (const q of queries) {
+					try {
+						const res = await Promise.race([
+							searchBySource(p.id as any, q, 1, 10),
+							createTimeoutPromise(6500),
+						]) as any[]
+						for (const item of res ?? []) {
+							const score = scoreOf(item)
+							if (score > bestScore) { bestScore = score; best = item }
+						}
+						if (bestScore >= 35) break
+					} catch (err) {
+						lastErr = String((err as any)?.message ?? err)
 					}
 				}
-			} catch { /* 换下一档音质 */ }
+				if (!best) throw new Error(`no match${lastErr ? `(${lastErr})` : ''}`)
+				logInfo(`[resolve] matrix search hit platform=${p.id} score=${bestScore} name=${String(best.name ?? '').slice(0, 48)}`)
+				return {
+					platform: p.id,
+					id: String(best.id),
+					name: String(best.name ?? title),
+					singer: String(best.singer ?? artist),
+					meta: best,
+					fromIndex: false,
+				} as AltCandidate
+			}),
+		)
+		for (const r of searched) {
+			if (r.status === 'fulfilled') list.push(r.value)
 		}
-		logInfo(`[resolve] matrix fail platform=${c.platform} id=${c.id}`)
-		throw new Error('miss')
-	})().catch((err) => { throw err }))
+		// 同平台同 id 去重
+		const seen = new Set<string>()
+		return list.filter(c => {
+			const key = `${c.platform}:${c.id}`
+			if (seen.has(key)) return false
+			seen.add(key)
+			return true
+		})
+	}
 
-	try {
-		const found = await Promise.any(attempts)
-		altCache.set(cacheKey, found)
-		logInfo('[resolve] switched', currentPlatform, '->', found.source, title)
-		return found
-	} catch {
+	const raceOnce = async(): Promise<any | null> => {
+		let uniq = await collectCandidates()
+		if (!uniq.length) {
+			// 偶发超时（真机上「重试又能播」）：稍等再完整跑一轮搜索
+			logInfo('[resolve] matrix 首轮无候选，800ms 后重试 title=', title)
+			await new Promise(r => setTimeout(r, 800))
+			uniq = await collectCandidates()
+		}
+		if (!uniq.length) return null
+		logInfo('[resolve] matrix 候选平台=', uniq.map(c => `${c.platform}${c.fromIndex ? '(idx)' : ''}`).join('/'))
+
+		// 并发竞速：每个候选曲目 × 音质降级（当前 → 320k → 128k），
+		// 取流走脚本池（同一平台会并发尝试所有支持它的脚本）。
+		const qualities = Array.from(new Set([String(quality || '128k'), '320k', '128k']))
+		const attempts = uniq.map(c => (async() => {
+			for (const q of qualities) {
+				try {
+					const url = await Promise.race([
+						getPooledMusicUrl(
+							c.name,
+							c.singer,
+							c.id,
+							q,
+							c.platform,
+							{ ...(c.meta ?? {}), songmid: c.id, id: c.id, source: c.platform, hash: c.id },
+						),
+						createTimeoutPromise(7000),
+					]) as string
+					if (typeof url === 'string' && /^https?:/.test(url)) {
+						logInfo(`[resolve] matrix ok platform=${c.platform} quality=${q} id=${c.id} from=${c.fromIndex ? 'index' : 'search'}`)
+						return {
+							url,
+							source: c.platform as any,
+							id: c.id,
+							label: platformLabel(c.platform),
+							title: c.name,
+							at: Date.now(),
+						}
+					}
+				} catch { /* 换下一档音质 */ }
+			}
+			logInfo(`[resolve] matrix fail platform=${c.platform} id=${c.id}`)
+			throw new Error('miss')
+		})())
+
+		try {
+			return await Promise.any(attempts)
+		} catch {
+			return null
+		}
+	}
+
+	let found = await raceOnce()
+	if (!found && requestType !== 'preload') {
+		// 真机网络抖动经常是「第一次超时、第二次就通」：整体再来一次
+		logInfo('[resolve] matrix 全失败，900ms 后整体重试一次 title=', title)
+		await new Promise(r => setTimeout(r, 900))
+		found = await raceOnce()
+	}
+	if (!found) {
 		logInfo('[resolve] matrix 所有平台均失败 title=', title, String(artist ?? ''), 'platforms=', platforms.map(p => p.id).join('/'))
 		return null
 	}
+	altCache.set(cacheKey, found)
+	logInfo('[resolve] switched', currentPlatform, '->', found.source, title)
+	return found
 }
 
 const isCurrentSourceRequest = (requestType: ResolveSourceRequestType) =>
@@ -290,7 +363,8 @@ const isTruncatedCachedFile = async(
 		const info0: any = await (FS0 as any).getInfoAsync(uri)
 		const bytes = Number(info0?.size ?? 0)
 		const hint = sizeHintBytes(musicItem as any)
-		const truncated = isTruncatedAudio(actual, expected) || isTruncatedBySize(bytes, hint)
+		const truncated = isTruncatedAudio(actual, expected)
+			|| (!actual && isTruncatedBySize(bytes, hint))
 		if (!truncated) return false
 		logError('[jk/play] 缓存为试听片段，删除重取:', uri.slice(0, 120),
 			`actual=${actual ? actual.toFixed(0) + 's' : '?'}/${expected}s`, `size=${bytes}/${hint || '-'}`)

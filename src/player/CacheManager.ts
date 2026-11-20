@@ -123,7 +123,11 @@ export const downloadToCache = async (
 		const fileInfo: any = await FileSystem.getInfoAsync(finalUri)
 		const actualBytes = Number(fileInfo?.size ?? 0)
 		const hintBytes = sizeHintBytes(musicItem as any, String(opts?.quality ?? (globalThis as any).__jkActualQuality ?? '') || undefined)
-		if (isTruncatedAudio(actualSeconds, expectedSeconds) || isTruncatedBySize(actualBytes, hintBytes)) {
+		// 时长是权威判据；只有解析不出时长时才用「大小」兜底，
+		// 否则会把 320k 文件（26MB）和 flac 标称（48MB）比对，误判成片段。
+		const truncated = isTruncatedAudio(actualSeconds, expectedSeconds)
+			|| (!actualSeconds && isTruncatedBySize(actualBytes, hintBytes))
+		if (truncated) {
 			try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
 			logError(`[cache] 试听片段已丢弃: ${String((musicItem as any).title ?? '')}`,
 				`actual=${actualSeconds ? actualSeconds.toFixed(0) + 's' : '?'}/${expectedSeconds}s`,
