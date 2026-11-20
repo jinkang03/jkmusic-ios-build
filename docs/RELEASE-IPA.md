@@ -1,3 +1,46 @@
+## v1.3.2（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.3.2-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `5ff2e0d00fef8a886776b5ca379abee9852a669eb242a70bfc0794127dd98b1c` |
+| 版本 / build | 1.3.2 / 16 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.3.2` |
+
+### 1.3.2 主题简化：只保留强调色
+
+按确认方案：
+
+1. **删除「主题」行**（4 套预设不再驱动颜色）；外观（浅色/深色/跟随系统）保留；
+2. **强调色自定义改为色盘**：新增 `ColorPickerModal`
+   - 饱和度/亮度面板（两层 LinearGradient 叠加）+ 色相条 + hex 预览；
+   - 纯 JS + `expo-linear-gradient`，没有新增依赖；
+3. **默认强调色跟随壁纸主色**：
+   - 保存壁纸时用 `react-native-image-colors` 提取主色，持久化到 `app.wallpaperAccent`；
+   - 启动时若已有壁纸但没记录主色，`ensureWallpaperAccent()` 补提取一次；
+   - `getAccentColor()` 优先级：自定义 → 壁纸主色 → 默认品牌色；
+   - 清除壁纸同时清掉壁纸主色；
+4. 色盘弹窗用实色背景（壁纸开启时页面底色是半透明，弹窗会透出下层）。
+
+### 实测（模拟器）
+
+```
+壁纸主色提取 → #55369E
+清空自定义强调色 → hint 变「跟随壁纸」，滑块/开关/按钮全部同步为该色
+打开色盘 → 初始色即 #55369E，指示圈落在紫蓝区域
+设置页不再有「主题」行
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.3.2 / build 16 / minos 16.4 / arm64
+jsbundle 6.3M / dev 残留 0 / size 17.x MB
+sha256 5ff2e0d00fef8a886776b5ca379abee9852a669eb242a70bfc0794127dd98b1c
+```
+
 ## v1.3.1（2026-11-20）
 
 | 项 | 值 |
