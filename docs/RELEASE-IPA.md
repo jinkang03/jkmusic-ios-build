@@ -1,3 +1,49 @@
+## v1.3.1（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.3.1-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `397c519f9cac32adb5ec01b1559c234a93c05a607e99ae10b208e69b1d6b448f` |
+| 版本 / build | 1.3.1 / 15 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.3.1` |
+
+### 1.3.1 音源管理：按平台逐个测试
+
+**旧实现的问题**
+
+- 只测 `supportedSources[0]`（通常就是 kg）；
+- 且用酷我的曲目 id（228908）去问所有平台 —— 各平台 id 体系不同，必然失败。
+
+结果：安妮音源明明 kw / wy 可用，测试却显示「失败」。
+
+**新实现**（`src/jk/sourceTest.ts`）
+
+1. 取脚本声明的平台列表（空则 kw/kg/tx/wy/mg 全测）；
+2. 每个平台先在该平台真实搜索「稻香 周杰伦」，拿到该平台自己的 id/meta 再取流；
+3. 搜索 6s / 取流 10s 超时；5 个平台并发（串行最坏 60s+）；
+4. 卡片实时显示进度：`2/4  酷我✓ 酷狗✗ 企鹅✗ 网易✓`；
+5. 结束 toast 三态：全部通过 / 部分平台可用（附失败原因）/ 全部失败；证据日志同步。
+
+### 实测（安妮独家音源）
+
+```
+[sourceTest] 安妮独家音源 kw ok
+[sourceTest] 安妮独家音源 wy ok
+[sourceTest] 安妮独家音源 kg fail(当前版本已停止服务，请升级到最新版本后重试)
+[sourceTest] 安妮独家音源 tx fail(当前版本已停止服务，请升级到最新版本后重试)
+→ 部分平台可用（旧实现只会显示失败）
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.3.1 / build 15 / minos 16.4 / arm64
+jsbundle 6.3M / dev 残留 0 / size 17.x MB
+sha256 397c519f9cac32adb5ec01b1559c234a93c05a607e99ae10b208e69b1d6b448f
+```
+
 ## v1.3.0（2026-11-20）
 
 | 项 | 值 |
