@@ -1,5 +1,6 @@
 import { nowLanguage, changeLanguage } from '@/utils/i18n'
-import { MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore, setMacTheme, setAccentColor, setWallpaper, getWallpaperUri, themeName, type MacThemeId } from '@/jk/themeStore'
+import { ACCENT_PRESETS, accentStore, wallpaperStore, wallpaperAccentStore, setAccentColor, setWallpaper, getWallpaperUri } from '@/jk/themeStore'
+import ColorPickerModal from '@/components/ColorPickerModal'
 /**
  * 设置分区页：键名与桌面版一致（点分格式），值由 settingsStore 持久化。
  * 桌面版专有分区只做说明，控件照常可读写（配置会保存，只是 iOS 不生效）。
@@ -22,11 +23,16 @@ import { getSectionTitle, getSectionNote } from '@/jk/settingsSections'
 import { tr } from '@/utils/i18n'
 
 const BasicSection = () => {
-	// 语言/主题写真正被消费的键；强调色独立于主题（壁纸能力已下线，播放页固定用封面背景）
+	// 语言写 app.language；强调色是唯一颜色来源（空 = 跟随壁纸主色）
 	const lang = nowLanguage.useValue()
-	const macTheme = macThemeStore.useValue()
 	const accent = accentStore.useValue()
 	const wallpaper = wallpaperStore.useValue()
+	const wallpaperAccent = wallpaperAccentStore.useValue()
+	const [pickerVisible, setPickerVisible] = React.useState(false)
+	const routeParams = useLocalSearchParams<{ openPicker?: string }>()
+	React.useEffect(() => {
+		if (routeParams?.openPicker === '1') setPickerVisible(true)
+	}, [routeParams?.openPicker])
 	const { themeMode, setThemeMode } = useThemeMode()
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
@@ -69,23 +75,31 @@ const BasicSection = () => {
 					{ value: 'dark', label: tr('深色', 'Dark') },
 				]}
 			/></SettingRow>
-			<SettingRow label={tr('主题', 'Theme')}><SettingSelect
-				value={macTheme.id}
-				onChange={(v) => setMacTheme(v as MacThemeId)}
-				options={(Object.keys(MAC_THEMES) as MacThemeId[]).map(id => ({ value: id, label: themeName(id) }))}
-			/></SettingRow>
-			{/* 强调色：控制字体/进度条/按钮等「强调」用色；留空则跟随主题预设 */}
+			{/* 强调色：唯一颜色来源；留空 = 跟随壁纸主色 */}
 			<SettingRow
 				label={tr('强调色', 'Accent Color')}
-				hint={accent ? tr('自定义', 'Custom') : `${tr('跟随主题', 'Follows theme')} · ${themeName(macTheme.id)}`}
+				hint={accent
+					? tr('自定义', 'Custom')
+					: (wallpaperAccent
+						? tr('跟随壁纸', 'Follows wallpaper')
+						: tr('默认', 'Default'))}
 			>
-				<View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: accent || macTheme.primary, borderWidth: 0.5, borderColor: c.divider }} />
+				<View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+					<Pressable
+						onPress={() => setPickerVisible(true)}
+						style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
+					>
+						<Text style={{ color: c.primary, fontSize: macFont.caption }}>{tr('自定义', 'Custom')}</Text>
+						<Ionicons name="color-palette-outline" size={16} color={c.primary} />
+					</Pressable>
+					<View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: accent || wallpaperAccent || c.primary, borderWidth: 0.5, borderColor: c.divider }} />
+				</View>
 			</SettingRow>
 			<View style={{
 				paddingHorizontal: macSpace.pageX, paddingVertical: 12,
 				borderBottomWidth: 0.5, borderBottomColor: c.divider,
 			}}>
-				{/* 预设色板：一行 8 个，选中打勾；下面单独给「跟随主题」一个明确入口 */}
+				{/* 快捷色板（点「自定义」可进色盘选任意颜色） */}
 				<View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
 					{ACCENT_PRESETS.map(color => {
 						const active = accent === color
@@ -111,11 +125,20 @@ const BasicSection = () => {
 				>
 					<Ionicons name={accent ? 'refresh-outline' : 'checkmark-circle'} size={14} color={c.primary} />
 					<Text style={{ color: c.primary, fontSize: macFont.caption }}>
-						{accent ? `${tr('恢复跟随主题', 'Follow theme')} · ${themeName(macTheme.id)}` : tr('当前跟随主题', 'Following theme')}
+						{accent
+							? tr('恢复跟随壁纸', 'Follow wallpaper')
+							: (wallpaperAccent ? tr('当前跟随壁纸', 'Following wallpaper') : tr('当前为默认色', 'Using default'))}
 					</Text>
 				</Pressable>
 			</View>
-			{/* 壁纸：作用于「我的列表/歌单/排行榜/搜索/下载/设置」等功能页面（播放页仍用封面） */}
+			<ColorPickerModal
+				visible={pickerVisible}
+				initialColor={accent || wallpaperAccent || c.primary}
+				followWallpaper={!accent}
+				onClose={() => setPickerVisible(false)}
+				onPick={(color) => { setAccentColor(color); setPickerVisible(false) }}
+				onFollowWallpaper={() => { setAccentColor(''); setPickerVisible(false) }}
+			/>
 			<SettingRow
 				label={tr('主题壁纸', 'Wallpaper')}
 				hint={wallpaper.uri

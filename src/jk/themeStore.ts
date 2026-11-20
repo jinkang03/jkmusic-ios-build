@@ -1,9 +1,9 @@
 /**
- * 桌面版主题（mac 风格）：
- * 1) 主题预设：提供一套默认强调色（JK 终包/中国墨/落霞/青瓷）
- * 2) 强调色：可单独覆盖（空 = 跟随主题预设）
- * 3) 壁纸 + 磨砂玻璃：自定义背景图、模糊度、透明度
- * 4) 明暗：跟随系统 / 浅色 / 深色（app.themeMode）
+ * 主题与强调色（1.3.2 起简化）：
+ * 1) 强调色：唯一颜色来源，可自定义（色盘）；空 = 跟随壁纸主色
+ * 2) 壁纸 + 磨砂玻璃：功能页面背景，保存时自动提取主色作为默认强调色
+ * 3) 明暗：跟随系统 / 浅色 / 深色（app.themeMode）
+ * 主题预设（JK 终包/中国墨/落霞/青瓷）已下线，仅保留常量做数据兼容。
  */
 import * as FileSystem from 'expo-file-system/legacy'
 import PersistStatus from '@/store/PersistStatus'
@@ -45,6 +45,47 @@ export const accentStore = new GlobalState<string>(
 )
 
 export type WallpaperState = { uri: string, blur: number, opacity: number }
+
+/** 壁纸主色（保存壁纸时自动提取）；未设置壁纸或提取失败时为空 */
+export const wallpaperAccentStore = new GlobalState<string>(
+	(PersistStatus.get('app.wallpaperAccent' as any) as string) || '',
+)
+
+export const setWallpaperAccent = (color: string) => {
+	wallpaperAccentStore.setValue(color || '')
+	try { PersistStatus.set('app.wallpaperAccent' as any, color || '') } catch { /* ignore */ }
+}
+
+/** 从壁纸图片提取主色（失败返回空） */
+const extractWallpaperAccent = async(uri: string): Promise<string> => {
+	try {
+		const { getColors } = await import('react-native-image-colors')
+		const result: any = await getColors(uri, { fallback: '#000000', cache: true, key: uri })
+		const swatch = result?.platform === 'ios'
+			? (result.background ?? result.primary)
+			: (result?.dominant ?? result?.average)
+		if (typeof swatch === 'string' && /^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(swatch)) return swatch
+		return ''
+	} catch {
+		return ''
+	}
+}
+
+/** 启动时若已有壁纸但没记录主色，补提取一次 */
+export const ensureWallpaperAccent = async() => {
+	const uri = getWallpaperUri(wallpaperStore.getValue()?.uri ?? '')
+	if (!uri) return
+	if (wallpaperAccentStore.getValue()) return
+	const color = await extractWallpaperAccent(uri)
+	if (color) {
+		setWallpaperAccent(color)
+		logAccent(color)
+	}
+}
+
+const logAccent = (color: string) => {
+	try { console.log('[theme] wallpaper accent =', color) } catch { /* ignore */ }
+}
 const storedWallpaper = (PersistStatus.get('app.wallpaper' as any) as WallpaperState) || null
 export const wallpaperStore = new GlobalState<WallpaperState>(
 	storedWallpaper && typeof storedWallpaper === 'object'
@@ -59,11 +100,18 @@ export const setMacTheme = (id: MacThemeId) => {
 	try { PersistStatus.set('app.macTheme' as any, resolved) } catch { /* ignore */ }
 }
 
-/** 当前生效的强调色：用户覆盖优先，否则用主题预设 */
+/**
+ * 当前生效的强调色：
+ * 1) 用户自定义（色盘/快捷色）
+ * 2) 壁纸主色（设置壁纸时自动提取）
+ * 3) 默认品牌色
+ */
 export const getAccentColor = () => {
 	const custom = accentStore.getValue()
 	if (custom) return custom
-	return macThemeStore.getValue()?.primary || MAC_THEMES.jk.primary
+	const fromWallpaper = wallpaperAccentStore.getValue()
+	if (fromWallpaper) return fromWallpaper
+	return MAC_THEMES.jk.primary
 }
 
 export const setAccentColor = (color: string) => {
@@ -108,6 +156,10 @@ export const saveWallpaperFrom = async(sourceUri: string): Promise<string> => {
 		}
 	}
 	setWallpaper({ uri: fileName })
+	// 默认强调色跟随壁纸主色
+	const color = await extractWallpaperAccent(dest)
+	setWallpaperAccent(color)
+	logAccent(color)
 	return fileName
 }
 
@@ -115,6 +167,8 @@ export const setWallpaper = (next: Partial<WallpaperState>) => {
 	const merged = { ...wallpaperStore.getValue(), ...next }
 	wallpaperStore.setValue(merged)
 	try { PersistStatus.set('app.wallpaper' as any, merged) } catch { /* ignore */ }
+	// 清除壁纸时同时清掉壁纸主色（强调色回落到默认）
+	if (!merged.uri) setWallpaperAccent('')
 }
 
 /** 是否启用「功能页面壁纸」 */
@@ -135,4 +189,5 @@ export const getMacTheme = () => macThemeStore.getValue()
 export default {
 	MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore,
 	setMacTheme, setAccentColor, setWallpaper, saveWallpaperFrom, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha,
+	wallpaperAccentStore, setWallpaperAccent, ensureWallpaperAccent,
 }

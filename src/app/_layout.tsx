@@ -57,6 +57,8 @@ const App = () => {
 	useLogTrackPlayerState()
 	useEffect(() => {
 		void LyricManager.setup()
+		// 已有壁纸但没记录主色（老版本/迁移）：补提取一次，作为默认强调色
+		void import('@/jk/themeStore').then(m => m.ensureWallpaperAccent()).catch(() => undefined)
 	}, [])
 	return (
 		<ShareIntentProvider
