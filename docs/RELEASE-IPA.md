@@ -1,3 +1,45 @@
+## v1.2.9（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.2.9-unsigned-20261120.ipa` |
+| 大小 | 17.x MB |
+| sha256 | `9e558125529a6c28158f877a97fc5c4dba67832b829c356cf160074d68bce8bb` |
+| 版本 / build | 1.2.9 / 13 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.2.9` |
+
+### 1.2.9 歌单二级菜单：复制歌曲名 / 搜索（先核对 mac 源码）
+
+mac 端实现（`references/mac-ui/renderer/views/List/MusicList/useMusicActions.js`）：
+
+- 搜索：`router.push({ path:'/search', query:{ text: `${info.name} ${info.singer}` } })`
+- 复制歌曲名：`clipboardWriteText(formatMusicName(appSetting['download.fileName'], minfo.name, minfo.singer))`
+  - `formatMusicName` = 把模板里的 `歌手` 换成 singer、`歌名` 换成 name
+  - 默认模板 `download.fileName = "歌名 - 歌手"`
+
+iOS 实现：
+
+1. 「复制歌曲名」：读 `download.fileName` 模板格式化后写系统剪贴板，toast 显示复制内容；
+2. 「搜索」：跳 `/(tabs)/search?q=歌名 歌手&source=曲目平台`，
+   比 mac 多带 `source` —— 直接落在该曲目所属平台的搜索页；
+3. 搜索页支持 `?source=`：选中对应源胶囊、按该源搜索、关键词回填搜索框（实测截图确认）。
+
+### 实测
+
+```
+jkmusic://search?q=Something to Hope For Phoebe Ryan&source=tx
+→ 搜索框回填关键词，源胶囊选中「企鹅」，结果为该源的 9 条命中
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.2.9 / build 13 / minos 16.4 / arm64
+jsbundle 6.0M / dev 残留 0 / size 17.x MB
+sha256 9e558125529a6c28158f877a97fc5c4dba67832b829c356cf160074d68bce8bb
+```
+
 ## v1.2.8（2026-11-20）
 
 | 项 | 值 |
