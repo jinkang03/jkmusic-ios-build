@@ -27,7 +27,7 @@ const WallpaperBackground = () => {
 			pointerEvents="none"
 			style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? '#0B0B0C' : '#FFFFFF' }]}
 		>
-			<Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+			<Image key={uri} source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="none" />
 			{intensity > 0 ? (
 				<BlurView
 					intensity={intensity}

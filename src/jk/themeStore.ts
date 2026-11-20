@@ -83,6 +83,34 @@ export const getWallpaperUri = (stored: string): string => {
 	return base ? `${base}${fileName}` : fileName
 }
 
+/**
+ * 把用户选择的图片保存成壁纸文件。
+ *
+ * 之前固定写 wallpaper.jpg：URI 不变，expo-image 走内存/磁盘缓存，
+ * 换图后界面仍是旧图（看着像「提示成功但不生效」）。
+ * 这里改成唯一文件名 + 复制后校验 + 清理旧文件。
+ */
+export const saveWallpaperFrom = async(sourceUri: string): Promise<string> => {
+	if (!sourceUri) throw new Error('empty uri')
+	const base = String((FileSystem as any).documentDirectory ?? '')
+	if (!base) throw new Error('no documentDirectory')
+	const fileName = `wallpaper-${Date.now()}.jpg`
+	const dest = `${base}${fileName}`
+	await (FileSystem as any).copyAsync({ from: sourceUri, to: dest })
+	const info: any = await (FileSystem as any).getInfoAsync(dest)
+	if (!info?.exists || Number(info.size ?? 0) <= 0) throw new Error('wallpaper copy failed')
+	// 清掉上一张，避免占空间
+	const prev = wallpaperStore.getValue()?.uri
+	if (prev) {
+		const prevName = prev.split('/').pop()
+		if (prevName && prevName !== fileName) {
+			try { await (FileSystem as any).deleteAsync(`${base}${prevName}`, { idempotent: true }) } catch { /* ignore */ }
+		}
+	}
+	setWallpaper({ uri: fileName })
+	return fileName
+}
+
 export const setWallpaper = (next: Partial<WallpaperState>) => {
 	const merged = { ...wallpaperStore.getValue(), ...next }
 	wallpaperStore.setValue(merged)
@@ -106,5 +134,5 @@ export const getMacTheme = () => macThemeStore.getValue()
 
 export default {
 	MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore,
-	setMacTheme, setAccentColor, setWallpaper, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha,
+	setMacTheme, setAccentColor, setWallpaper, saveWallpaperFrom, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha,
 }

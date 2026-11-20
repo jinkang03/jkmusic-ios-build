@@ -45,11 +45,8 @@ const BasicSection = () => {
 			}
 			const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as any, quality: 0.9 })
 			if (res.canceled || !res.assets?.[0]?.uri) return
-			const FS = await import('expo-file-system/legacy')
-			const dest = `${(FS as any).documentDirectory}wallpaper.jpg`
-			await (FS as any).copyAsync({ from: res.assets[0].uri, to: dest })
-			// 只存文件名：绝对路径在重装后会指向旧容器
-			setWallpaper({ uri: 'wallpaper.jpg' })
+			const { saveWallpaperFrom } = await import('@/jk/themeStore')
+			await saveWallpaperFrom(res.assets[0].uri)
 			showToast(tr('已设置', 'Done'), tr('壁纸已应用到功能页面', 'Wallpaper applied to main pages'), 'success')
 		} catch (err) {
 			showToast(tr('设置失败', 'Failed'), String((err as any)?.message ?? err).slice(0, 60), 'error')
@@ -839,6 +836,13 @@ const SettingsSectionScreen = () => {
 					const { setAccentColor } = await import('@/jk/themeStore')
 					setAccentColor(String((params as any).color ?? ''))
 					logInfo('[dev] accent', String((params as any).color ?? '(follow theme)'))
+				} else if (action === 'wallpaperFile') {
+					// 模拟「相册选图」的保存链路（无点击环境验证换图是否真的生效）
+					const src = String((params as any).path ?? '')
+					if (!src) throw new Error('缺少 path')
+					const { saveWallpaperFrom } = await import('@/jk/themeStore')
+					const name = await saveWallpaperFrom(src)
+					logInfo('[dev] wallpaperFile saved=', name)
 				} else if (action === 'wallpaper') {
 					const { setWallpaper: setWp } = await import('@/jk/themeStore')
 					const next: any = {}
