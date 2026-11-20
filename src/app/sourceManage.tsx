@@ -10,6 +10,7 @@ import { logError, logInfo } from '@/helpers/logger'
 import myTrackPlayer, { musicApiSelectedStore, musicApiStore } from '@/helpers/trackPlayerIndex'
 import { createMusicApiFromScript, fetchScriptFromUrl } from '@/helpers/userApi/importMusicSource'
 import { bindMusicApi } from '@/jk/sourceRegistry'
+import { sourceLabel } from '@/jk/sourceLabels'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import PersistStatus from '@/store/PersistStatus'
 import { showToast } from '@/utils/utils'
@@ -268,21 +269,36 @@ const SourceManageScreen = () => {
 	}
 
 	const onTest = async(api: IMusic.MusicApi) => {
+		const shortOf = (src: string) => sourceLabel(src, true)
 		setTestNote(prev => ({ ...prev, [api.id]: tr('测试中…', 'Testing…') }))
 		const previousId = musicApiSelectedStore.getValue()?.id
 		try {
-			const reloaded = await myTrackPlayer.reloadMusicApi({ ...api, isSelected: true }, true)
-			const sources = formatPlatforms((reloaded as any).supportedSources ?? (api as any).supportedSources)
-			const platform = ((reloaded as any).supportedSources?.[0] as string | undefined) || 'kw'
-			if (typeof reloaded.getMusicUrl !== 'function') throw new Error(tr('getMusicUrl 不可用', 'getMusicUrl unavailable'))
-			const url = await Promise.race([
-				reloaded.getMusicUrl('稻香', '周杰伦', '228908', '128k', { requestType: 'test' }, platform),
-				new Promise<string>((_, reject) => setTimeout(() => reject(new Error(tr('测试超时', 'Test timed out'))), 12000)),
-			])
-			const note = url ? `${tr('测试通过', 'Passed')} ${platform}` : tr('测试失败：空地址', 'Failed: empty url')
-			setTestNote(prev => ({ ...prev, [api.id]: note }))
-			appendEvidence(`TEST ${note} sources=${sources || '(none)'}`)
-			showToast(url ? tr('测试通过', 'Passed') : tr('测试失败', 'Failed'), note, url ? 'success' : 'error')
+			const { testSourcePlatforms } = await import('@/jk/sourceTest')
+			const { platforms, results } = await testSourcePlatforms(api, (done, all) => {
+				const passed = done.filter(d => d.ok).length
+				const detail = all.map(src => {
+					const hit = done.find(d => d.src === src)
+					if (!hit) return `${shortOf(src)}…`
+					return `${shortOf(src)}${hit.ok ? '✓' : '✗'}`
+				}).join(' ')
+				setTestNote(prev => ({ ...prev, [api.id]: `${passed}/${all.length}  ${detail}` }))
+			})
+			const passed = results.filter(r => r.ok).length
+			const failed = results.filter(r => !r.ok)
+			const summary = `${passed}/${platforms.length}`
+			const failText = failed.map(f => `${shortOf(f.src)}:${f.note || tr('失败', 'failed')}`).join('; ')
+			appendEvidence(`TEST ${summary} sources=${platforms.join('/')} ${failText ? `fail=[${failText}]` : ''}`)
+			if (passed === platforms.length) {
+				showToast(tr('测试通过', 'All passed'), `${summary} ${platforms.map(shortOf).join(' / ')}`, 'success')
+			} else if (passed === 0) {
+				showToast(tr('测试失败', 'All failed'), failText.slice(0, 100) || tr('全部平台不可用', 'No platform available'), 'error')
+			} else {
+				showToast(tr('部分平台可用', 'Partially available'), `${summary} · ${failText.slice(0, 90)}`, 'info')
+			}
+			setTestNote(prev => ({
+				...prev,
+				[api.id]: `${summary}  ${platforms.map(src => `${shortOf(src)}${results.find(r => r.src === src)?.ok ? '✓' : '✗'}`).join(' ')}`,
+			}))
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)
 			setTestNote(prev => ({ ...prev, [api.id]: `${tr('测试失败', 'Failed')}: ${msg}` }))
@@ -440,7 +456,7 @@ const SourceManageScreen = () => {
 								{tr('支持平台', 'Platforms')} {sources || tr('未上报', 'n/a')}
 							</Text>
 							{testNote[api.id] ? (
-								<Text style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: 4 }}>{testNote[api.id]}</Text>
+								<Text numberOfLines={2} style={{ color: c.textMuted, fontSize: macFont.caption, marginTop: 4 }}>{testNote[api.id]}</Text>
 							) : null}
 							<View style={{ flexDirection: 'row', marginTop: 12, gap: 8 }}>
 								<Pressable

@@ -954,6 +954,16 @@ const SettingsSectionScreen = () => {
 					if (!target) throw new Error('目标平台没有搜索结果')
 					const count = lib.replaceSong(hit, target)
 					logInfo('[dev] applyChangeSource', String(hit.name ?? ''), String(hit.source ?? ''), '->', String(target.source ?? ''), 'count=', count)
+				} else if (action === 'testSource') {
+					// 按平台逐个测试某个音源（无点击验证）
+					const want = String((params as any).name ?? '')
+					const { musicApiStore } = await import('@/player/PlayerStore')
+					const list: any[] = (musicApiStore.getValue() as any[]) ?? []
+					const api = list.find(a => String(a?.name ?? '').includes(want))
+					if (!api) throw new Error(`找不到音源: ${want}`)
+					const { testSourcePlatforms } = await import('@/jk/sourceTest')
+					const { platforms, results } = await testSourcePlatforms(api)
+					logInfo('[dev] testSource', String(api.name ?? ''), JSON.stringify({ platforms, results }))
 				} else if (action === 'openChangeSource') {
 					// 打开换源弹窗（按歌名在「我的列表」里找第一首匹配）
 					const want = String((params as any).title ?? '')
