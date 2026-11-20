@@ -1,3 +1,33 @@
+## v1.3.7（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.3.7-unsigned-20261120.ipa` |
+| 大小 | 18.x MB |
+| sha256 | `bb4f80e229e6051171a3a3cd301df779573d8bc5cca7fa748914bf97981bda31` |
+| 版本 / build | 1.3.7 / 21 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.3.7` |
+
+### 1.3.7 恢复锁屏卡片
+
+尝试把锁屏 content 改成透明空视图（想只保留灵动岛），实测会留下一个空白圆角块，
+比原来的卡片更难看，已回滚。
+
+**限制说明**：ActivityKit 的 `ActivityConfiguration` 必须提供锁屏 content，
+系统无法只渲染灵动岛。可选只有：
+
+1. 正常卡片（当前：封面 + 歌名 + 剩余时间 + 细进度线）—— 推荐；
+2. 空白块（透明空视图）—— 难看，已放弃。
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.3.7 / build 21 / minos 16.4 / arm64
+jsbundle 6.4M / dev 残留 0 / size 18.x MB
+sha256 bb4f80e229e6051171a3a3cd301df779573d8bc5cca7fa748914bf97981bda31
+```
+
 ## v1.3.6（2026-11-20）
 
 | 项 | 值 |
