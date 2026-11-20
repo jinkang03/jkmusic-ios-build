@@ -1,3 +1,57 @@
+## v1.3.6（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.3.6-unsigned-20261120.ipa` |
+| 大小 | 18.x MB（新增 expo-image-manipulator） |
+| sha256 | `9ef020f7f980f411176c722f7aa883ecb2ee62c70efef6a2c31af92c7fb54c86` |
+| 版本 / build | 1.3.6 / 20 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.3.6` |
+
+### 1.3.6 灵动岛：封面 + 展开态边缘进度
+
+**封面（解决「有时读不到」）**
+
+根因：Live Activity 是独立进程，读不到主 App 沙盒；传远程 URL 又依赖网络。
+
+做法：
+
+1. 主 App 用 `expo-image-manipulator` 把封面压成 **64×64 JPEG**（base64 约 2KB）；
+2. 放进 `ActivityAttributes`（切歌时重启 activity），widget 直接 `UIImage(data:)` 解码；
+3. 封面来源优先 `currentArtworkStore`（本地缓存曲目的 `track.artwork` 常为空）；
+4. **ActivityAttributes 有 4KB 上限**（实测超限报
+   `Request includes ActivityAttributes that exceed the maximum permitted size`）：
+   - base64 > 3000 字符时再压到 48×48；
+   - Swift 侧 start 失败会自动去掉封面重试一次，保证灵动岛至少能显示；
+5. 同一首歌封面后到时补一次 start，且只尝试一次（避免每 2 秒重建 activity）。
+
+**进度**
+
+- 删除紧凑态圆圈进度；
+- 展开态（长按卡片）：`RoundedRectangle.trim(from:0,to:progress)` 沿边缘画进度线（强调色 2.5pt）；
+- 紧凑态：左侧封面缩略图、右侧倒计时（`Text(timerInterval:)`，系统自动走，不耗 update）；
+- 锁屏卡片：封面 + 歌名 + 剩余时间 + 线性进度条。
+
+**实测（模拟器锁屏截图）**
+
+```
+[LiveActivity] Requesting an activity ... （无 start failed）
+锁屏卡片：封面缩略图 + 晴天 / 周杰伦 + 波形图标 + 3:45 倒计时 + 紫色进度线
+[INFO] [live] start 晴天 total= 269.8 art= yes
+```
+
+首次使用会弹「允许 JKMUSIC 的实时活动?」，点「允许」后生效。
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.3.6 / build 20 / minos 16.4 / arm64
+PlugIns: JKMUSICWidget.appex / ShareExtension.appex
+jsbundle 6.4M / dev 残留 0 / size 18.x MB
+sha256 9ef020f7f980f411176c722f7aa883ecb2ee62c70efef6a2c31af92c7fb54c86
+```
+
 ## v1.3.5（2026-11-20）
 
 | 项 | 值 |
