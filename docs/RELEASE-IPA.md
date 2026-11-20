@@ -1,3 +1,52 @@
+## v1.4.0（2026-11-20）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.0-unsigned-20261120.ipa` |
+| 大小 | 18.x MB |
+| sha256 | `8e7ed54c5edd99c0cf3af81aa271f6b1a6187e4d069a8bbba137eba0bfab9b5d` |
+| 版本 / build | 1.4.0 / 24 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.4.0` |
+
+### 1.4.0 收藏统一 + 设置清理（第 1 批）
+
+**收藏按钮不生效**
+
+根因：播放页收藏写 CyMusic 旧 store（`music.favorites`），而「我的收藏」页读
+`libraryStore.loveList`，两套数据不通。
+
+- `useTrackPlayerFavorite` 改为 `toggleLove` / `isInLoveList`
+- `TrackShortcutsMenu` 的「添加到喜欢 / 从喜欢移除」同样改走 libraryStore
+- 删除 `store/library.tsx` 的 `favorites` / `toggleTrackFavorite` / `useFavorites`
+- 删除旧收藏页 `favoriteMusic.tsx` 与路由注册
+- `libraryStore` 新增 `libraryVersionStore`：写入后递增，收藏图标实时刷新
+- 旧收藏数据直接抛弃（按用户要求不做迁移）
+
+影响说明：`store/library.tsx` 里还有旧的 `usePlaylists` / `useLibraryStore`，
+被隐藏的「歌曲」「电台」子页使用，这部分未动（删除会导致那些页面崩）。
+
+**设置清理**
+
+- 移除「桌面专属（仅保存）」折叠组与桌面歌词 / 快捷键 / 数据同步 / 开放 API 分区
+- 移除「网络设置」分区与 `NetworkSection`
+- 设置首页现在只有：基本 / 播放 / 详情 / 搜索 / 列表 / 下载 / 强迫症 / 备份 / 其他
+
+### 实测
+
+```
+[dev] toggleLove 晴天 inLove= true count= 6
+设置页截图：仅 9 个分区，无「桌面专属」「网络设置」
+```
+
+### 断言
+
+```
+bundle com.jkmusic.ios / version 1.4.0 / build 24 / minos 16.4 / arm64
+jsbundle 6.4M / dev 残留 0 / size 18.x MB
+sha256 8e7ed54c5edd99c0cf3af81aa271f6b1a6187e4d069a8bbba137eba0bfab9b5d
+```
+
 ## v1.3.9（2026-11-20）
 
 | 项 | 值 |
