@@ -8,7 +8,9 @@ import { Playlist } from '@/helpers/types'
 import { jkToTrack } from '@/jk/adapt'
 import { LIST_IDS, getDefaultList, getLoveList, getUserLists, removeUserList } from '@/jk/libraryStore'
 import { useNavigationSearch } from '@/hooks/useNavigationSearch'
-import { useDefaultStyles } from '@/styles'
+import { useAppTheme } from '@/hooks/useAppTheme'
+import { macPalette } from '@/constants/macTokens'
+
 import i18n, { tr } from '@/utils/i18n'
 import { logInfo } from '@/helpers/logger'
 import { showToast } from '@/utils/utils'
@@ -18,7 +20,8 @@ import { ScrollView, View } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 
 const FavoritesScreen = () => {
-	const defaultStyles = useDefaultStyles()
+	const { isDark } = useAppTheme()
+	const c = macPalette(!!isDark)
 	const [version, setVersion] = useState(0)
 	const search = useNavigationSearch({
 		searchBarOptions: {
@@ -69,7 +72,7 @@ const FavoritesScreen = () => {
 	}, [playLists, search])
 
 	return (
-		<View style={defaultStyles.container}>
+		<View style={{ flex: 1, backgroundColor: c.bg }}>
 			<ScrollView contentInsetAdjustmentBehavior="automatic" style={{ paddingHorizontal: screenPadding.horizontal }}>
 				<PlaylistsList
 					playlists={filteredPlayLists}

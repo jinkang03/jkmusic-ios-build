@@ -8,6 +8,7 @@ const LeaderboardLayout = () => {
 	return (
 		<Stack
 			screenOptions={{
+				headerShown: false,
 				headerStyle: { backgroundColor: colors.background },
 				headerTintColor: colors.text,
 				headerShadowVisible: false,

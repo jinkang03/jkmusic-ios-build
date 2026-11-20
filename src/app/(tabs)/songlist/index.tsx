@@ -7,6 +7,7 @@
  * 避免空列表触底后无限请求（发热/流量放大器）。
  */
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { macPalette } from '@/constants/macTokens'
 import { logInfo } from '@/helpers/logger'
 import { getSongLists, getSongListTags, sources } from '@/jk/musicSdk'
 import type { JKSource } from '@/jk/musicSdk'
@@ -19,6 +20,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { sourceLabel } from '@/jk/sourceLabels'
 import { tr } from '@/utils/i18n'
 import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 const LIST_SOURCES: JKSource[] = ['kw', 'kg', 'tx', 'wy', 'mg']
 const PAGE_SIZE_GUESS = 30
@@ -41,6 +43,7 @@ const SongListScreen = () => {
 	const initialSource = (LIST_SOURCES as string[]).includes(String(params.source))
 		? (params.source as JKSource)
 		: 'kw'
+	const insets = useSafeAreaInsets()
 	const [source, setSource] = useState<JKSource>(initialSource)
 	const [tags, setTags] = useState<Array<{ id: string, name: string }>>([])
 	const [tagId, setTagId] = useState('')
@@ -159,7 +162,10 @@ const SongListScreen = () => {
 	]
 
 	return (
-		<View style={{ flex: 1, backgroundColor: colors.background }}>
+		<View style={{ flex: 1, backgroundColor: macPalette(!!useAppTheme().isDark).bg, paddingTop: insets.top }}>
+			<View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
+				<Text style={{ color: macPalette(!!useAppTheme().isDark).textStrong, fontSize: 30, fontWeight: '700' }}>{tr('歌单', 'Playlists')}</Text>
+			</View>
 			{/* 源标签行：固定高度，不允许被拉伸 */}
 			<ScrollView
 				horizontal

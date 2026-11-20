@@ -439,7 +439,6 @@ const createStyles = (colors: ThemeColors) =>
 	},
 	contentContainer: {
 		flex: 1,
-		backgroundColor: colors.background,
 		paddingTop: 8,
 	},
 	segmentedControlContainer: {

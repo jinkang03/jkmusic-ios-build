@@ -977,6 +977,16 @@ const SettingsSectionScreen = () => {
 					if (!target) throw new Error('目标平台没有搜索结果')
 					const count = lib.replaceSong(hit, target)
 					logInfo('[dev] applyChangeSource', String(hit.name ?? ''), String(hit.source ?? ''), '->', String(target.source ?? ''), 'count=', count)
+				} else if (action === 'dumpTheme') {
+					const { macPalette } = await import('@/constants/macTokens')
+					const { getThemeColors } = await import('@/constants/tokens')
+					const { glassAlpha, wallpaperStore } = await import('@/jk/themeStore')
+					logInfo('[dev] themeDump', JSON.stringify({
+						wallpaper: wallpaperStore.getValue(),
+						alpha: glassAlpha(),
+						macBg: macPalette(false).bg,
+						tokensBg: getThemeColors('light').background,
+					}))
 				} else if (action === 'testSource') {
 					// 按平台逐个测试某个音源（无点击验证）
 					const want = String((params as any).name ?? '')

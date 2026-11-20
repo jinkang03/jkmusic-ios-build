@@ -9,7 +9,7 @@ const RadiolistsScreenLayout = () => {
 	const colors = useThemeColors()
 	const defaultStyles = useDefaultStyles()
 	return (
-		<View style={defaultStyles.container} key={language}>
+		<View style={{ flex: 1 }} key={language}>
 			<Stack>
 				<Stack.Screen
 					name="index"
