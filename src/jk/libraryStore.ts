@@ -110,6 +110,12 @@ export const renameUserList = (id: string, name: string) => {
 
 const sameMusic = (a: JKMusic, b: JKMusic) => a.id === b.id && a.source === b.source
 
+export const getListName = (id: string): string => {
+	if (id === LIST_IDS.DEFAULT) return '试听列表'
+	if (id === LIST_IDS.LOVE) return '我的收藏'
+	return state.userLists.find(item => item.id === id)?.name ?? '试听'
+}
+
 export const getListById = (id: string): JKMusic[] => {
 	if (id === LIST_IDS.DEFAULT) return state.defaultList
 	if (id === LIST_IDS.LOVE) return state.loveList

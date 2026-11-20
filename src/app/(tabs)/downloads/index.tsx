@@ -61,51 +61,29 @@ const DownloadsScreen = () => {
 	const load = useCallback(async() => {
 		setLoading(true)
 		try {
-			const names: string[] = (await FS.readDirectoryAsync(cacheDir).catch(() => []))
-				.filter((n: string) => n !== 'index.json' && !n.endsWith('.part'))
-			const index = await readCacheIndex()
-			const list: CacheItem[] = []
-			let legacyCount = 0
-			let sum = 0
-			for (const name of names) {
-				const uri = `${cacheDir}${name}`
-				try {
-					const st: any = await FS.getInfoAsync(uri)
-					if (!st?.exists || st.isDirectory) continue
-					const size = Number(st.size ?? 0)
-					sum += size
-					const mt = Number(st.modificationTime ?? 0)
-					// RN 返回秒级时间戳，new Date() 需要毫秒
-					const meta: any = index[name] ?? {}
-					// 只显示「用户手动下载」的条目；播放产生的缓存不进下载页
-					if (meta.manual !== true) {
-						if (meta.manual === undefined) legacyCount++
-						continue
-					}
-					list.push({
-						name, uri, size,
-						mtime: mt > 1e12 ? mt : mt * 1000,
-						title: meta.title,
-						artist: meta.artist,
-						quality: normalizeQuality(String(meta.quality ?? ''), size),
-					} as any)
-				} catch { /* 单个文件失败忽略 */ }
-			}
-			if (legacyCount > 0) logInfo('[cache] 迁移老条目（视为缓存）count=', legacyCount)
-			list.sort((a, b) => b.mtime - a.mtime)
-			setItems(list)
-			setTotal(sum)
-			const manualN = list.length
-			const autoN = Object.values(index).filter((x: any) => x?.manual !== true).length
-			logInfo('[downloads] 刷新', `manual=${manualN}`, `auto=${autoN}`, `total=${(sum / 1024 / 1024).toFixed(1)}MB`)
+			const { scanDownloads, getDownloadSize } = await import('@/jk/downloadStore')
+			const list = await scanDownloads()
+			setItems(list.map(item => ({
+				name: item.name,
+				uri: item.uri,
+				size: item.size,
+				mtime: item.mtime,
+				title: item.meta?.title,
+				artist: item.meta?.artist,
+				quality: normalizeQuality(String(item.meta?.quality ?? ''), item.size),
+				folder: item.folder,
+			})) as any)
+			const { bytes } = await getDownloadSize()
+			setTotal(bytes)
+			logInfo('[downloads] 刷新', 'count=', list.length, 'total=', (bytes / 1024 / 1024).toFixed(1) + 'MB')
 		} catch (err) {
-			logError('[downloads] 读取缓存目录失败', String((err as any)?.message ?? err))
+			logError('[downloads] 扫描下载目录失败', String((err as any)?.message ?? err))
 			setItems([])
 			setTotal(0)
 		} finally {
 			setLoading(false)
 		}
-	}, [cacheDir])
+	}, [])
 
 	const runBackfill = useCallback(async() => {
 		try {
@@ -140,12 +118,16 @@ const DownloadsScreen = () => {
 	const playLocal = async(item: CacheItem) => {
 		try {
 			const tp = (await import('@/helpers/trackPlayerIndex')).default as any
+			const { readSidecar } = await import('@/jk/downloadStore')
+			const side = await readSidecar(item.uri)
+			const fallbackName = item.name.replace(/\.[^.]+$/, '')
 			const track: any = {
-				id: item.name.replace(/\.[^.]+$/, ''),
-				platform: 'local',
-				title: item.name.replace(/\.[^.]+$/, ''),
-				artist: tr('本地缓存', 'Local cache'),
-				duration: 0,
+				id: side.meta?.sourceId || fallbackName,
+				platform: side.meta?.source || 'local',
+				title: side.meta?.title || fallbackName,
+				artist: side.meta?.artist || tr('本地下载', 'Downloaded'),
+				album: side.meta?.album || '',
+				duration: Number(side.meta?.duration ?? 0) || 0,
 				url: item.uri.startsWith('file://') ? item.uri : `file://${item.uri}`,
 			}
 			logInfo('[downloads] 试听本地文件', track.url)
@@ -157,26 +139,17 @@ const DownloadsScreen = () => {
 
 	const removeOne = async(uri: string) => {
 		try {
-			await FS.deleteAsync(uri, { idempotent: true })
-			await removeCacheIndexEntry(uri.split('/').pop() ?? '')
+			const { removeDownload } = await import('@/jk/downloadStore')
+			await removeDownload(uri)
 			await load()
 		} catch (err) {
 			logError('[downloads] 删除失败', String((err as any)?.message ?? err))
 		}
 	}
 
-	const clearAll = async() => {
-		try {
-			await FS.deleteAsync(cacheDir, { idempotent: true })
-			await load()
-		} catch (err) {
-			logError('[downloads] 清理失败', String((err as any)?.message ?? err))
-		}
-	}
-
-	const filtered = quality ? items.filter((i: any) => String(i.quality) === quality) : items
+	// 手动下载都是已完成项；"正在下载"走上面的任务卡片
+	const filtered = items
 	const shown = filter === 'downloading' ? [] : filtered
-	const mb = (total / 1024 / 1024).toFixed(1)
 
 	return (
 		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
@@ -199,7 +172,7 @@ const DownloadsScreen = () => {
 
 			{/* 音质选择 */}
 			<View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: macSpace.pageX, marginTop: 10 }}>
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('下载音质', 'Quality')}</Text>
+				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('筛选音质', 'Filter')}</Text>
 				{QUALITIES.map(q => {
 					const active = q.value === quality
 					return (
@@ -288,18 +261,6 @@ const DownloadsScreen = () => {
 				/>
 			)}
 
-			{/* 底部信息条 */}
-			<View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: macSpace.pageX, paddingVertical: 12, borderTopWidth: 0.5, borderTopColor: c.divider }}>
-				<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>{tr('已用', 'Used')} {mb} MB / {tr('上限', 'Limit')} {limitMb} MB</Text>
-				<View style={{ flexDirection: 'row', gap: 8 }}>
-					<Pressable onPress={() => { void runBackfill() }} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-						<Text style={{ color: c.text, fontSize: macFont.caption }}>{tr('刷新信息', 'Refresh')}</Text>
-					</Pressable>
-					<Pressable onPress={clearAll} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: pressed ? c.fillMuted : c.fillSubtle })}>
-						<Text style={{ color: c.text, fontSize: macFont.caption }}>{tr('清理全部', 'Clear all')}</Text>
-					</Pressable>
-				</View>
-			</View>
 		</View>
 	)
 }

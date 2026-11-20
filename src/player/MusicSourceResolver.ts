@@ -11,12 +11,14 @@ export type SourceResult = {
 	wasCached: boolean
 }
 
-export type ResolveSourceRequestType = 'current' | 'preload'
+export type ResolveSourceRequestType = 'current' | 'preload' | 'download'
 
 type ResolveSourceOptions = {
 	requestType?: ResolveSourceRequestType
 	/** 指定请求音质（下载时可覆盖设置里的默认值），不传则用当前播放音质 */
 	quality?: IMusic.IQualityKey
+	/** 手动下载：只取流，不做「先下载到缓存」那一步 */
+	skipDownload?: boolean
 }
 
 type MusicUrlRequestContext = {
@@ -406,7 +408,9 @@ export const resolveSource = async (
 	}
 
 	const forceRemote = (globalThis as any).__JK_FORCE_REMOTE__ === true
-	const cached = forceRemote ? false : await isCached(musicItem)
+	// 手动下载必须按「请求的音质」重新取流：命中播放缓存会拿到别的音质（实测 128k 下成 flac）
+	const isDownloadRequest = requestType === 'download'
+	const cached = (forceRemote || isDownloadRequest) ? false : await isCached(musicItem)
 	if (cached) {
 		const localPath = getLocalFilePath(musicItem)
 		// 缓存记录可能指向旧容器路径（重装后 UUID 变化），或文件是半截的。
@@ -451,11 +455,12 @@ export const resolveSource = async (
 	}
 
 	// 只在本地与磁盘缓存都未命中时，才复用预加载的远端音源。
+	// 下载请求不复用（预取地址用的是当前播放音质）。
 	// 注意：本环境 AVPlayer 放不了网络流，current 请求拿到预取地址也要先下载，
 	// 不能直接把 http 地址交给播放器（否则必然 PlaybackError → 被判失败）。
 	let preloadedUrl: string | null = null
 	const preloaded = getPreloadedUrl(musicItem)
-	if (preloaded) {
+	if (preloaded && !isDownloadRequest) {
 		preloadCache.delete(preloadKey)
 		if (isCurrentSourceRequest(requestType)) {
 			preloadedUrl = preloaded
@@ -547,7 +552,7 @@ export const resolveSource = async (
 			}
 			if (!resp_url) {
 				// 主源整条链路失败：换其它源播同一首（跨源兜底），避免点了没声音
-				const alt = await findPlayableAlt(musicItem, String(qualityStore.getValue() ?? '128k'), requestType)
+				const alt = await findPlayableAlt(musicItem, String(options.quality ?? qualityStore.getValue() ?? '128k'), requestType)
 				if (alt?.url) {
 					resp_url = alt.url
 					switchedAlt = { source: String(alt.source), id: String((alt as any).id ?? '') }
@@ -602,6 +607,11 @@ export const resolveSource = async (
 				}
 			}
 
+			// 手动下载：直接把远程地址交给下载器（否则会先落到播放缓存，拿到的是别的音质）
+			if (options.skipDownload === true) {
+				logInfo('[jk/play] skipDownload：返回远程 URL 供下载')
+				return { url: String(resp_url), wasCached: false }
+			}
 			const { getSetting: getStreamSetting } = await import('@/jk/settingsStore')
 			const streamMode = Boolean(getStreamSetting<boolean>('_dev.streamMode', false))
 			if (streamMode) {

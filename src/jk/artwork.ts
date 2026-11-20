@@ -9,6 +9,15 @@ const cache = new Map<string, string>()
 
 export const resolveArtwork = async(track: any): Promise<string> => {
 	if (!track) return ''
+	// 手动下载的歌曲：优先用同名封面文件
+	try {
+		const localPath = String(track?.url ?? '')
+		if (localPath.includes('/downloads/')) {
+			const { readSidecar } = await import('./downloadStore')
+			const side = await readSidecar(localPath)
+			if (side.coverUri) return side.coverUri
+		}
+	} catch { /* ignore */ }
 	const existing = track.artwork || track?.lxMusic?.meta?.picUrl || track?.lxMusic?.meta?.img
 	if (existing && String(existing).startsWith('http')) return String(existing)
 

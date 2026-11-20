@@ -116,6 +116,18 @@ const fetchLyricFromOtherSources = async(music: JKMusic): Promise<LyricResult | 
 }
 
 export const fetchLyric = async(track: Track): Promise<LyricResult> => {
+	// 手动下载的歌曲：优先读同名 sidecar（离线也有歌词）
+	try {
+		const localPath = String((track as any)?.url ?? '')
+		if (localPath.includes('/downloads/')) {
+			const { readSidecar } = await import('./downloadStore')
+			const side = await readSidecar(localPath)
+			if (side.lyric && side.lyric.length > 10) {
+				logInfo('[jk/lyric] local sidecar', localPath.split('/').pop())
+				return { lyric: side.lyric, tlyric: side.translation || null, lxlyric: null }
+			}
+		}
+	} catch { /* ignore */ }
 	const music: JKMusic = trackToJk(track)
 	const swapped = buildSwappedMusic(music)
 	try {

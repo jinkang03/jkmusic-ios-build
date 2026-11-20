@@ -5,7 +5,7 @@ import { logInfo } from '@/helpers/logger'
 import SongListView from '@/components/mac/SongListView'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { jkToTrack } from '@/jk/adapt'
-import { getListById } from '@/jk/libraryStore'
+import { getListById, getListName } from '@/jk/libraryStore'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { tr } from '@/utils/i18n'
 import React, { useMemo } from 'react'
@@ -45,7 +45,7 @@ const ListDetailScreen = () => {
 
 	return (
 		<View style={{ flex: 1, backgroundColor: colors.background }}>
-			<SongListView tracks={tracks} queueId={`mylist_${listId}`} autoPlayIndex={autoPlayIndex} showActions emptyText={tr('列表还是空的', 'This list is empty')} />
+			<SongListView tracks={tracks} queueId={`mylist_${listId}`} autoPlayIndex={autoPlayIndex} showActions listName={getListName(String(listId))} emptyText={tr('列表还是空的', 'This list is empty')} />
 		</View>
 	)
 }

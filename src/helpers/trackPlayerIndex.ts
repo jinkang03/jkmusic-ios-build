@@ -234,6 +234,8 @@ async function ensureBuiltinSources(): Promise<IMusic.MusicApi | null> {
 
 async function setupTrackPlayer() {
 	migrate()
+	// 一次性清理旧版本留在 musicCache 里的手动下载（新版本改为 downloads/ 独立目录）
+	void import('@/jk/downloadStore').then(m => m.purgeLegacyManualDownloads()).catch(() => undefined)
 	const rate = PersistStatus.get('music.rate')
 	const musicQueue = PersistStatus.get('music.play-list')
 	const legacyMusicQueue = PersistStatus.get('music.playList')
@@ -1132,6 +1134,16 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		}) as IMusic.IMusicItem
 		logInfo('获取音源成功：', track)
 		setTrackSource(track)
+		// 手动下载的歌曲：用 sidecar 封面（离线也有图）
+		if (String((track as any).url ?? '').startsWith('file://') && String((track as any).url).includes('/downloads/')) {
+			void import('@/jk/downloadStore').then(async m => {
+				const side = await m.readSidecar(String((track as any).url))
+				if (side.coverUri) {
+					const { currentArtworkStore } = await import('@/jk/artworkStore')
+					currentArtworkStore.setValue(side.coverUri)
+				}
+			}).catch(() => undefined)
+		}
 		const appliedToken = nativeQueue.token
 		// 启动恢复：音源就绪后跳到上次播放位置（只应用一次）
 		const restorePos = pendingRestorePositionStore.getValue()
@@ -1149,7 +1161,7 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		}
 
 		// 7. Fetch lyrics in background (non-blocking)
-		fetchLyric(musicItem as any)
+		fetchLyric({ ...(musicItem as any), url: (track as any).url } as any)
 			.then((lyc) => {
 				// 歌词只跟「当前这首歌」绑定。原来的 nativeQueue.token 守卫在试听换源后
 				// 会因为队列 token 变化而永远不写入，导致播放页一直「暂无歌词」。

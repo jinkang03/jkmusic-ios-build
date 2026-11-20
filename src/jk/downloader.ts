@@ -1,10 +1,9 @@
 /**
- * 手动下载：解析 URL → 落到缓存目录 → 索引标记 manual=true 并记录实际音质。
- * 与播放缓存共用目录（不新建第二套），靠索引的 manual 字段区分。
+ * 手动下载：解析 URL → 落到 Documents/downloads/<歌单名>/（与播放缓存分离），
+ * 按「歌名 - 歌手」命名，并写入同名 .json/.lrc/.jpg（歌曲信息/歌词/封面）。
  */
+import * as FileSystem from 'expo-file-system/legacy'
 import { resolveSource } from '@/player/MusicSourceResolver'
-import { downloadToCache, readCacheIndex, upsertCacheIndex } from '@/player/CacheManager'
-import { withLimit } from '@/jk/limiter'
 import { getSetting } from '@/jk/settingsStore'
 import { logError, logInfo } from '@/helpers/logger'
 import { showToast } from '@/utils/utils'
@@ -20,7 +19,7 @@ export const normalizeQuality = (raw: string, sizeBytes?: number): string => {
 	return 'unknown'
 }
 
-export const downloadTrack = async(track: any, opts?: { quality?: string }) => {
+export const downloadTrack = async(track: any, opts?: { quality?: string, listName?: string }) => {
 	const requested = String(opts?.quality ?? getSetting('music.quality', '128k'))
 	// 连续失败 3 次后停止，避免无限重试
 	const prevTask = (await import('@/jk/downloadTasksStore')).downloadTasksStore.getValue()[String(track?.id)]
@@ -30,7 +29,7 @@ export const downloadTrack = async(track: any, opts?: { quality?: string }) => {
 		return
 	}
 	try {
-		logInfo('[download] start', String(track?.title ?? ''), 'q=' + requested)
+		logInfo('[download] start', String(track?.title ?? ''), 'q=' + requested, 'list=' + String(opts?.listName ?? '试听'))
 		upsertTask({ id: String(track.id), title: String(track.title ?? ''), percent: 0, status: 'downloading' })
 		const forceBad = track?.__forceBad === true || track?.bad === true
 		const resolved: any = forceBad
@@ -39,37 +38,79 @@ export const downloadTrack = async(track: any, opts?: { quality?: string }) => {
 				requestType: 'download',
 				requestKey: `dl_${Date.now()}`,
 				quality: requested as any,
+				skipDownload: true,
 			} as any)
 		if (forceBad) logInfo('[download] forceBad url=', String(resolved?.url ?? ''))
 		const url = String(resolved?.url ?? '')
 		if (!url) throw new Error('解析未返回可下载地址')
 		const actual = normalizeQuality(String((globalThis as any).__jkActualQuality ?? requested))
+
+		const ds = await import('@/jk/downloadStore')
+		const dir = ds.getDownloadDir(opts?.listName)
+		await ds.ensureDir(dir)
+		const extMatch = /\.(flac|mp3|m4a|aac|ogg|wav)(\?|$)/i.exec(url)
+		const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : (actual === 'flac' ? '.flac' : '.mp3')
+		const baseName = ds.buildBaseName(track)
+		const dest = await ds.uniquePath(dir, baseName, ext)
+
 		const limit = Math.max(1, Number(getSetting('download.maxDownloadNum', 3)) || 3)
-		logInfo('[limit] queued limit=', limit, 'activeBefore=', (await import('@/jk/limiter')).getActive())
-		const localPath = await withLimit(limit, () => downloadToCache({ ...track, url } as any, (pct: number) => {
-			upsertTask({ id: String(track.id), percent: pct, status: 'downloading' })
-			if (pct % 20 === 0) logInfo('[download] progress', String(track.title ?? ''), pct + '%')
-		}, { manual: true, quality: actual }))
-		// 兜底校正：无论 downloadToCache 内部如何写，手动下载最终必须是 manual=true
-		try {
-			const base = String(localPath).split('/').pop() ?? ''
-			const idx: any = await readCacheIndex()
-			if (base && idx?.[base]?.manual !== true) {
-				await upsertCacheIndex(base, {
-					...(idx?.[base] ?? {}),
-					manual: true,
-					quality: actual,
-					source: String((track as any).platform ?? ''),
-					songmid: String((track as any).id ?? ''),
-					mtime: Date.now(),
-				})
-				logInfo('[download] index fixed manual=true', base, 'q=', actual)
-			}
-		} catch (e) {
-			logError('[download] index fix failed', String((e as any)?.message ?? e))
+		const { downloadFile } = await import('@/helpers/fileDownload')
+		const { withLimit } = await import('@/jk/limiter')
+		await withLimit(limit, async() => {
+			await downloadFile(url, dest, (res: any) => {
+				const pct = res?.contentLength > 0 ? Math.round((res.bytesWritten / res.contentLength) * 100) : 0
+				upsertTask({ id: String(track.id), percent: pct, status: 'downloading' })
+				if (pct % 20 === 0) logInfo('[download] progress', String(track.title ?? ''), pct + '%')
+			})
+		})
+
+		// 完整性校验：拒绝试听片段
+		const { readAudioDuration, isTruncatedAudio, parseIntervalSeconds, intervalOf } = await import('@/player/audioDuration')
+		const expectedSec = parseIntervalSeconds(intervalOf(track))
+		const actualSec = await readAudioDuration(dest)
+		if (isTruncatedAudio(actualSec, expectedSec)) {
+			try { await (FileSystem as any).deleteAsync(dest, { idempotent: true }) } catch { /* ignore */ }
+			throw new Error('下载到的是试听片段')
 		}
-		logInfo('[limit] done active=', (await import('@/jk/limiter')).getActive())
-		logInfo('[download] done', String(track?.title ?? ''), 'q=' + actual)
+
+		// 歌词 / 封面 sidecar
+		let lyric = ''
+		let translation = ''
+		try {
+			const { fetchLyric } = await import('@/jk/lyric')
+			const lrc = await fetchLyric(track)
+			lyric = String(lrc?.lyric ?? '')
+			translation = String((lrc as any)?.tlyric ?? '')
+		} catch { /* 歌词失败不影响下载 */ }
+		let coverTemp = ''
+		try {
+			const { resolveArtwork } = await import('@/jk/artwork')
+			const coverUrl = await resolveArtwork(track)
+			if (coverUrl) {
+				const { File, Paths } = await import('expo-file-system')
+				const target = new File(Paths.cache, `dl-cover-${Date.now()}.jpg`)
+				const downloaded = await File.downloadFileAsync(coverUrl, target, { idempotent: true })
+				coverTemp = String((downloaded as any)?.uri ?? target.uri)
+			}
+		} catch { /* 封面失败不影响下载 */ }
+
+		const st: any = await (FileSystem as any).getInfoAsync(dest)
+		await ds.writeSidecar(dest, {
+			title: String(track?.title ?? ''),
+			artist: String(track?.artist ?? ''),
+			album: String((track as any)?.album ?? (track as any)?.meta?.albumName ?? ''),
+			year: String((track as any)?.year ?? (track as any)?.meta?.year ?? (track as any)?.meta?.publishTime ?? ''),
+			duration: Number((track as any)?.duration ?? 0) || undefined,
+			source: String((track as any)?.platform ?? ''),
+			sourceId: String((track as any)?.id ?? ''),
+			quality: actual,
+			bitrate: String((globalThis as any).__jkActualQuality ?? actual),
+			fileSize: Number(st?.size ?? 0),
+			downloadedAt: Date.now(),
+			listName: String(opts?.listName ?? '试听'),
+		}, { lyric, translation, coverUri: coverTemp })
+
+		logInfo('[download] done', String(track?.title ?? ''), 'q=' + actual, 'path=' + dest.split('/').pop())
 		upsertTask({ id: String(track.id), percent: 100, status: 'done' })
 		setTimeout(() => removeTask(String(track.id)), 1500)
 		showToast('提示', `已下载 ${String(track?.title ?? '')}（${actual}）`, 'success')

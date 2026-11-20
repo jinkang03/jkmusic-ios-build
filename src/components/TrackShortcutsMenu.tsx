@@ -21,6 +21,8 @@ type TrackShortcutsMenuProps = PropsWithChildren<{
 	isSinger?: boolean
 	allowDelete?: boolean
 	onDeleteTrack?: (trackId: string) => void
+	/** 下载时用来决定子目录（歌单名 / 试听） */
+	listName?: string
 }>
 
 export const TrackShortcutsMenu = ({
@@ -29,6 +31,7 @@ export const TrackShortcutsMenu = ({
 	isSinger,
 	allowDelete,
 	onDeleteTrack,
+	listName,
 }: TrackShortcutsMenuProps) => {
 	const router = useRouter()
 	// 收藏状态来自 JKMUSIC 列表模型（旧 favorites store 已移除）
@@ -133,7 +136,7 @@ export const TrackShortcutsMenu = ({
 				},
 			)
 			.with('download-track', async () => {
-				void import('@/jk/downloader').then(m => m.downloadTrack(track)).catch(() => undefined)
+				void import('@/jk/downloader').then(m => m.downloadTrack(track, { listName })).catch(() => undefined)
 			})
 			.with(
 				P.when((id) => id.startsWith('download-') && id !== 'download-track'),
@@ -142,7 +145,7 @@ export const TrackShortcutsMenu = ({
 					if (!['128k', '320k', 'flac'].includes(quality)) return
 					logInfo('[menu] download quality=', quality, 'track=', String((track as any)?.title ?? ''))
 					void import('@/jk/downloader')
-						.then(m => m.downloadTrack(track, { quality }))
+						.then(m => m.downloadTrack(track, { quality, listName }))
 						.catch(() => undefined)
 				},
 			)

@@ -34,9 +34,11 @@ export interface SongListViewProps {
 	onTrackPress?: () => void
 	/** 行右侧显示「⋯」操作菜单（收藏 / 添加到歌单 / 播放列表） */
 	showActions?: boolean
+	/** 下载子目录：歌单名（搜索/排行榜等不传 → 试听） */
+	listName?: string
 }
 
-const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress, showActions }: SongListViewProps) => {
+const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress, showActions, listName }: SongListViewProps) => {
 	const c = macPalette(!!useAppTheme().isDark)
 	const router = useRouter()
 	const params = useLocalSearchParams<{ t?: string }>()
@@ -100,7 +102,7 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress,
 				return (
 					<View style={{ flexDirection: 'row', alignItems: 'center' }}>
 						<View style={{ flex: 1 }}>{row}</View>
-						<TrackShortcutsMenu track={item as any}>
+						<TrackShortcutsMenu track={item as any} listName={listName}>
 							<View style={{ width: 32, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 }}>
 								<Text style={{ color: c.textMuted, fontSize: 18 }}>⋯</Text>
 							</View>

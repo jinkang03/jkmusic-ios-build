@@ -368,6 +368,8 @@ const DownloadSection = () => {
 	const c = macPalette(!!isDark)
 	const [size, setSize] = React.useState(0)
 	const [count, setCount] = React.useState(0)
+	const [dlSize, setDlSize] = React.useState(0)
+	const [dlCount, setDlCount] = React.useState(0)
 	const [limitMb, setLimitMb] = useSetting('download.cacheLimitMb', 500)
 	const [status, setStatus] = React.useState('')
 	const [showGoFavorites, setShowGoFavorites] = React.useState(false)
@@ -385,6 +387,12 @@ const DownloadSection = () => {
 			const autoNames = names.filter((n: string) => !n.endsWith('.part') && (idx as any)[n]?.manual !== true)
 			setCount(autoNames.length)
 		} catch { setCount(0) }
+		try {
+			const { getDownloadSize } = await import('@/jk/downloadStore')
+			const dl = await getDownloadSize()
+			setDlSize(dl.bytes)
+			setDlCount(dl.count)
+		} catch { setDlSize(0); setDlCount(0) }
 	}, [])
 
 	const clearAuto = async() => {
@@ -413,8 +421,12 @@ const DownloadSection = () => {
 		try {
 			const cm = await import('@/player/CacheManager')
 			await cm.clearCache()
+			// 手动下载目录一并清空
+			const FS = await import('expo-file-system/legacy')
+			const { DOWNLOAD_ROOT } = await import('@/jk/downloadStore')
+			try { await FS.deleteAsync(DOWNLOAD_ROOT, { idempotent: true }) } catch { /* ignore */ }
 			await refresh()
-			setStatus(tr('已清理缓存', 'Cache cleared'))
+			setStatus(tr('已清理缓存与下载', 'Cache and downloads cleared'))
 		} catch (err: any) {
 			setStatus(`${tr('清理失败', 'Clear failed')}: ${err?.message ?? err}`)
 		}
@@ -426,6 +438,17 @@ const DownloadSection = () => {
 		<>
 			<SettingRow label={tr('缓存占用', 'Cache Usage')} hint={`${count} ${tr('个文件', 'files')}`}>
 				<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{mb} MB</Text>
+			</SettingRow>
+			<SettingRow
+				label={tr('已下载占用', 'Downloads Usage')}
+				hint={`${dlCount} ${tr('首', 'songs')}`}
+			>
+				<View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+					<Text style={{ color: c.textMuted, fontSize: macFont.body }}>{(dlSize / 1024 / 1024).toFixed(1)} MB</Text>
+					<Pressable onPress={() => { void refresh() }}>
+						<Text style={{ color: c.primary, fontSize: macFont.caption }}>{tr('刷新', 'Refresh')}</Text>
+					</Pressable>
+				</View>
 			</SettingRow>
 			<SettingRow label={tr('缓存上限', 'Cache Limit')} hint={tr('超出后按最久未使用淘汰', 'Evicts least recently used first')}>
 				<SettingSelect
@@ -809,7 +832,11 @@ const SettingsSectionScreen = () => {
 					}
 					if (!track.id) throw new Error('缺少 id')
 					const q = String((params as any).quality ?? '')
-					await downloadTrack(track, q ? { quality: q } : undefined)
+					const listName = String((params as any).list ?? '')
+					await downloadTrack(track, {
+						quality: q || undefined,
+						listName: listName || undefined,
+					})
 					logInfo('[dev] download ok', track.title, 'q=', q || '(default)')
 				} else if (action === 'addToList') {
 					const listId = String((params as any).listId ?? '')
@@ -986,6 +1013,26 @@ const SettingsSectionScreen = () => {
 					setPendingChangeSource(hit)
 					logInfo('[dev] openChangeSource title=', String(hit?.name ?? ''), 'source=', String(hit?.source ?? ''))
 					router.push('/(modals)/changeSource' as any)
+				} else if (action === 'playDownload') {
+					// 播放「下载页」里的本地文件（验证封面/歌词 sidecar）
+					const want = String((params as any).name ?? '')
+					const ds = await import('@/jk/downloadStore')
+					const items = await ds.scanDownloads()
+					const hit = items.find(i => !want || i.name.includes(want))
+					if (!hit) throw new Error('没有匹配的下载文件')
+					const side = await ds.readSidecar(hit.uri)
+					const { default: tp } = await import('@/helpers/trackPlayerIndex')
+					const track: any = {
+						id: side.meta?.sourceId || hit.name,
+						platform: side.meta?.source || 'local',
+						title: side.meta?.title || hit.name,
+						artist: side.meta?.artist || '',
+						album: side.meta?.album || '',
+						duration: Number(side.meta?.duration ?? 0) || 0,
+						url: hit.uri,
+					}
+					logInfo('[dev] playDownload', track.title, 'cover=', side.coverUri ? 'yes' : 'no', 'lrc=', side.lyric ? 'yes' : 'no')
+					await (tp as any).playWithReplacePlayList(track, [track])
 				} else if (action === 'toggleLove') {
 					// 验证播放页收藏：对当前曲目 toggle 我的收藏
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
