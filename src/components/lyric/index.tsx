@@ -44,6 +44,10 @@ interface IItemHeights {
 
 interface IProps {
 	onTurnPageClick?: () => void
+	/** 是否允许滚动（跟手转场未完成时禁用，避免抢手势） */
+	scrollEnabled?: boolean
+	/** 在列表顶部继续下拉时回调（用于收起全屏歌词） */
+	onRequestClose?: () => void
 }
 
 const fontSizeMap = {
@@ -53,8 +57,8 @@ const fontSizeMap = {
 	3: rpx(42),
 } as Record<number, number>
 
-export default function Lyric(_props: IProps) {
-	void _props
+export default function Lyric(props: IProps) {
+	const { scrollEnabled = true, onRequestClose } = props
 	const colors = useThemeColors()
 	const styles = useMemo(() => createStyles(colors), [colors])
 	// const lrcSource = {
@@ -144,6 +148,7 @@ export default function Lyric(_props: IProps) {
 			if (!listRef.current || listLength <= 0) {
 				return
 			}
+			if (!scrollEnabled) return
 			const targetIndex = clampLyricIndex(index, listLength)
 			const now = Date.now()
 			// 只挡「同一行重复调用」，其余一律滚动：mac 端的连贯感来自逐行平滑滚动
@@ -162,7 +167,7 @@ export default function Lyric(_props: IProps) {
 			lastAutoScrollAtRef.current = now
 			lastAutoScrollIndexRef.current = targetIndex
 		},
-		[clampLyricIndex],
+		[clampLyricIndex, scrollEnabled],
 	)
 
 	// 滚到当前行（按播放位置算出来的行，而不是滞后的 progress 事件）
@@ -216,6 +221,13 @@ export default function Lyric(_props: IProps) {
 		return () => clearTimeout(t)
 	}, [lyrics.length, scrollToCurrentLrcItem])
 
+	// 跟手转场完成后（scrollEnabled 变为 true）补一次定位，否则会停在顶部
+	useEffect(() => {
+		if (!scrollEnabled) return
+		const t = setTimeout(() => scrollToCurrentLrcItem(), 160)
+		return () => clearTimeout(t)
+	}, [scrollEnabled, scrollToCurrentLrcItem])
+
 	const getItemLayout = useCallback((_: unknown, index: number) => {
 		const itemHeights = itemHeightsRef.current
 		const headerHeight = itemHeights.blankHeight ?? 0
@@ -231,6 +243,7 @@ export default function Lyric(_props: IProps) {
 		}
 	}, [])
 
+	const scrollOffsetRef = useRef(0)
 	const onScrollBeginDrag = useCallback(() => {
 		dragShownRef.current = true
 	}, [])
@@ -319,6 +332,7 @@ export default function Lyric(_props: IProps) {
 							itemVisiblePercentThreshold: 100,
 						}}
 						onScrollToIndexFailed={({ index }) => {
+							logInfo('[lyric] scrollToIndex failed index=', index)
 							delay(120).then(() => {
 								scrollToLyricIndex(index ?? 0, lyrics.length, true)
 							})
@@ -326,9 +340,22 @@ export default function Lyric(_props: IProps) {
 						fadingEdgeLength={120}
 					ListHeaderComponent={listHeader}
 					ListFooterComponent={blankComponent}
+					scrollEnabled={scrollEnabled}
+					onContentSizeChange={() => {
+						// 全屏层常驻渲染时，首次布局完成得晚：内容尺寸就绪后再定位一次
+						if (scrollEnabled) setTimeout(() => scrollToCurrentLrcItem(), 60)
+					}}
 					onScrollBeginDrag={onScrollBeginDrag}
 					onMomentumScrollEnd={onScrollEndDrag}
-					onScroll={onScroll}
+					onScroll={(e) => {
+						scrollOffsetRef.current = e.nativeEvent.contentOffset.y
+						onScroll(e)
+					}}
+					onScrollEndDrag={(e) => {
+						// 列表已在顶部还继续下拉 → 收起全屏歌词
+						if (scrollOffsetRef.current < -55) onRequestClose?.()
+						void onScrollEndDrag()
+					}}
 					scrollEventThrottle={32}
 					style={styles.wrapper}
 					data={lyrics}

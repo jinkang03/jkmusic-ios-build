@@ -153,22 +153,49 @@ const PlayerScreenContent = () => {
 	const [showLyrics, setShowLyrics] = useState(false)
 	const [showLyricDelayControls, setShowLyricDelayControls] = useState(false)
 	const lyricDelaySeconds = PersistStatus.useValue('lyric.delaySeconds', 0) ?? 0
-	// 初始值跟随 showLyrics：dev 开关直接置 true 时也要可见（否则 opacity 停在 0）
-	const lyricsOpacity = useSharedValue(showLyrics ? 1 : 0)
-	const lyricsTranslateY = useSharedValue(showLyrics ? 0 : 50)
+	// 0 = 播放详情，1 = 全屏歌词。由手势跟手驱动，UI 线程动画
+	const lyricProgress = useSharedValue(showLyrics ? 1 : 0)
+	const gestureStartProgress = useSharedValue(0)
 	// dev 验收开关：?action=fullLyric 会置位，便于无点击环境截图全屏歌词
 	React.useEffect(() => {
 		if ((globalThis as any).__JK_FULL_LYRIC__ === true) {
 			setShowLyrics(true)
-			lyricsOpacity.value = 1
-			lyricsTranslateY.value = 0
+			lyricProgress.value = 1
 		}
-	}, [lyricsOpacity, lyricsTranslateY])
+	}, [lyricProgress])
 
-	const lyricsAnimatedStyle = useAnimatedStyle(() => ({
-		opacity: lyricsOpacity.value,
-		transform: [{ translateY: lyricsTranslateY.value }],
+	// 播放详情层：上滑时轻微上移并完全淡出（否则会和全屏层叠在一起）
+	const detailAnimatedStyle = useAnimatedStyle(() => ({
+		opacity: Math.max(0, 1 - lyricProgress.value),
+		transform: [{ translateY: -lyricProgress.value * 26 }],
 	}))
+
+	// 全屏歌词层：从下方跟手滑入
+	const lyricsAnimatedStyle = useAnimatedStyle(() => ({
+		opacity: lyricProgress.value,
+		transform: [{ translateY: (1 - lyricProgress.value) * Math.max(220, height * 0.35) }],
+	}))
+
+	// 歌词区上滑 → 跟手展开全屏歌词
+	const openLyricsByGesture = useMemo(
+		() =>
+			Gesture.Pan()
+				.activeOffsetY([-14, 14])
+				.failOffsetX([-26, 26])
+				.onStart(() => {
+					gestureStartProgress.value = lyricProgress.value
+				})
+				.onUpdate((e) => {
+					const next = gestureStartProgress.value + (-e.translationY) / Math.max(240, height * 0.5)
+					lyricProgress.value = Math.max(0, Math.min(1, next))
+				})
+				.onEnd((e) => {
+					const shouldOpen = lyricProgress.value > 0.35 || e.velocityY < -800
+					lyricProgress.value = withSpring(shouldOpen ? 1 : 0, { damping: 20, stiffness: 190 })
+					runOnJS(setShowLyrics)(shouldOpen)
+				}),
+		[height, lyricProgress, gestureStartProgress],
+	)
 
 	const currentActiveTrack = myTrackPlayer.useCurrentMusic()
 	const prevTrackRef = useRef(currentActiveTrack)
@@ -363,20 +390,21 @@ const PlayerScreenContent = () => {
 		[artworkTranslateX, handleSkipNext, handleSkipPrev, width],
 	)
 
+	// 打开 / 收起全屏歌词（按钮与点击封面用；手势走 openLyricsByGesture）
+	const setLyricsOpen = useCallback((open: boolean) => {
+		if (!open) setShowLyricDelayControls(false)
+		lyricProgress.value = withSpring(open ? 1 : 0, { damping: 20, stiffness: 190 })
+		setShowLyrics(open)
+	}, [lyricProgress])
+
 	const handleLyricsToggle = useCallback(() => {
 		setShowLyrics((prev) => {
-			const newShowLyrics = !prev
-			if (newShowLyrics) {
-				lyricsOpacity.value = withTiming(1, { duration: 300 })
-				lyricsTranslateY.value = withSpring(0, { damping: 15, stiffness: 100, mass: 1 })
-			} else {
-				setShowLyricDelayControls(false)
-				lyricsOpacity.value = withTiming(0, { duration: 300 })
-				lyricsTranslateY.value = withSpring(50, { damping: 15, stiffness: 100, mass: 1 })
-			}
-			return newShowLyrics
+			const next = !prev
+			if (!next) setShowLyricDelayControls(false)
+			lyricProgress.value = withSpring(next ? 1 : 0, { damping: 20, stiffness: 190 })
+			return next
 		})
-	}, [lyricsOpacity, lyricsTranslateY])
+	}, [lyricProgress])
 
 	const handleViewArtist = useCallback((artist: string) => {
 		if (!artist.includes('未知')) {
@@ -584,112 +612,11 @@ const PlayerScreenContent = () => {
 						</TouchableOpacity>
 					</View>
 				</View>
-				{showLyrics ? (
-					<View
-						style={[
-							styles.lyricsLayout,
-							{ paddingTop: top + 40, paddingBottom: Math.max(bottom, 16) },
-						]}
+				{/* 播放详情层（上滑时淡出） */}
+					<Animated.View
+						style={[styles.playerLayout, detailAnimatedStyle]}
+						pointerEvents={showLyrics ? 'none' : 'auto'}
 					>
-						<Animated.View style={[styles.lyricContainer, lyricsAnimatedStyle]}>
-							{/* <Pressable style={styles.artworkTouchable} onPress={handleLyricsToggle}> */}
-							<Lyric onTurnPageClick={handleLyricsToggle} />
-							{/* </Pressable> */}
-						</Animated.View>
-						<View style={styles.lyricToolbar}>
-							<TouchableOpacity
-								style={styles.lyricToolbarButton}
-								onPress={handleLyricsToggle}
-								accessibilityRole="button"
-								accessibilityLabel={i18n.t('player.backToPlayer')}
-							>
-								<MaterialCommunityIcons
-									name="tooltip-minus-outline"
-									size={27}
-									color={colors.text}
-									accessible={false}
-								/>
-							</TouchableOpacity>
-							<TouchableOpacity
-								style={styles.lyricToolbarButton}
-								onPress={handleLyricsFontSizeDecrease}
-								accessibilityRole="button"
-								accessibilityLabel={i18n.t('player.decreaseLyricFontSize')}
-							>
-								<MaterialCommunityIcons
-									name="format-font-size-decrease"
-									size={30}
-									color={colors.text}
-									accessible={false}
-								/>
-							</TouchableOpacity>
-							<TouchableOpacity
-								style={styles.lyricToolbarButton}
-								onPress={handleLyricsFontSizeIncrease}
-								accessibilityRole="button"
-								accessibilityLabel={i18n.t('player.increaseLyricFontSize')}
-							>
-								<MaterialCommunityIcons
-									name="format-font-size-increase"
-									size={30}
-									color={colors.text}
-									accessible={false}
-								/>
-							</TouchableOpacity>
-							<TouchableOpacity
-								style={styles.lyricToolbarButton}
-								onPress={toggleLyricDelayControls}
-								accessibilityRole="button"
-								accessibilityLabel={i18n.t('player.lyricDelay')}
-								accessibilityState={{ expanded: showLyricDelayControls }}
-							>
-								<MaterialCommunityIcons
-									name="timer-outline"
-									size={26}
-									color={showLyricDelayControls ? colors.primary : colors.text}
-									accessible={false}
-								/>
-							</TouchableOpacity>
-						</View>
-						{showLyricDelayControls ? (
-							<View style={styles.lyricDelayContainer}>
-								<TouchableOpacity
-									style={styles.delayAdjustButton}
-									onPress={handleLyricDelayDecrease}
-									accessibilityRole="button"
-									accessibilityLabel={i18n.t('player.decreaseLyricDelay')}
-								>
-									<Text style={styles.delayAdjustText} numberOfLines={1} adjustsFontSizeToFit>
-										-0.5s
-									</Text>
-								</TouchableOpacity>
-								<TouchableOpacity
-									style={styles.delayValueButton}
-									onPress={handleLyricDelayReset}
-									accessibilityRole="button"
-									accessibilityLabel={i18n.t('player.resetLyricDelay')}
-									accessibilityValue={{ text: formatLyricDelay(lyricDelaySeconds) }}
-								>
-									<Text style={styles.delayLabel} numberOfLines={1} adjustsFontSizeToFit>
-										{i18n.t('player.lyricDelay')}
-									</Text>
-									<Text style={styles.delayValueText}>{formatLyricDelay(lyricDelaySeconds)}</Text>
-								</TouchableOpacity>
-								<TouchableOpacity
-									style={styles.delayAdjustButton}
-									onPress={handleLyricDelayIncrease}
-									accessibilityRole="button"
-									accessibilityLabel={i18n.t('player.increaseLyricDelay')}
-								>
-									<Text style={styles.delayAdjustText} numberOfLines={1} adjustsFontSizeToFit>
-										+0.5s
-									</Text>
-								</TouchableOpacity>
-							</View>
-						) : null}
-					</View>
-				) : (
-					<View style={styles.playerLayout}>
 						<View style={styles.artworkRegion}>
 							<View style={styles.artworkCanvas}>
 								<GestureDetector gesture={swipeGesture}>
@@ -726,10 +653,12 @@ const PlayerScreenContent = () => {
 								</Text>
 							</View>
 						) : null}
-						{/* 紧凑歌词区：当前行 ± 2，点行可 seek */}
-						<View style={{ flex: 1, minHeight: 120, marginTop: 12 }}>
-							<MiniLyric />
-						</View>
+						{/* 紧凑歌词区：当前行 ± 2，点行可 seek；上滑跟手展开全屏歌词 */}
+						<GestureDetector gesture={openLyricsByGesture}>
+							<View style={{ flex: 1, minHeight: 120, marginTop: 12 }}>
+								<MiniLyric />
+							</View>
+						</GestureDetector>
 						<View style={[styles.controlsPanel, { paddingBottom: Math.max(bottom, 16) }]}>
 							<View>
 								<View style={{ minHeight: 60 }}>
@@ -854,8 +783,116 @@ const PlayerScreenContent = () => {
 								</View>
 							</View>
 						</View>
-					</View>
-				)}
+					</Animated.View>
+				{/* 全屏歌词层（跟手转场，位于上层） */}
+					<Animated.View
+						pointerEvents={showLyrics ? 'auto' : 'none'}
+						style={[
+							styles.lyricsLayout,
+							StyleSheet.absoluteFill,
+							{ paddingTop: top + 40, paddingBottom: Math.max(bottom, 16) },
+							lyricsAnimatedStyle,
+						]}
+					>
+						<View style={styles.lyricContainer}>
+							<Lyric
+								onTurnPageClick={handleLyricsToggle}
+								scrollEnabled={showLyrics}
+								onRequestClose={() => setLyricsOpen(false)}
+							/>
+						</View>
+						<View style={styles.lyricToolbar}>
+							<TouchableOpacity
+								style={styles.lyricToolbarButton}
+								onPress={handleLyricsToggle}
+								accessibilityRole="button"
+								accessibilityLabel={i18n.t('player.backToPlayer')}
+							>
+								<MaterialCommunityIcons
+									name="tooltip-minus-outline"
+									size={27}
+									color={colors.text}
+									accessible={false}
+								/>
+							</TouchableOpacity>
+							<TouchableOpacity
+								style={styles.lyricToolbarButton}
+								onPress={handleLyricsFontSizeDecrease}
+								accessibilityRole="button"
+								accessibilityLabel={i18n.t('player.decreaseLyricFontSize')}
+							>
+								<MaterialCommunityIcons
+									name="format-font-size-decrease"
+									size={30}
+									color={colors.text}
+									accessible={false}
+								/>
+							</TouchableOpacity>
+							<TouchableOpacity
+								style={styles.lyricToolbarButton}
+								onPress={handleLyricsFontSizeIncrease}
+								accessibilityRole="button"
+								accessibilityLabel={i18n.t('player.increaseLyricFontSize')}
+							>
+								<MaterialCommunityIcons
+									name="format-font-size-increase"
+									size={30}
+									color={colors.text}
+									accessible={false}
+								/>
+							</TouchableOpacity>
+							<TouchableOpacity
+								style={styles.lyricToolbarButton}
+								onPress={toggleLyricDelayControls}
+								accessibilityRole="button"
+								accessibilityLabel={i18n.t('player.lyricDelay')}
+								accessibilityState={{ expanded: showLyricDelayControls }}
+							>
+								<MaterialCommunityIcons
+									name="timer-outline"
+									size={26}
+									color={showLyricDelayControls ? colors.primary : colors.text}
+									accessible={false}
+								/>
+							</TouchableOpacity>
+						</View>
+						{showLyricDelayControls ? (
+							<View style={styles.lyricDelayContainer}>
+								<TouchableOpacity
+									style={styles.delayAdjustButton}
+									onPress={handleLyricDelayDecrease}
+									accessibilityRole="button"
+									accessibilityLabel={i18n.t('player.decreaseLyricDelay')}
+								>
+									<Text style={styles.delayAdjustText} numberOfLines={1} adjustsFontSizeToFit>
+										-0.5s
+									</Text>
+								</TouchableOpacity>
+								<TouchableOpacity
+									style={styles.delayValueButton}
+									onPress={handleLyricDelayReset}
+									accessibilityRole="button"
+									accessibilityLabel={i18n.t('player.resetLyricDelay')}
+									accessibilityValue={{ text: formatLyricDelay(lyricDelaySeconds) }}
+								>
+									<Text style={styles.delayLabel} numberOfLines={1} adjustsFontSizeToFit>
+										{i18n.t('player.lyricDelay')}
+									</Text>
+									<Text style={styles.delayValueText}>{formatLyricDelay(lyricDelaySeconds)}</Text>
+								</TouchableOpacity>
+								<TouchableOpacity
+									style={styles.delayAdjustButton}
+									onPress={handleLyricDelayIncrease}
+									accessibilityRole="button"
+									accessibilityLabel={i18n.t('player.increaseLyricDelay')}
+								>
+									<Text style={styles.delayAdjustText} numberOfLines={1} adjustsFontSizeToFit>
+										+0.5s
+									</Text>
+								</TouchableOpacity>
+							</View>
+						) : null}
+					</Animated.View>
 				<DismissPlayerSymbol />
 			</View>
 		</>
