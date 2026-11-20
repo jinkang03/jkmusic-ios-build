@@ -1,5 +1,6 @@
 import { nowLanguage, changeLanguage } from '@/utils/i18n'
 import { ACCENT_PRESETS, accentStore, wallpaperStore, wallpaperAccentStore, setAccentColor, setWallpaper, getWallpaperUri } from '@/jk/themeStore'
+import { setGlassAlpha } from '@/constants/glass'
 import ColorPickerModal from '@/components/ColorPickerModal'
 /**
  * 设置分区页：键名与桌面版一致（点分格式），值由 settingsStore 持久化。
@@ -34,7 +35,7 @@ const BasicSection = () => {
 		if (routeParams?.openPicker === '1') setPickerVisible(true)
 	}, [routeParams?.openPicker])
 	const { themeMode, setThemeMode } = useThemeMode()
-	const { isDark } = useAppTheme()
+	const { isDark, glassAlpha } = useAppTheme()
 	const c = macPalette(!!isDark)
 	// 键值语义与桌面版一致：fontSize 是 px 数值，glassBlur 是 0..1，sourceNameType 是 alias/real
 	const [fontSize, setFontSize] = useSetting('common.fontSize', 16)
@@ -173,6 +174,19 @@ const BasicSection = () => {
 				{ value: '14', label: tr('小', 'Small') }, { value: '16', label: tr('标准', 'Standard') }, { value: '18', label: tr('大', 'Large') },
 			]} /></SettingRow>
 			<SettingRow label={tr('玻璃模糊', 'Glass Blur')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={Number(glass) > 0} onChange={(v) => setGlass((v ? 1 : 0) as any)} /></SettingRow>
+			<SettingRow
+				label={tr('玻璃透明度', 'Glass Opacity')}
+				hint={tr('控制按钮/卡片的玻璃底透明度', 'Glass fill opacity for buttons and cards')}
+			>
+				<SettingSlider
+					value={Math.round((Number(glassAlpha ?? 0.55)) * 100)}
+					min={10}
+					max={95}
+					step={1}
+					onChange={(v) => setGlassAlpha(Number(v) / 100)}
+					format={(v) => `${Math.round(v)}%`}
+				/>
+			</SettingRow>
 			<SettingRow label={tr('显示源名', 'Source Name Type')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSelect value={sourceName === 'real' ? 'real' : 'alias'} onChange={(v) => setSourceName(v as any)} options={[
 				{ value: 'real', label: tr('原名', 'Full') }, { value: 'alias', label: tr('缩写', 'Alias') },
 			]} /></SettingRow>

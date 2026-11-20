@@ -9,6 +9,7 @@ import { useFocusEffect } from 'expo-router'
 import * as FS from 'expo-file-system/legacy'
 import StateView from '@/components/mac/StateView'
 import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
+import { glass } from '@/constants/glass'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { getSetting, setSetting, useSetting } from '@/jk/settingsStore'
 import { logError, logInfo } from '@/helpers/logger'
@@ -40,7 +41,8 @@ interface CacheItem {
 }
 
 const DownloadsScreen = () => {
-	const { isDark } = useAppTheme()
+	const { isDark, glassAlpha } = useAppTheme()
+	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
 	const c = macPalette(!!isDark)
 	const insets = useSafeAreaInsets()
 	const [filter, setFilter] = useState<string>(FILTERS[0])
@@ -188,7 +190,7 @@ const DownloadsScreen = () => {
 					const active = item === filter
 					const count = item === 'downloading' ? downloading.length : items.length
 					return (
-						<Pressable key={item} onPress={() => setFilter(item)} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: macRadius.pill, backgroundColor: active ? c.primary : c.fillSubtle }}>
+						<Pressable key={item} onPress={() => setFilter(item)} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: macRadius.pill, backgroundColor: active ? c.primary : g.fill, borderWidth: 0.5, borderColor: active ? c.primary : g.stroke }}>
 							<Text style={{ color: active ? '#fff' : c.text, fontSize: macFont.caption }}>{filterLabel(item)} {count}</Text>
 						</Pressable>
 					)
@@ -221,7 +223,7 @@ const DownloadsScreen = () => {
 			{(downloading.length > 0 || failed.length > 0) ? (
 				<View style={{ paddingHorizontal: macSpace.pageX, paddingTop: 10, gap: 8 }}>
 					{downloading.map((t: any) => (
-						<View key={`dl-${t.id}`} style={{ backgroundColor: c.fillSubtle, borderRadius: 10, padding: 12 }}>
+						<View key={`dl-${t.id}`} style={{ backgroundColor: g.fill, borderWidth: 0.5, borderColor: g.stroke, borderRadius: 10, padding: 12 }}>
 							<View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
 								<Text style={{ color: c.text, fontSize: macFont.body }} numberOfLines={1}>{t.title || t.id}</Text>
 								<Text style={{ color: c.primary, fontSize: macFont.caption }}>{t.percent}%</Text>
@@ -232,7 +234,7 @@ const DownloadsScreen = () => {
 						</View>
 					))}
 					{failed.map((t: any) => (
-						<View key={`fl-${t.id}`} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.fillSubtle, borderRadius: 10, padding: 12 }}>
+						<View key={`fl-${t.id}`} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: g.fill, borderWidth: 0.5, borderColor: g.stroke, borderRadius: 10, padding: 12 }}>
 							<View style={{ flex: 1 }}>
 								<Text style={{ color: c.text, fontSize: macFont.body }} numberOfLines={1}>{t.title || t.id}</Text>
 								<Text style={{ color: c.danger, fontSize: macFont.caption }}>{tr('失败：', 'Failed: ')}{String(t.error ?? '').slice(0, 40)}</Text>

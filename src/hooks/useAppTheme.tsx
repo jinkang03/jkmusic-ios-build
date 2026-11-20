@@ -22,10 +22,12 @@ type AppThemeContextValue = {
 	macTheme?: { id: string, primary: string }
 	accent?: string
 	wallpaper?: { uri: string, blur: number, opacity: number }
+	glassAlpha?: number
 }
 
 // 主题色变化要触发所有用 macPalette 的页面重渲染
 import { macThemeStore, accentStore, wallpaperStore } from '@/jk/themeStore'
+import { glassAlphaStore } from '@/constants/glass'
 const storedThemeMode = PersistStatus.get('app.themeMode') ?? 'system'
 
 export const themeModeStore = new GlobalState<ThemeMode>(storedThemeMode)
@@ -75,10 +77,12 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
 	const accent = accentStore.useValue()
 	// 壁纸/磨砂/透明度变化要立刻重算调色板（页面底色是半透明玻璃色）
 	const wallpaper = wallpaperStore.useValue()
+	// 玻璃透明度（设置里可调）：放进 context 依赖，保证全局即时生效
+	const glassAlpha = glassAlphaStore.useValue()
 	const resolvedTheme = resolveTheme(themeMode, systemColorScheme)
 	const themeValue = useMemo(
-		() => ({ ...createThemeValue(themeMode, resolvedTheme, setThemeMode), macTheme, accent, wallpaper }),
-		[resolvedTheme, themeMode, macTheme, accent, wallpaper],
+		() => ({ ...createThemeValue(themeMode, resolvedTheme, setThemeMode), macTheme, accent, wallpaper, glassAlpha }),
+		[resolvedTheme, themeMode, macTheme, accent, wallpaper, glassAlpha],
 	)
 
 	if (getRuntimeColors() !== themeValue.colors) {

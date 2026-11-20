@@ -10,6 +10,7 @@ import { useLocalSearchParams } from 'expo-router'
 import SongListView from '@/components/mac/SongListView'
 import StateView from '@/components/mac/StateView'
 import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
+import { glass } from '@/constants/glass'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { getBoardDetail, getBoards } from '@/jk/musicSdk'
 import type { JKSource } from '@/jk/musicSdk'
@@ -22,7 +23,8 @@ const BOARD_SOURCES: JKSource[] = ['kw', 'kg', 'tx', 'wy', 'mg']
 interface Board { id: string, name: string, source: JKSource }
 
 const LeaderboardScreen = () => {
-	const { isDark } = useAppTheme()
+	const { isDark, glassAlpha } = useAppTheme()
+	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
 	const c = macPalette(!!isDark)
 	const insets = useSafeAreaInsets()
 	const params = useLocalSearchParams<{ source?: string }>()
@@ -102,7 +104,8 @@ const LeaderboardScreen = () => {
 							onPress={() => setSource(tab.id)}
 							style={{
 								paddingHorizontal: 14, paddingVertical: 6, borderRadius: macRadius.pill,
-								backgroundColor: active ? c.primary : c.fillSubtle,
+								backgroundColor: active ? c.primary : g.fill,
+								borderColor: active ? c.primary : g.stroke,
 							}}
 						>
 							<Text style={{ color: active ? '#fff' : c.text, fontSize: macFont.caption }}>{tab.label}</Text>

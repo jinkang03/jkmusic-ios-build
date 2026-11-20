@@ -5,11 +5,13 @@ export const getStackScreenWithSearchBar = (
 	colors: ThemeColors,
 ): NativeStackNavigationOptions => ({
 	headerLargeTitle: true,
+	// 导航栏（大标题 + 搜索栏）透明：否则会在页面上多叠一层半透明白，和壁纸出现色差
+	headerTransparent: true,
 	headerStyle: {
-		backgroundColor: colors.background,
+		backgroundColor: 'transparent',
 	},
 	headerLargeStyle: {
-		backgroundColor: colors.background,
+		backgroundColor: 'transparent',
 	},
 	headerLargeTitleStyle: {
 		color: colors.text,

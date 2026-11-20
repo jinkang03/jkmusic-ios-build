@@ -4,6 +4,7 @@ import { unknownTrackImageUri } from '@/constants/images'
 import { ThemeColors } from '@/constants/tokens'
 import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
 import { macPalette } from '@/constants/macTokens'
+import { glass } from '@/constants/glass'
 import { useLastActiveTrack } from '@/hooks/useLastActiveTrack'
 import { currentArtworkStore } from '@/jk/artworkStore'
 import { syncCurrentArtwork } from '@/jk/artworkSync'
@@ -32,7 +33,8 @@ const fmt = (sec?: number) => {
 const srcShort = (id: string) => sourceLabel(id, true)
 
 export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
-	const { blurTint, isDark } = useAppTheme()
+	const { blurTint, isDark, glassAlpha } = useAppTheme()
+	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
 	const mac = macPalette(!!isDark)
 	const colors = useThemeColors()
 	const defaultStyles = useDefaultStyles()
@@ -82,7 +84,11 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 	if (!displayedTrack) return null
 
 	return (
-		<TouchableOpacity onPress={handlePress} activeOpacity={0.9} style={[styles.container, style]}>
+		<TouchableOpacity
+			onPress={handlePress}
+			activeOpacity={0.9}
+			style={[styles.container, { borderColor: g.stroke, backgroundColor: g.fill }, style]}
+		>
 			<BlurView intensity={80} tint={blurTint} style={styles.blurContainer}>
 				{/* 左段：封面 + 标题/歌手 */}
 				<View style={styles.leftSection}>
@@ -155,13 +161,11 @@ const createStyles = (
 	timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 },
 	trackArtist: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
 	container: {
-		// 与底部导航胶囊统一的悬浮玻璃样式
+		// 与底部导航胶囊统一的液态玻璃样式
 		borderRadius: 22,
 		borderCurve: 'continuous',
-		borderColor: 'rgba(255,255,255,0.16)',
 		borderWidth: StyleSheet.hairlineWidth,
 		overflow: 'hidden',
-		backgroundColor: 'transparent',
 		shadowColor: '#000',
 		shadowOpacity: 0.22,
 		shadowRadius: 16,

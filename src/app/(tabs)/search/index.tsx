@@ -2,8 +2,9 @@ import SongListView from '@/components/mac/SongListView'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { getSetting, setSetting, useSetting } from '@/jk/settingsStore'
 import { logInfo } from '@/helpers/logger'
-import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
 import { ThemeColors } from '@/constants/tokens'
+import { macFont, macPalette, macRadius, macSpace } from '@/constants/macTokens'
+import { glass } from '@/constants/glass'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import searchAll from '@/helpers/searchAll'
 import i18n from '@/utils/i18n'
@@ -45,7 +46,8 @@ const SEGMENT_WIDTH = (SCREEN_WIDTH - 32 - 4) / 2 // 32 for padding, 4 for conta
 
 const SearchlistsScreen = () => {
 	const colors = useThemeColors()
-	const { isDark } = useAppTheme()
+	const { isDark, glassAlpha } = useAppTheme()
+	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
 	const mac = macPalette(!!isDark)
 	const styles = useMemo(() => createStyles(colors), [colors])
 	// const router = useRouter()
@@ -288,7 +290,7 @@ const SearchlistsScreen = () => {
 				{/* 自绘胶囊搜索框：高 44，左放大镜，右侧清除 */}
 				<View style={{
 					flexDirection: 'row', alignItems: 'center', gap: 8,
-					height: 44, borderRadius: macRadius.pill, backgroundColor: mac.fillSubtle,
+					height: 44, borderRadius: macRadius.pill, backgroundColor: g.fill, borderWidth: StyleSheet.hairlineWidth, borderColor: g.stroke,
 					paddingHorizontal: 14, marginTop: 12,
 				}}>
 					<Ionicons name="search" size={18} color={mac.textMuted} />
@@ -327,9 +329,9 @@ const SearchlistsScreen = () => {
 								paddingVertical: 6,
 								borderRadius: macRadius.pill,
 								borderWidth: active ? 1 : 0.5,
-								borderColor: active ? mac.primary : mac.divider,
-								// mac 风格：选中是实心品牌色 + 白字
-								backgroundColor: active ? mac.primary : mac.fillSubtle,
+								// 液态玻璃：未选中用玻璃底 + 高光描边
+								borderColor: active ? mac.primary : g.stroke,
+								backgroundColor: active ? mac.primary : g.fill,
 							}}
 						>
 							<Text style={{ color: active ? '#FFFFFF' : mac.text, fontSize: macFont.caption, fontWeight: active ? '600' : '400' }}>{pill.label}</Text>
@@ -340,11 +342,11 @@ const SearchlistsScreen = () => {
 
 			<View style={styles.contentContainer}>
 				<View style={styles.segmentedControlContainer}>
-					<View style={styles.segmentedControl}>
+					<View style={[styles.segmentedControl, { backgroundColor: g.fill, borderWidth: 0.5, borderColor: g.stroke }]}>
 						<Animated.View
 							style={[
 								styles.activeSegment,
-								{ position: 'absolute', width: SEGMENT_WIDTH, transform: [{ translateX: slideAnim }] },
+								{ position: 'absolute', width: SEGMENT_WIDTH, transform: [{ translateX: slideAnim }], backgroundColor: g.fillStrong },
 							]}
 						/>
 						<Pressable
@@ -367,7 +369,7 @@ const SearchlistsScreen = () => {
 				</View>
 
 				{(showHot || showHistory) && !search ? (
-					<View style={{ marginHorizontal: macSpace.pageX, marginTop: 12, borderRadius: macRadius.card, backgroundColor: mac.fillSubtle, padding: 14 }}>
+					<View style={{ marginHorizontal: macSpace.pageX, marginTop: 12, borderRadius: macRadius.card, backgroundColor: g.fill, borderWidth: StyleSheet.hairlineWidth, borderColor: g.stroke, padding: 14 }}>
 						{showHot ? (
 							<View style={{ marginBottom: showHistory ? 14 : 0 }}>
 								<Text style={{ color: mac.textStrong, fontSize: macFont.body, fontWeight: '600', marginBottom: 8 }}>{tr('热门搜索', 'Trending')}</Text>

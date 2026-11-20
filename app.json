@@ -2,7 +2,7 @@
   "expo": {
     "name": "JKMUSIC",
     "slug": "jkmusic",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "orientation": "portrait",
     "icon": "./assets/1024.png",
     "userInterfaceStyle": "automatic",

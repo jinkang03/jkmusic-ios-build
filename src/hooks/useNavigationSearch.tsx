@@ -1,4 +1,5 @@
-import { useThemeColors } from '@/hooks/useAppTheme'
+import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
+import { glass } from '@/constants/glass'
 import { nowLanguage } from '@/utils/i18n'
 import { useNavigation } from 'expo-router'
 import { debounce } from 'lodash'
@@ -20,18 +21,20 @@ export const useNavigationSearch = ({
 	const navigation = useNavigation()
 	const language = nowLanguage.useValue()
 	const colors = useThemeColors()
+	const { isDark, glassAlpha } = useAppTheme()
+	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
 
 	const defaultSearchOptions = useMemo<SearchBarProps>(
 		() => ({
 			tintColor: colors.primary,
-			barTintColor: colors.background,
-			backgroundColor: colors.surfaceMuted,
+			barTintColor: 'transparent',
+			backgroundColor: g.fill,
 			textColor: colors.text,
 			hintTextColor: colors.placeholder,
 			hideWhenScrolling: false,
 			placement: 'stacked',
 		}),
-		[colors],
+		[colors, g.fill],
 	)
 
 	const debouncedSetSearch = useCallback(
