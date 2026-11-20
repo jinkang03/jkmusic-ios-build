@@ -66,7 +66,7 @@ const SearchlistsScreen = () => {
 	const [hotTick, setHotTick] = useState(0)
 	const [history, setHistory] = useState<string[]>(() => { const raw = getSetting<any>('search.history', []); return Array.isArray(raw) ? raw : [] })
 	// 深链参数 ?q= 仅触发一次搜索（jkmusic://search?q=周杰伦），之后仍由搜索框驱动
-	const routeParams = useLocalSearchParams<{ q?: string }>()
+	const routeParams = useLocalSearchParams<{ q?: string, source?: string }>()
 	const initialQuery = typeof routeParams.q === 'string' ? routeParams.q : ''
 	const initialQueryApplied = useRef(false)
 	const [resultsFromDeepLink, setResultsFromDeepLink] = useState<Track[]>([])
@@ -134,10 +134,27 @@ const SearchlistsScreen = () => {
 		if (!initialQuery || initialQueryApplied.current) return
 		initialQueryApplied.current = true
 		let cancelled = false
+		// 「我的列表 → 搜索」会带 source：跳到该曲目所属平台的搜索
+		const rawSource = typeof routeParams.source === 'string' ? routeParams.source : ''
+		const pickedSource = ['kw', 'kg', 'tx', 'wy', 'mg'].includes(rawSource) ? rawSource : 'all'
+		if (pickedSource !== 'all') setActiveSourcePill(pickedSource)
+		setSearch(initialQuery)
 		;(async() => {
 			try {
 				setIsLoading(true)
-				const { data, hasMore: moreResults } = await searchAll(initialQuery, 1, 'songs')
+				let data: Track[] = []
+				let moreResults = false
+				if (pickedSource === 'all') {
+					const res = await searchAll(initialQuery, 1, 'songs')
+					data = res.data
+					moreResults = res.hasMore
+				} else {
+					const { searchBySource } = await import('@/jk/musicSdk')
+					const { jkToTrack } = await import('@/jk/adapt')
+					const list = await searchBySource(pickedSource as any, initialQuery, 1)
+					data = (list ?? []).map((m: any) => jkToTrack(m))
+					moreResults = (list ?? []).length >= 20
+				}
 				if (!cancelled) {
 					setResultsFromDeepLink(data)
 					setSearchResults(data)
@@ -151,7 +168,7 @@ const SearchlistsScreen = () => {
 			}
 		})()
 		return () => { cancelled = true }
-	}, [initialQuery])
+	}, [initialQuery, routeParams.source])
 
 	const debouncedFetchSearchResults = useRef(
 		debounce((currentPage: number) => {

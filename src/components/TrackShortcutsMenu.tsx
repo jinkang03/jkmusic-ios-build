@@ -9,6 +9,8 @@ import { useQueue } from '@/store/queue'
 import i18n, { tr } from '@/utils/i18n'
 import { MenuAction, MenuView } from '@react-native-menu/menu'
 import { useFocusEffect, useRouter } from 'expo-router'
+import { Clipboard } from 'react-native'
+import { showToast } from '@/utils/utils'
 import { PropsWithChildren, useCallback, useMemo, useState } from 'react'
 import type { Track } from '@/player/types'
 import { match, P } from 'ts-pattern'
@@ -141,6 +143,28 @@ export const TrackShortcutsMenu = ({
 						.catch(() => undefined)
 				},
 			)
+			.with('copy-song-name', async () => {
+				// 与 mac 一致：按「下载文件名格式」（download.fileName，默认「歌名 - 歌手」）格式化
+				const { getSetting } = await import('@/jk/settingsStore')
+				const template = String(getSetting('download.fileName', '歌名 - 歌手') ?? '歌名 - 歌手')
+				const name = String((track as any)?.title ?? '')
+				const singer = String((track as any)?.artist ?? '')
+				const text = template.replace('歌手', singer).replace('歌名', name)
+				try {
+					Clipboard.setString(text)
+					showToast(tr('已复制', 'Copied'), text, 'success')
+				} catch (err) {
+					logInfo('[menu] copy failed', String((err as any)?.message ?? err))
+				}
+			})
+			.with('search-in-source', async () => {
+				// 与 mac 一致：跳搜索页并带上「歌名 歌手」；额外带上曲目所属平台
+				const q = `${String((track as any)?.title ?? '')} ${String((track as any)?.artist ?? '')}`.trim()
+				const src = String((track as any)?.platform ?? '')
+				const params = [`q=${encodeURIComponent(q)}`]
+				if (['kw', 'kg', 'tx', 'wy', 'mg'].includes(src)) params.push(`source=${src}`)
+				router.push(`/(tabs)/search?${params.join('&')}` as any)
+			})
 			.with('add-to-storedPlayList', async () => {
 				handleAddToStoredPlayList(track as IMusic.IMusicItem)
 			})
@@ -184,6 +208,16 @@ export const TrackShortcutsMenu = ({
 					id: 'add-to-storedPlayList',
 					title: i18n.t('menu.addToPlaylist'),
 					image: 'text.badge.plus',
+				},
+				{
+					id: 'copy-song-name',
+					title: tr('复制歌曲名', 'Copy Song Name'),
+					image: 'doc.on.doc',
+				},
+				{
+					id: 'search-in-source',
+					title: tr('搜索', 'Search'),
+					image: 'magnifyingglass',
 				},
 				...(isSinger ? [] : (artistActions as MenuAction[])),
 				...(allowDelete
