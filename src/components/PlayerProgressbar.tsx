@@ -68,14 +68,15 @@ export const PlayerProgressBar = React.memo(({
 
 	const handleSlidingComplete = useCallback((value: number) => {
 		isSliding.value = false
+		// duration 还没回来时不要 seek：clampedValue * 0 = 0，会把歌词与音频一起跳到开头
+		if (!(duration > 0)) return
 		const clampedValue = Math.min(Math.max(value, 0), 1)
 		const newPosition = clampedValue * duration
 		progress.value = clampedValue
-		// seek 完成后再清预览位置：否则会闪回旧位置一帧
-		void Promise.resolve(myTrackPlayer.seekTo(newPosition))
-			.catch(() => undefined)
-			.then(() => import('@/player/seekPreview'))
-			.then(m => m.setSeekPreview(null))
+		// 用 seekWithPreview：内部保持 preview 直到原生 position 追上，
+		// 否则清得太早会让歌词先跳回旧行、几秒后再追上（表现为「偏移」）
+		void import('@/player/seekPreview')
+			.then(m => m.seekWithPreview(newPosition))
 			.catch(() => undefined)
 		if (onSeek) {
 			onSeek(newPosition)

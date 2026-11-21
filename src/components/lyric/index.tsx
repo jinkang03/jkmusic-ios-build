@@ -300,7 +300,8 @@ export default function Lyric(props: IProps) {
 			if (index >= 0 && index < lyrics.length) {
 				const time = lyrics[index].time + +(meta?.offset ?? 0)
 				if (time !== undefined && !isNaN(time)) {
-					myTrackPlayer.seekTo(time)
+					const { seekWithPreview } = await import('@/player/seekPreview')
+					await seekWithPreview(time)
 					await myTrackPlayer.play()
 				}
 			}

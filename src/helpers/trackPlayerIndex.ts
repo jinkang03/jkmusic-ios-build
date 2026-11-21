@@ -732,7 +732,9 @@ const setTrackSource = (track: Track) => {
 	currentIndex = getMusicIndex(track as IMusic.IMusicItem)
 	const token = createTrackSourceLoadingToken(track as IMusic.IMusicItem)
 	// Snapshot after source resolution. A preference change never reloads the active item.
-	const playbackOptions = { preciseSeeking: PersistStatus.get('music.preciseSeeking') === true }
+	// 默认开启精确 seek：false 时 RNTP 会跳到最近关键帧，音频实际落点与目标差 1-2 秒，
+	// 而歌词按目标时间走 → 拖完进度后必然偏移（偏移量随关键帧间隔变化，所以「每次不一样」）
+	const playbackOptions = { preciseSeeking: PersistStatus.get('music.preciseSeeking') !== false }
 	const items = [
 		toMediaItem(track, token, false, playbackOptions),
 		toMediaItem(getFakeNextTrack(), token, true),

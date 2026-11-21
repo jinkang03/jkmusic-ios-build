@@ -245,7 +245,7 @@ const MiniLyric = () => {
 						onPress={() => {
 							// 能拿到时间就 seek，拿不到就不响应
 							const t = Number(item?.time ?? 0)
-							if (t > 0) void myTrackPlayer.seekTo(t)
+							if (t > 0) void import('@/player/seekPreview').then(m => m.seekWithPreview(t)).catch(() => undefined)
 						}}
 						style={{
 							height: ROW_HEIGHT,

@@ -663,7 +663,9 @@ const SettingsSectionScreen = () => {
 					const pos = Number((params as any).pos ?? 0)
 					if (!Number.isFinite(pos) || pos <= 0) throw new Error('bad pos')
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
-					await (tp as any).seekTo(pos)
+					// 与进度条拖动走同一路径（含预览位置保护），保证脚本验证覆盖真实交互
+					const { seekWithPreview } = await import('@/player/seekPreview')
+					await seekWithPreview(pos)
 					// seek 后等一小会儿再暂停，确保 position 已写入（立即暂停可能读到旧值）
 					await new Promise(r => setTimeout(r, 300))
 					if (String((params as any).pause ?? '1') === '1') await (tp as any).pause()

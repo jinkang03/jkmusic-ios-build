@@ -1,53 +1,52 @@
-> **LATEST：1.4.9 / build 33**
-> 文件 `artifacts/ipa/JKMUSIC-1.4.9-unsigned-20261121.ipa`
-> sha256 `b7bf8b21739f41f9a781d49b980628b497ce4b64f27c9784f59048a4404e9f69`
+> **LATEST：1.4.10 / build 34**
+> 文件 `artifacts/ipa/JKMUSIC-1.4.10-unsigned-20261121.ipa`
+> sha256 `55a69e509a5cedb98a84fc0e155cbc992401a541dde16bb629091bdfe222a38c`
 > 固定别名 `artifacts/ipa/JKMUSIC-ios-unsigned.ipa` 与最新版字节相同（`./scripts/sync-latest-ipa.sh`）。
 > 安装前在 App 内确认版本号（设置 → 其他 → App Version）。
 
-## v1.4.9（2026-11-21）
+## v1.4.10（2026-11-21）
 
 | 项 | 值 |
 |---|---|
-| 产物 | `artifacts/ipa/JKMUSIC-1.4.9-unsigned-20261121.ipa` |
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.10-unsigned-20261121.ipa` |
 | 大小 | 18 MB |
-| sha256 | `b7bf8b21739f41f9a781d49b980628b497ce4b64f27c9784f59048a4404e9f69` |
-| 版本 / build | 1.4.9 / 33 |
+| sha256 | `55a69e509a5cedb98a84fc0e155cbc992401a541dde16bb629091bdfe222a38c` |
+| 版本 / build | 1.4.10 / 34 |
 | 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
-| commit | 见 tag `v1.4.9` |
+| commit | 见 tag `v1.4.10` |
 
-### 1.4.9 歌词偏移：两个真实根因
+### 1.4.10 拖动进度后歌词卡几秒并偏移
 
-**根因 1：`parseKaraokeLine` 的「绝对/相对时间」自适应会误判**
+**现象**（用户描述）：手动拉进度后，歌词先卡几秒，跟上来之后就和音频错位，偏移量每次不同；不拉进度就不偏移。
 
-1.4.6 加过一条规则：若首个 seg 起点 ≥ 行时间 × 0.8，就认为数据是绝对时间、不再叠加行时间。
-问题是 lxlyric 行首常有空白段（`<0,0>` 被跳过），第一个**有效**段的 start 可能已经比较大，
-这条规则就会误判成绝对时间 → 少加一次行时间 → 整行提前（最多能提前一整行）。
+**根因：`seekPreview` 清得太早**
 
-把三个源的实现都核对了一遍，段内时间**全部是相对行开始**：
-- kw：`lrcTools.getWordInfo` 输出 `<start,dur>`，start 从 0 起；
-- mg：`parseLyric` 显式做了 `wordStart - lineStart`；
-- mac 的 `FontPlayer` 同样把 seg.start 当相对值，播放时传 `curTime - lineTime`。
+进度条松手时旧代码是：
 
-已去掉自适应，统一 `start + lineTimeMs`。
-
-**根因 2：换源后歌词可能来自另一个平台**
-
-`buildSwappedMusic` 之前只看 `resolvedFromStore`，不看**音频实际来源**。
-`resolvedFromStore` 可能是上一次换源尝试的残留，于是出现「音频是 tx、歌词却是 kw」——
-两个平台的同曲版本前奏长度不同，整行会差 1–5 秒（用户感知就是「快了两个词」）。
-
-修复：
-- `fetchLyric` 先读缓存 index 的 `actualSource`（音频真实来源）；
-- 只有 `swapped.to === audioSource` 时才使用换源歌词；
-- 日志增加 `audioSource=` 字段，便于核对（`source= kw audioSource= kw swapped= false`）。
-
-**验证**：播放晴天 → seek 00:59（暂停）
-
-```
-[lyric] active idx=10 pos=59170 segs=6 lit=2 first=58838 last=60102
+```ts
+myTrackPlayer.seekTo(newPosition)
+  .then(() => setSeekPreview(null))   // ← 这里
 ```
 
-行时间 58.84s、位置 59.17s、行内 0.33s → 「花落的那一天」前 2 字已唱，
-截图确认「花落」金色、「的那一天」灰色，时间轴与字序完全对齐。
+`seekTo()` 返回只代表「原生层接受了 seek 请求」，`useProgress` 的 `position`
+还要几百毫秒才追上。preview 一清空，`karaokeMs` 立刻回退到**旧的 position**，
+歌词先跳回旧行；等 position 追上再跳一次。两次跳变的间隔取决于原生上报延迟，
+所以「偏移多少不一定」。
+
+**修复：`seekWithPreview`**
+
+- seek 期间持续保持 `preview = 目标秒数`；
+- 每 100ms 轮询 `getProgress().position`，追上目标（±0.6s）再清空，最多等 4 秒；
+- 进度条拖动、点击歌词行跳转、紧凑歌词点击、dev seek 全部走同一条路径。
+
+**验证**：播放晴天 25 秒后 seek 到 120s（暂停）
+
+```
+基线        active idx=0  pos=397
+seek 之后   active idx=23 pos=120291 first=118543 last=124555
+```
+
+行时间 118.54s、位置 120.29s，立即落在正确行且 `lit=3`（逐字同步），
+不再出现「先跳回旧行、几秒后又追上来」。
 
 
