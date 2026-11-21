@@ -23,12 +23,15 @@ export const parseKaraokeLine = (line: string, lineTimeMs: number): KaraokeSeg[]
 			rawSegs.push({ start: Number.isFinite(start) ? start : 0, dur: Number.isFinite(dur) ? dur : 0, text })
 		}
 		if (!rawSegs.length) return []
-		// 时间基准自适应：
-		//   - kw 经 lrcTools.parse 转换后是「相对行开始」的毫秒（需要加 lineTimeMs）；
-		//   - 部分源/原始 krc 直接给「相对歌曲开始」的绝对毫秒（不能再加）。
-		// 判据：首段起点已经接近或超过行时间，说明数据本身是绝对时间。
-		const absolute = lineTimeMs > 0 && rawSegs[0].start >= lineTimeMs * 0.8
-		return rawSegs.map(seg => ({ ...seg, start: absolute ? seg.start : lineTimeMs + seg.start }))
+		// 所有源的 lxlyric 段内时间都是「相对行开始」的毫秒：
+		//   - kw：lrcTools.getWordInfo 输出 <start,dur>，start 从 0 开始；
+		//   - mg：parseLyric 显式做了 `wordStart - lineStart`；
+		//   - mac 的 FontPlayer 也是把 seg.start 当相对值，播放时传 `curTime - lineTime`。
+		//
+		// 之前加过「首段起点 >= 行时间×0.8 就当作绝对时间」的自适应，
+		// 遇到「行首有空白段被跳过、第一个有效段起点较大」的行会误判成绝对，
+		// 少加一次行时间 → 整行偏移（正是「歌词快两个词」的来源）。现在统一按相对处理。
+		return rawSegs.map(seg => ({ ...seg, start: lineTimeMs + seg.start }))
 	} catch {
 		return []
 	}

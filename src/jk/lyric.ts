@@ -30,10 +30,14 @@ const normalize = (raw: any): LyricResult => {
  * 酷狗曲目换到酷我播放时，酷狗歌词接口对这歌往往没有词；
  * 用 resolvedFromStore 记录的实际源 + 实际曲目 id 去请求，命中率更高。
  */
-const buildSwappedMusic = (music: JKMusic): JKMusic | null => {
+const buildSwappedMusic = (music: JKMusic, audioSource?: string): JKMusic | null => {
 	try {
 		const swapped = resolvedFromStore.getValue()
 		if (!swapped?.toId || swapped.to === music.source) return null
+		// 关键：只有「音频确实来自换源目标」时才用换源歌词。
+		// resolvedFromStore 可能是上一首/上一次尝试的残留，若音频其实是原平台（tx），
+		// 却拿另一个平台（kw）的歌词，两版时间轴不同 → 整行偏移（实测差 1-5 秒）。
+		if (audioSource && swapped.to !== audioSource) return null
 		if (swapped.title && music.name && swapped.title !== music.name) return null
 		const meta: any = {
 			...(music.meta ?? {}),
@@ -129,10 +133,23 @@ export const fetchLyric = async(track: Track): Promise<LyricResult> => {
 		}
 	} catch { /* ignore */ }
 	const music: JKMusic = trackToJk(track)
-	const swapped = buildSwappedMusic(music)
+	// 音频实际来源：缓存文件可能来自换源，index 里记了 actualSource
+	let audioSource = String(music.source ?? '')
+	try {
+		const u = String((track as any)?.url ?? '')
+		if (u.includes('/musicCache/')) {
+			const base = u.split('/').pop() ?? ''
+			const { readCacheIndex } = await import('@/player/CacheManager')
+			const idx: any = await readCacheIndex()
+			const actual = idx?.[base]?.actualSource
+			if (actual) audioSource = String(actual)
+		}
+	} catch { /* ignore */ }
+	const swapped = buildSwappedMusic(music, audioSource)
 	try {
 		const target = swapped ?? music
-		logInfo('[jk/lyric] source=', String(target.source), 'id=', String(target.id), 'swapped=', String(!!swapped))
+		logInfo('[jk/lyric] source=', String(target.source), 'id=', String(target.id),
+			'audioSource=', audioSource, 'swapped=', String(!!swapped))
 		const res = await getJkLyric(target)
 		if (isUsableLyric(res)) {
 			const n = normalize(res)
