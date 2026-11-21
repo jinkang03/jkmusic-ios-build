@@ -38,8 +38,7 @@ const SettingsScreen = () => {
 						paddingHorizontal: macSpace.pageX,
 						height: 52,
 						backgroundColor: pressed ? c.fillSubtle : 'transparent',
-						borderBottomWidth: 0.5,
-						borderBottomColor: c.divider,
+						borderBottomWidth: 0,
 					})}
 				>
 					<Text style={{ color: c.text, fontSize: macFont.body }}>{tr('音源管理', 'Sources')}</Text>
@@ -59,7 +58,7 @@ const SettingsScreen = () => {
 							paddingHorizontal: macSpace.pageX,
 							height: 52,
 							backgroundColor: pressed ? c.fillSubtle : 'transparent',
-							borderBottomWidth: 0.5,
+							borderBottomWidth: 0,
 							borderBottomColor: c.divider,
 						})}
 					>

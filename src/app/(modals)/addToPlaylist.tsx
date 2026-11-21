@@ -62,7 +62,7 @@ const AddToPlaylistScreen = () => {
 							flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
 							paddingHorizontal: macSpace.pageX, height: 52,
 							backgroundColor: pressed ? c.fillSubtle : 'transparent',
-							borderBottomWidth: 0.5, borderBottomColor: c.divider,
+							borderBottomWidth: 0,
 						})}
 					>
 						<Text style={{ color: c.text, fontSize: macFont.body }}>{item.name}</Text>

@@ -99,7 +99,7 @@ const BasicSection = () => {
 			</SettingRow>
 			<View style={{
 				paddingHorizontal: macSpace.pageX, paddingVertical: 12,
-				borderBottomWidth: 0.5, borderBottomColor: c.divider,
+				borderBottomWidth: 0,
 			}}>
 				{/* 快捷色板（点「自定义」可进色盘选任意颜色） */}
 				<View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>

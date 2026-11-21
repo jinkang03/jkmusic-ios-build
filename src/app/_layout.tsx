@@ -173,7 +173,11 @@ const RootNavigation = () => {
 		//每个 Stack.Screen 组件定义了一个可导航的屏幕
 		// 功能页统一浅色；player 页内部会再 override 成 dark
 		<ThemeOverrideProvider resolvedTheme="light">
-		<Stack key={language}>
+		<Stack
+			key={language}
+			// 功能页统一「白色半透明玻璃」底：壁纸只轻微透出，不会让整页发暗
+			screenOptions={{ contentStyle: { backgroundColor: 'rgba(255,255,255,0.72)' } }}
+		>
 			<Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 			<Stack.Screen
 				name="player"
@@ -183,6 +187,8 @@ const RootNavigation = () => {
 					gestureDirection: 'vertical',
 					animationDuration: 400,
 					headerShown: false,
+					// 播放页背景来自封面，不要被浅色底覆盖
+					contentStyle: { backgroundColor: 'transparent' },
 				}}
 			/>
 			<Stack.Screen

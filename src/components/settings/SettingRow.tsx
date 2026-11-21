@@ -11,7 +11,7 @@ const SettingRow = ({ label, hint, disabled, children }: { label: string, hint?:
 		<View style={{
 			flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
 			paddingHorizontal: macSpace.pageX, minHeight: 52, gap: 12,
-			borderBottomWidth: 0.5, borderBottomColor: c.divider,
+			borderBottomWidth: 0,
 			opacity: disabled ? 0.45 : 1,
 		}}>
 			<View style={{ flex: 1 }}>

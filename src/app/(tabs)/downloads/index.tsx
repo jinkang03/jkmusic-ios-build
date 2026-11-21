@@ -248,7 +248,7 @@ const DownloadsScreen = () => {
 					style={{ flex: 1, marginTop: 8 }}
 					contentContainerStyle={{ paddingBottom: 176 }}
 					renderItem={({ item }) => (
-						<View style={{ flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: macSpace.pageX / 2, borderBottomWidth: 0.5, borderBottomColor: c.divider }}>
+						<View style={{ flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: macSpace.pageX / 2, borderBottomWidth: 0, borderBottomColor: c.divider }}>
 							<View style={{ flex: 1 }}>
 								<Text numberOfLines={1} style={{ color: c.text, fontSize: macFont.body }}>
 									{item.title || item.name.replace(/\.(mp3|flac|m4a)$/i, '')}

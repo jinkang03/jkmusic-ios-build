@@ -106,8 +106,16 @@ export const ThemeOverrideProvider = ({
 	const parentTheme = useAppTheme()
 
 	const value = useMemo(
-		() => createThemeValue(parentTheme.themeMode, resolvedTheme, parentTheme.setThemeMode),
-		[parentTheme.setThemeMode, parentTheme.themeMode, resolvedTheme],
+		() => ({
+			...createThemeValue(parentTheme.themeMode, resolvedTheme, parentTheme.setThemeMode),
+			// 保留父级的壁纸/强调色/玻璃参数：否则 override 后子页面拿不到 wallpaper，
+			// 背景会退回纯色或出现 undefined（这是「切换后页面发暗」的直接原因）
+			macTheme: parentTheme.macTheme,
+			accent: parentTheme.accent,
+			wallpaper: parentTheme.wallpaper,
+			glassAlpha: parentTheme.glassAlpha,
+		}),
+		[parentTheme, resolvedTheme],
 	)
 
 	return <AppThemeContext.Provider value={value}>{children}</AppThemeContext.Provider>

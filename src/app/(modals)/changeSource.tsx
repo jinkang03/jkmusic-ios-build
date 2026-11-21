@@ -222,7 +222,7 @@ const ChangeSourceScreen = () => {
 								style={{
 									flexDirection: 'row', alignItems: 'center',
 									paddingHorizontal: macSpace.pageX, paddingVertical: 10,
-									borderBottomWidth: 0.5, borderBottomColor: c.divider,
+									borderBottomWidth: 0,
 									backgroundColor: active ? `${c.primary}14` : 'transparent',
 								}}
 							>

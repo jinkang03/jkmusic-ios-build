@@ -13,7 +13,8 @@ import { useAppTheme } from '@/hooks/useAppTheme'
 
 const WallpaperBackground = () => {
 	const wallpaper = wallpaperStore.useValue()
-	const { isDark } = useAppTheme()
+	// 功能页固定浅色：不让系统深色把底层压成黑色（否则半透明玻璃全变暗）
+	const isDark = false
 	if (!wallpaper?.uri) return null
 
 	const uri = getWallpaperUri(wallpaper.uri)
