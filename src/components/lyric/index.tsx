@@ -85,9 +85,10 @@ export default function Lyric(props: IProps) {
 	const karaokeMap = useMemo(() => buildKaraokeMap(lxRaw), [lxRaw])
 	const { position } = myTrackPlayer.useProgress(0.05)
 	const seekPreview = seekPreviewStore.useValue()
-	const [lyricDelay] = useSetting('lyric.delaySeconds', 0)
-	// 与 mac 一致：统一减去歌词延迟
-	const karaokeMs = Math.max(0, (Number(seekPreview ?? position ?? 0) - Number(lyricDelay ?? 0)) * 1000)
+	// 这里用 lyrics[].time 二分找行，而 lyrics 存的是未含 offset 的原始时间
+	// （offset 只在 LyricParser.getPosition 内部相减），所以必须自己减。
+	const lyricDelaySec = Number(PersistStatus.useValue('lyric.delaySeconds', 0) ?? 0)
+	const karaokeMs = Math.max(0, (Number(seekPreview ?? position ?? 0) - lyricDelaySec) * 1000)
 	// 当前行按播放位置二分查找：LyricManager 的 index 依赖 progress 事件，
 	// 暂停/seek 后会滞后，表现为「歌词不滚动 / 逐字不亮」。
 	const activeIndex = useMemo(() => {

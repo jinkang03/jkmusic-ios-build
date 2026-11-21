@@ -45,7 +45,7 @@ modules/cymusic-native/          原生 JS 引擎（CyMusic 原有）
 ```bash
 yarn install --frozen-lockfile
 cd ios && pod install && cd ..
-./scripts/build-ios.sh        # 产出 artifacts/ipa/JKMUSIC-ios-unsigned.ipa
+./scripts/build-ios.sh        # 产出 JKMUSIC-<版本>-unsigned-<日期>.ipa，并同步固定别名
 ```
 
 Ruby 2.6 环境已通过 `ios/ruby_compat.rb` 兼容（补 `filter_map`）。

@@ -14,6 +14,7 @@ import myTrackPlayer, { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { macFont, macPalette } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { useSetting } from '@/jk/settingsStore'
+import PersistStatus from '@/store/PersistStatus'
 import { tr } from '@/utils/i18n'
 import { nowLxLyricState } from '@/player/PlayerStore'
 import { seekPreviewStore } from '@/player/seekPreview'
@@ -38,9 +39,9 @@ const MiniLyric = () => {
 	const raw: string = nowLyricState.useValue() as any
 	const [zoomActive] = useSetting('playDetail.isZoomActiveLrc', true)
 	const [delayScroll] = useSetting('playDetail.isDelayScroll', false)
-	const [fontSizeKey] = useSetting('lyric.detailFontSize', 1)
+	// 字号真源是 PersistStatus（播放页 +/- 按钮写的就是它），用 settingsStore 会读到另一个值
+	const fontSizeKey = PersistStatus.useValue('lyric.detailFontSize', 1)
 	const [showTrans] = useSetting('player.isShowLyricTranslation', false)
-	const [lyricDelay] = useSetting('lyric.delaySeconds', 0)
 	// 字号档位：当前行 [16,18,20,22]，其它行 [13,15,16,18]
 	const curSize = [16, 18, 20, 22][Number(fontSizeKey)] ?? 16
 	const otherSize = [13, 15, 16, 18][Number(fontSizeKey)] ?? 13
@@ -71,8 +72,11 @@ const MiniLyric = () => {
 	const { position: karaokePos } = myTrackPlayer.useProgress(0.05)
 	const seekPreview = seekPreviewStore.useValue()
 	// 拖动进度条时：歌词按预览位置走（松手后才真正 seek），避免「拉完对不上」
-	// 与 mac 一致：进度统一减去「歌词延迟」再对齐时间轴
-	const karaokeMs = Math.max(0, Math.round((Number(seekPreview ?? karaokePos ?? 0) - Number(lyricDelay ?? 0)) * 1000))
+	// 本组件用 lyrics[].time 二分找行，而 lyrics 里存的是「未含 offset 的原始时间」
+	// （offset 只在 LyricParser.getPosition 内部相减，这里不走那条路径），所以必须自己减。
+	// 真源是 PersistStatus（播放页 +/- 写的就是它）。
+	const lyricDelaySec = Number(PersistStatus.useValue('lyric.delaySeconds', 0) ?? 0)
+	const karaokeMs = Math.max(0, Math.round((Number(seekPreview ?? karaokePos ?? 0) - lyricDelaySec) * 1000))
 	// 当前行改由「播放位置」计算：LyricManager 的 index 依赖 progress 事件，
 	// 暂停/seek 后会冻结在旧值（P127 实测：seek 到 14s 仍停在 line=0）。
 	const currentIndex = useMemo(() => {

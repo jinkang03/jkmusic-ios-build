@@ -384,6 +384,8 @@ const isTruncatedCachedFile = async(
 
 const setQuality = (quality: IMusic.IQualityKey) => {
 	qualityStore.setValue(quality)
+	// 与 trackPlayerIndex.setQuality 保持一致：settingsStore 是唯一真源
+	import('@/jk/settingsStore').then(m => m.setSetting('music.quality', quality)).catch(() => undefined)
 	PersistStatus.set('music.quality', quality)
 }
 

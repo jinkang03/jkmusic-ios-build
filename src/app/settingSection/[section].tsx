@@ -18,6 +18,8 @@ import SettingSwitch from '@/components/settings/SettingSwitch'
 import { macFont, macPalette, macSpace } from '@/constants/macTokens'
 import { useAppTheme, useThemeMode } from '@/hooks/useAppTheme'
 import { setSetting, useSetting } from '@/jk/settingsStore'
+import BUILD_INFO from '@/constants/buildInfo'
+import PersistStatus from '@/store/PersistStatus'
 import { showToast } from '@/utils/utils'
 import { logError, logInfo } from '@/helpers/logger'
 import { getSectionTitle, getSectionNote } from '@/jk/settingsSections'
@@ -262,8 +264,9 @@ const OtherSection = () => {
 	const router = useRouter()
 	const [confirm, setConfirm] = React.useState(false)
 	const [status, setStatus] = React.useState('')
-	const version = '1.0.0'
-	const build = '1'
+	// 由 scripts/sync-version.sh 生成，与 Info.plist 的真实版本/构建号一致
+	const version = BUILD_INFO.version
+	const build = BUILD_INFO.build
 
 	const wipeAll = async() => {
 		try {
@@ -341,7 +344,11 @@ const OdcSection = () => {
 const PlayDetailSection = () => {
 	const [blur, setBlur] = useSetting('playDetail.bgBlur', 0.6)
 	const [zoom, setZoom] = useSetting('playDetail.isZoomActiveLrc', true)
-	const [fontSizeKey, setFontSizeKey] = useSetting('lyric.detailFontSize', 1)
+	// 与播放页 +/- 按钮共用 PersistStatus，避免两套存储各写一份
+	const fontSizeKey = PersistStatus.useValue('lyric.detailFontSize', 1)
+	const setFontSizeKey = React.useCallback((v: number) => {
+		PersistStatus.set('lyric.detailFontSize', v)
+	}, [])
 	const [delay, setDelay] = useSetting('playDetail.isDelayScroll', false)
 	return (
 		<>
@@ -1085,6 +1092,18 @@ const SettingsSectionScreen = () => {
 							const tp: any = (await import('@/helpers/trackPlayerIndex')).default
 							if (k === 'player.playbackRate') tp.setRate?.(Number(parsed))
 							else tp.setVolume?.(Number(parsed))
+						} catch { /* ignore */ }
+					}
+					// 歌词字号/延迟的真源是 PersistStatus（播放页 +/- 写的就是它），dev 深链要同步写
+					if (k === 'lyric.detailFontSize' || k === 'lyric.delaySeconds') {
+						try {
+							const ps = (await import('@/store/PersistStatus')).default
+							if (k === 'lyric.detailFontSize') ps.set('lyric.detailFontSize', Number(parsed))
+							else {
+								ps.set('lyric.delaySeconds', Number(parsed))
+								const lm: any = await import('@/helpers/lyricManager')
+								await (lm.default ?? lm).refreshLyric?.()
+							}
 						} catch { /* ignore */ }
 					}
 					logInfo(`[jk/dev] set ${k}=${rawV}`)

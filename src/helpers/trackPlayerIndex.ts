@@ -1,7 +1,7 @@
 import { sortIndexSymbol, timeStampSymbol } from '@/constants/commonConst'
 import { SoundAsset } from '@/constants/constant'
 import Config from '@/store/config'
-import { getSetting } from '@/jk/settingsStore'
+import { getSetting, setSetting } from '@/jk/settingsStore'
 import delay from '@/utils/delay'
 import { isSameMediaItem, mergeProps, sortByTimestampAndIndex } from '@/utils/mediaItem'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -243,7 +243,8 @@ async function setupTrackPlayer() {
 	const repeatMode = PersistStatus.get('music.repeatMode')
 	const progress = PersistStatus.get('music.progress')
 	const track = PersistStatus.get('music.musicItem')
-	const quality = PersistStatus.get('music.quality') || '128k'
+	// music.quality 以 settingsStore 为唯一真源（下载链路也读它），PersistStatus 只做旧版本回填
+	const quality = getSetting<IMusic.IQualityKey>('music.quality', PersistStatus.get('music.quality') || '128k')
 	const playLists = PersistStatus.get('music.playLists')
 	const musicApiLists = PersistStatus.get('music.musicApi')
 	const selectedMusicApi = PersistStatus.get('music.selectedMusicApi')
@@ -710,6 +711,7 @@ const setCurrentMusic = (musicItem?: IMusic.IMusicItem | null) => {
 
 const setQuality = (quality: IMusic.IQualityKey) => {
 	qualityStore.setValue(quality)
+	setSetting('music.quality', quality)
 	PersistStatus.set('music.quality', quality)
 }
 //添加歌曲到指定歌单
