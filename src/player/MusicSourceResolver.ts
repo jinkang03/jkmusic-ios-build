@@ -157,6 +157,9 @@ export const findPlayableAlt = async (
 		if (!titleScore) return 0
 		const itemArtists = splitArtists(item?.singer)
 		const artistHit = itemArtists.some(x => targetArtists.some(y => x.includes(y) || y.includes(x)))
+		// 规则：同名（去掉括号/后缀后一致）+ 同歌手 → 直接判定为同一首，
+		// 不再要求其它字段吻合（用户明确：同名同歌手就算成功）
+		if (artistHit && (itemFull === targetTitleFull || (!!itemMain && itemMain === targetTitleMain))) return 100
 		return titleScore * 10 + (artistHit ? 5 : 0)
 	}
 
@@ -205,7 +208,7 @@ export const findPlayableAlt = async (
 							const score = scoreOf(item)
 							if (score > bestScore) { bestScore = score; best = item }
 						}
-						if (bestScore >= 35) break
+						if (bestScore >= 100) break
 					} catch (err) {
 						lastErr = String((err as any)?.message ?? err)
 					}

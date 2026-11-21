@@ -20,6 +20,7 @@ import { useAppTheme, useThemeMode } from '@/hooks/useAppTheme'
 import { setSetting, useSetting } from '@/jk/settingsStore'
 import BUILD_INFO from '@/constants/buildInfo'
 import PersistStatus from '@/store/PersistStatus'
+import { fileUriFromPath } from '@/helpers/localFile'
 import { showToast } from '@/utils/utils'
 import { logError, logInfo } from '@/helpers/logger'
 import { getSectionTitle, getSectionNote } from '@/jk/settingsSections'
@@ -1042,13 +1043,14 @@ const SettingsSectionScreen = () => {
 					const side = await ds.readSidecar(hit.uri)
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
 					const track: any = {
-						id: side.meta?.sourceId || hit.name,
+						id: `local:${side.meta?.sourceId || hit.name}`,
 						platform: side.meta?.source || 'local',
 						title: side.meta?.title || hit.name,
 						artist: side.meta?.artist || '',
 						album: side.meta?.album || '',
 						duration: Number(side.meta?.duration ?? 0) || 0,
-						url: hit.uri,
+						// 必须编码：文件名含中文/空格/括号，裸路径会被 requireMediaUri 判为 INVALID_SOURCE
+						url: fileUriFromPath(hit.uri),
 					}
 					logInfo('[dev] playDownload', track.title, 'cover=', side.coverUri ? 'yes' : 'no', 'lrc=', side.lyric ? 'yes' : 'no')
 					await (tp as any).playWithReplacePlayList(track, [track])

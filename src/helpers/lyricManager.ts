@@ -153,7 +153,10 @@ async function refreshLyric(fromStart?: boolean, forceRequest = false, positionO
 			loading: false,
 			lyricParser: parser,
 			lyrics: stripMetaLines(builtLyrics as any) as any,
-			translationLyrics: lrcSource.translation ? parser.getTranslationLyric() : undefined,
+			// 翻译行同样要过滤元信息/声明（实测 tx 会在翻译里返回「以下歌词翻译由…提供」）
+			translationLyrics: lrcSource.translation
+				? stripMetaLines(parser.getTranslationLyric() as any) as any
+				: undefined,
 			meta: parser.getMeta(),
 			hasTranslation: !!lrcSource.translation,
 		})

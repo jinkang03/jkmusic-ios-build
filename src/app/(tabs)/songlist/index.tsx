@@ -152,7 +152,7 @@ const SongListScreen = () => {
 	}, [loading, hasMore, list.length, source, tagId, sortId, page, loadList])
 
 	const sourceTabs = React.useMemo(
-		() => LIST_SOURCES.map(item => ({ id: item, label: sourceLabel(item) || sources.find(s => s.id === item)?.name || item })),
+		() => LIST_SOURCES.map(item => ({ id: item, label: sourceLabel(item, false, 'alias') || sources.find(s => s.id === item)?.name || item })),
 		[],
 	)
 

@@ -33,11 +33,11 @@ type SearchType = 'songs' | 'artists'
 // 桌面版源胶囊（聚合 = 全源并行）
 /** 源胶囊在渲染期生成，保证语言切换后立即生效 */
 const sourcePills = () => [
-	{ id: 'kw', label: sourceLabel('kw', true) },
-	{ id: 'kg', label: sourceLabel('kg', true) },
-	{ id: 'tx', label: sourceLabel('tx', true) },
-	{ id: 'wy', label: sourceLabel('wy', true) },
-	{ id: 'mg', label: sourceLabel('mg', true) },
+	{ id: 'kw', label: sourceLabel('kw', true, 'alias') },
+	{ id: 'kg', label: sourceLabel('kg', true, 'alias') },
+	{ id: 'tx', label: sourceLabel('tx', true, 'alias') },
+	{ id: 'wy', label: sourceLabel('wy', true, 'alias') },
+	{ id: 'mg', label: sourceLabel('mg', true, 'alias') },
 	{ id: 'all', label: tr('聚合搜索', 'All Sources') },
 ]
 

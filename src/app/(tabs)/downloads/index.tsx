@@ -17,6 +17,7 @@ import { readCacheIndex, removeCacheIndexEntry } from '@/player/CacheManager'
 import { normalizeQuality } from '@/jk/downloader'
 import { downloadTasksStore } from '@/jk/downloadTasksStore'
 import { tr } from '@/utils/i18n'
+import { fileUriFromPath } from '@/helpers/localFile'
 
 // 筛选项用 id 判断，文案渲染期翻译（模块级常量会在语言切换后过期）
 const FILTERS = ['all', 'done', 'downloading'] as const
@@ -125,13 +126,17 @@ const DownloadsScreen = () => {
 			const side = await readSidecar(item.uri)
 			const fallbackName = item.name.replace(/\.[^.]+$/, '')
 			const track: any = {
-				id: side.meta?.sourceId || fallbackName,
+				// 加 local: 前缀：否则与在线同曲 id/platform 相同，play() 会误判「已经在播」
+				// 并复用上一次的 nativeQueue（没有 url），最终拿到 fake-audio（duration=0 卡住）
+				id: `local:${side.meta?.sourceId || fallbackName}`,
 				platform: side.meta?.source || 'local',
 				title: side.meta?.title || fallbackName,
 				artist: side.meta?.artist || tr('本地下载', 'Downloaded'),
 				album: side.meta?.album || '',
 				duration: Number(side.meta?.duration ?? 0) || 0,
-				url: item.uri.startsWith('file://') ? item.uri : `file://${item.uri}`,
+				// 必须做 percent-encoding：文件名是「歌名 - 歌手」，含中文/空格/括号，
+				// 直接拼 file:// 会让 AVPlayer 解析失败（duration=0，表现为卡住播不了）
+				url: fileUriFromPath(item.uri.replace(/^file:\/\//, '')),
 			}
 			logInfo('[downloads] 试听本地文件', track.url)
 			await tp.playWithReplacePlayList(track, [track])

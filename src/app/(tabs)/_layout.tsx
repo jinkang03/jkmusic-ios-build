@@ -6,6 +6,7 @@ import { glass } from '@/constants/glass'
 import { tr } from '@/utils/i18n'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { useMemo } from 'react'
 import { useLiveActivity } from '@/hooks/useLiveActivity'
@@ -18,9 +19,9 @@ export const unstable_settings = { initialRouteName: 'favorites' }
 // iOS 26/27 Apple Music 风格：底部导航是悬浮胶囊（左右留边、离底留白）
 // 60 而不是 54：54 时 icon 34 + label 14 + 上下 padding 刚好溢出，
 // 文字会压到底部圆角上（实测 1.4.x 的视觉问题）
-const TAB_BAR_HEIGHT = 60
+const TAB_BAR_HEIGHT = 56
 const TAB_BAR_SIDE = 12
-const TAB_BAR_BOTTOM = 8
+const TAB_BAR_BOTTOM = 4
 
 const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boolean, alpha: number }) => {
 	const g = glass(isDark, alpha)
@@ -29,15 +30,22 @@ const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boo
 			style={[
 				StyleSheet.absoluteFill,
 				{
-					borderRadius: 30,
+					borderRadius: 28,
 					overflow: 'hidden',
-					borderWidth: StyleSheet.hairlineWidth,
+					borderWidth: 1,
 					borderColor: g.stroke,
 					backgroundColor: g.fill,
 				},
 			]}
 		>
-			<BlurView intensity={92} tint={tint} style={StyleSheet.absoluteFill} />
+			<BlurView intensity={100} tint={tint} style={StyleSheet.absoluteFill} />
+			{/* 液态玻璃高光：顶部渐隐白，底部几乎没有 → 形成玻璃厚度 */}
+			<LinearGradient
+				pointerEvents="none"
+				colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0.06)', 'transparent']}
+				locations={[0, 0.4, 1]}
+				style={StyleSheet.absoluteFill}
+			/>
 		</View>
 	)
 }
@@ -54,7 +62,7 @@ const TabsNavigation = () => {
 		left: TAB_BAR_SIDE,
 		right: TAB_BAR_SIDE,
 		// 悬浮在导航胶囊上方，两者之间留 10pt
-		bottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM + Math.max(bottom, 8) + 10,
+		bottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM + Math.max(bottom, 8) + 14,
 	}), [bottom])
 
 	return (
@@ -78,7 +86,7 @@ const TabsNavigation = () => {
 						right: TAB_BAR_SIDE,
 						bottom: Math.max(bottom, TAB_BAR_BOTTOM),
 						height: TAB_BAR_HEIGHT,
-						borderRadius: 30,
+						borderRadius: 28,
 						borderTopWidth: 0,
 						paddingTop: 0,
 						paddingBottom: 0,

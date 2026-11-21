@@ -1182,6 +1182,14 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 			if (nativeQueue && getNativeTrackIdentity(firstItem)?.token === nativeQueue.token &&
 				isSameMediaItem(musicItem, nativeQueue.track as IMusic.IMusicItem)) {
 				trackSourceLoadingStore.setValue(null)
+				// 本地文件（下载页试听）带的 url 必须优先：nativeQueue.track 可能是上一次
+				// 在线取流的结果，没有 url，直接复用会变成 fake-audio
+				const incomingUrl = String((musicItem as any)?.url ?? '')
+				const queuedUrl = String((nativeQueue.track as any)?.url ?? '')
+				if (incomingUrl.startsWith('file://') && incomingUrl !== queuedUrl) {
+					setTrackSource(musicItem as any)
+					return
+				}
 				if (forcePlay || ReactNativeTrackPlayer.getActiveMediaItemIndex() !== 0 ||
 					ReactNativeTrackPlayer.getPlaybackState() === PlaybackState.Error) {
 					// A fresh transport token also retires already-queued placeholder events.

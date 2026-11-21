@@ -85,7 +85,9 @@ export const karaokeLineProgress = (
 	return total > 0 ? Math.min(1, sung / total) : 0
 }
 
-export const findKaraokeSegs = (map: Map<number, KaraokeSeg[]>, lineMs: number, tolerance = 30): KaraokeSeg[] => {
+// tolerance 120ms：普通 lrc 与 lxlyric 的行时间偶有几十毫秒舍入差异，
+// 30ms 会导致匹配失败后回退成「整行扫过」，看起来像歌词提前
+export const findKaraokeSegs = (map: Map<number, KaraokeSeg[]>, lineMs: number, tolerance = 120): KaraokeSeg[] => {
 	if (!map.size) return []
 	const direct = map.get(Math.round(lineMs))
 	if (direct) return direct

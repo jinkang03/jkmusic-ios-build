@@ -79,7 +79,8 @@ const LeaderboardScreen = () => {
 	}, [source, activeBoard, loadDetail])
 
 	const sourceTabs = useMemo(
-		() => BOARD_SOURCES.map(item => ({ id: item, label: sourceLabel(item) })),
+		// 平台胶囊始终中文：只有歌单内的歌曲行跟随「显示源名」设置
+		() => BOARD_SOURCES.map(item => ({ id: item, label: sourceLabel(item, false, 'alias') })),
 		[],
 	)
 

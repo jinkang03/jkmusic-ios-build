@@ -13,6 +13,7 @@ import { sourceLabel } from '@/jk/sourceLabels'
 import { useDefaultStyles } from '@/styles'
 import { Ionicons } from '@expo/vector-icons'
 import { BlurView } from 'expo-blur'
+import { LinearGradient } from 'expo-linear-gradient'
 import * as Haptics from 'expo-haptics'
 import { useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
@@ -89,7 +90,14 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 			activeOpacity={0.9}
 			style={[styles.container, { borderColor: g.stroke, backgroundColor: g.fill }, style]}
 		>
-			<BlurView intensity={80} tint={blurTint} style={styles.blurContainer}>
+			<BlurView intensity={95} tint={blurTint} style={styles.blurContainer}>
+				{/* 液态玻璃高光：顶部一道白色渐隐，配合细描边形成「玻璃厚度」 */}
+				<LinearGradient
+					pointerEvents="none"
+					colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0.06)', 'transparent']}
+					locations={[0, 0.35, 1]}
+					style={StyleSheet.absoluteFill}
+				/>
 				{/* 左段：封面 + 标题/歌手 */}
 				<View style={styles.leftSection}>
 					<View style={styles.artworkBox}>
@@ -162,9 +170,9 @@ const createStyles = (
 	trackArtist: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
 	container: {
 		// 与底部导航胶囊统一的液态玻璃样式
-		borderRadius: 22,
+		borderRadius: 24,
 		borderCurve: 'continuous',
-		borderWidth: StyleSheet.hairlineWidth,
+		borderWidth: 1,
 		overflow: 'hidden',
 		shadowColor: '#000',
 		shadowOpacity: 0.22,

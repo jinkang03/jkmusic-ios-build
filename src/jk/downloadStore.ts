@@ -8,6 +8,7 @@
  * 与播放缓存（musicCache/）完全分离，LRU 不会删这里的文件。
  */
 import * as FileSystem from 'expo-file-system/legacy'
+import { fileUriFromPath } from '@/helpers/localFile'
 import { getSetting } from '@/jk/settingsStore'
 import { logError, logInfo } from '@/helpers/logger'
 
@@ -135,7 +136,10 @@ const readText = async(uri: string): Promise<string> => {
 export const readSidecar = async(audioPathOrUri: string): Promise<LocalSidecar> => {
 	const empty: LocalSidecar = { meta: null, lyric: '', translation: '', coverUri: '' }
 	if (!audioPathOrUri) return empty
-	const path = audioPathOrUri.startsWith('file://') ? audioPathOrUri : `file://${audioPathOrUri}`
+	// 与播放器统一：裸路径要 percent-encode（文件名含中文/空格）
+	const path = audioPathOrUri.startsWith('file://')
+		? audioPathOrUri
+		: fileUriFromPath(audioPathOrUri)
 	if (!/\/downloads\//.test(path)) return empty
 	const base = sidecarBase(path)
 	const raw = await readText(`${base}.json`)

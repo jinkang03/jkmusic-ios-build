@@ -38,8 +38,13 @@ const isFilePath = (filePath: string) =>
 		.split('/')
 		.every((part) => part.length > 0 && part !== '.' && part !== '..')
 
-export const fileUriFromPath = (filePath: string) =>
-	`file://${filePath.split('/').map(encodeURIComponent).join('/')}`
+export const fileUriFromPath = (filePath: string) => {
+	// 入参可能是裸路径，也可能已经带 file://（downloads 的 uri 就是后者）。
+	// 必须先剥掉前缀，否则 'file:' 会被 encodeURIComponent 成 'file%3A'，
+	// 生成 file://file%3A///... 这种无效地址（AVPlayer 直接判为 invalid）。
+	const bare = String(filePath ?? '').replace(/^file:\/\//i, '')
+	return `file://${bare.split('/').map(encodeURIComponent).join('/')}`
+}
 
 function parseLocalFile(
 	value: unknown,
