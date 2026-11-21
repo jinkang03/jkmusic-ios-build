@@ -1,6 +1,7 @@
 import { sortIndexSymbol, timeStampSymbol } from '@/constants/commonConst'
 import { SoundAsset } from '@/constants/constant'
 import Config from '@/store/config'
+import { getSetting } from '@/jk/settingsStore'
 import delay from '@/utils/delay'
 import { isSameMediaItem, mergeProps, sortByTimestampAndIndex } from '@/utils/mediaItem'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -258,9 +259,17 @@ async function setupTrackPlayer() {
 		PersistStatus.set('music.playList', undefined)
 	}
 	// 状态恢复
-	if (rate) {
-		ReactNativeTrackPlayer.setPlaybackSpeed(+rate)
-	}
+	// 播放倍速 / 音量：设置项是唯一真源（与桌面版语义一致），music.rate 只做旧版本兼容回填
+	const playbackRate = Number(getSetting<number>('player.playbackRate', 1))
+	const effectiveRate = Number.isFinite(playbackRate) && playbackRate > 0
+		? playbackRate
+		: (rate ? +rate : 1)
+	ReactNativeTrackPlayer.setPlaybackSpeed(effectiveRate)
+	PersistStatus.set('music.rate', effectiveRate)
+	const savedVolume = Number(getSetting<number>('player.volume', 1))
+	ReactNativeTrackPlayer.setVolume(
+		Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 1,
+	)
 	if (repeatMode) {
 		repeatModeStore.setValue(repeatMode as MusicRepeatMode)
 	}
@@ -716,10 +725,13 @@ const addSongToStoredPlayList = (playlist: IMusic.PlayList, track: IMusic.IMusic
 				// console.log('songExists', songExists)
 
 				if (!songExists) {
-					// 只有当歌曲不存在时才添加
+					// 只有当歌曲不存在时才添加；插入位置跟随「添加音乐位置」设置
+					const addPos = getSetting<'top' | 'bottom'>('list.addMusicLocationType', 'top')
 					return {
 						...existingPlaylist,
-						songs: [...existingPlaylist.songs, track],
+						songs: addPos === 'bottom'
+							? [...existingPlaylist.songs, track]
+							: [track, ...existingPlaylist.songs],
 					}
 				} else {
 					logInfo('歌曲已存在')
@@ -1561,7 +1573,15 @@ const myTrackPlayer = {
 	useCurrentQuality: qualityStore.useValue,
 	getCurrentQuality: qualityStore.getValue,
 	getRate: ReactNativeTrackPlayer.getPlaybackSpeed,
-	setRate: ReactNativeTrackPlayer.setPlaybackSpeed,
+	setRate: (rate: number) => {
+		ReactNativeTrackPlayer.setPlaybackSpeed(rate)
+		PersistStatus.set('music.rate', rate)
+	},
+	getVolume: ReactNativeTrackPlayer.getVolume,
+	setVolume: (volume: number) => {
+		const v = Number(volume)
+		ReactNativeTrackPlayer.setVolume(Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1)
+	},
 	useMusicState,
 	reset,
 	getPreviousMusic,

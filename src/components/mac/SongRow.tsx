@@ -21,7 +21,8 @@ export interface SongRowProps {
 }
 
 const COL_INDEX = 28
-const COL_BADGE = 30
+// 角标现在可能是两字中文（酷我），30 会挤成省略号
+const COL_BADGE = 34
 const COL_META = '22%'
 const COL_TIME = 60
 

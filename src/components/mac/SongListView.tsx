@@ -15,6 +15,8 @@ import { useAppTheme } from '@/hooks/useAppTheme'
 import SongRow, { SongRowHeader } from './SongRow'
 import { TrackShortcutsMenu } from '@/components/TrackShortcutsMenu'
 import StateView from './StateView'
+import { useSetting } from '@/jk/settingsStore'
+import { sourceLabel } from '@/jk/sourceLabels'
 import type { Track } from '@/player/types'
 
 const formatDuration = (v?: number | string | null): string => {
@@ -43,6 +45,9 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress,
 	const router = useRouter()
 	const params = useLocalSearchParams<{ t?: string }>()
 	const currentMusic: any = myTrackPlayer.useCurrentMusic()
+	// 桌面版「显示来源」「显示源名」两个设置：角标是否显示、显示中文名还是平台代号
+	const [showSource] = useSetting('list.isShowSource', true)
+	const [sourceNameType] = useSetting('common.sourceNameType', 'alias')
 	const lastAutoPlayTokenRef = useRef<string | null>(null)
 
 	// 深链自动播放：只触发一次
@@ -85,7 +90,9 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress,
 						artist={item?.artist ?? item?.singer ?? ''}
 						album={item?.album ?? item?.meta?.albumName ?? ''}
 						duration={formatDuration(item?.duration ?? item?.interval)}
-						badge={item?.platform ? String(item.platform).toUpperCase() : undefined}
+						badge={showSource && item?.platform
+							? sourceLabel(String(item.platform), true, sourceNameType === 'real' ? 'real' : 'alias')
+							: undefined}
 						active={active}
 						onPress={() => {
 							onTrackPress?.()

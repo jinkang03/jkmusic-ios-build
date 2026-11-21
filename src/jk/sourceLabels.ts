@@ -1,6 +1,12 @@
 /**
- * 音源显示名（中英双语）。桌面版文案固定为「酷我音乐 / 酷狗音乐 / 企鹅音乐 / 网易音乐 / 咪咕音乐」。
+ * 音源显示名（中英双语）。
+ *
+ * 与桌面版 `common.sourceNameType` 对齐：
+ *   - alias（默认）→ 中文/英文全名「酷我音乐 / Kuwo Music」
+ *   - real        → 平台代号「kw / kg / tx / wy / mg」
+ * 桌面版用语言包前缀 `source_alias_` / `source_` 区分，这里用同一份映射表实现。
  */
+import { getSetting } from '@/jk/settingsStore'
 import { tr } from '@/utils/i18n'
 
 const SOURCE_NAMES: Record<string, { zh: string, en: string, shortZh: string, shortEn: string }> = {
@@ -11,8 +17,14 @@ const SOURCE_NAMES: Record<string, { zh: string, en: string, shortZh: string, sh
 	mg: { zh: '咪咕音乐', en: 'Migu Music', shortZh: '咪咕', shortEn: 'Migu' },
 }
 
-/** short = 胶囊用的短名（酷我 / Kuwo） */
-export const sourceLabel = (source: string, short = false) => {
+/**
+ * @param short    胶囊/角标用的短名（酷我 / Kuwo）
+ * @param nameType 覆盖设置值（组件里用 useSetting 传入，保证改设置后立刻刷新）
+ */
+export const sourceLabel = (source: string, short = false, nameType?: 'alias' | 'real') => {
+	const type = nameType ?? (getSetting<'alias' | 'real'>('common.sourceNameType', 'alias') === 'real' ? 'real' : 'alias')
+	// 真实名：桌面版显示平台代号本身（source_kw → kw）
+	if (type === 'real') return source
 	const item = SOURCE_NAMES[source]
 	if (!item) return source
 	return short ? tr(item.shortZh, item.shortEn) : tr(item.zh, item.en)

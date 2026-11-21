@@ -37,9 +37,7 @@ const BasicSection = () => {
 	const { themeMode, setThemeMode } = useThemeMode()
 	const { isDark, glassAlpha } = useAppTheme()
 	const c = macPalette(!!isDark)
-	// 键值语义与桌面版一致：fontSize 是 px 数值，glassBlur 是 0..1，sourceNameType 是 alias/real
-	const [fontSize, setFontSize] = useSetting('common.fontSize', 16)
-	const [glass, setGlass] = useSetting('common.glassBlur', 0)
+	// 源名语义与桌面版一致：alias = 中文名（酷我音乐），real = 平台代号（kw）
 	const [sourceName, setSourceName] = useSetting('common.sourceNameType', 'alias')
 
 	const pickWallpaper = async() => {
@@ -170,10 +168,6 @@ const BasicSection = () => {
 					</SettingRow>
 				</>
 			) : null}
-			<SettingRow label={tr('字号', 'Font Size')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSelect value={String(Number(fontSize) || 16)} onChange={(v) => setFontSize(Number(v) as any)} options={[
-				{ value: '14', label: tr('小', 'Small') }, { value: '16', label: tr('标准', 'Standard') }, { value: '18', label: tr('大', 'Large') },
-			]} /></SettingRow>
-			<SettingRow label={tr('玻璃模糊', 'Glass Blur')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={Number(glass) > 0} onChange={(v) => setGlass((v ? 1 : 0) as any)} /></SettingRow>
 			<SettingRow
 				label={tr('玻璃透明度', 'Glass Opacity')}
 				hint={tr('控制按钮/卡片的玻璃底透明度', 'Glass fill opacity for buttons and cards')}
@@ -187,38 +181,50 @@ const BasicSection = () => {
 					format={(v) => `${Math.round(v)}%`}
 				/>
 			</SettingRow>
-			<SettingRow label={tr('显示源名', 'Source Name Type')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSelect value={sourceName === 'real' ? 'real' : 'alias'} onChange={(v) => setSourceName(v as any)} options={[
-				{ value: 'real', label: tr('原名', 'Full') }, { value: 'alias', label: tr('缩写', 'Alias') },
+			<SettingRow label={tr('显示源名', 'Source Name')} hint={tr('歌曲列表里的音源角标', 'Source badge in song lists')}><SettingSelect value={sourceName === 'real' ? 'real' : 'alias'} onChange={(v) => setSourceName(v as any)} options={[
+				{ value: 'alias', label: tr('中文名（酷我音乐）', 'Full name') }, { value: 'real', label: tr('平台代号（kw）', 'Code') },
 			]} /></SettingRow>
 		</>
 	)
 }
 
 const PlayerSection = () => {
-	// 以 music.quality 为唯一真源（播放链路读 qualityStore）；player.playQuality 仅桌面兼容
+	// 以 music.quality 为唯一真源（播放链路读 qualityStore），不再写 player.playQuality 镜像
 	const [quality, setQualityRaw] = useSetting('music.quality', '128k')
 	const setQuality = React.useCallback(async(v: string) => {
 		setQualityRaw(v)
-		setSetting('player.playQuality', v)
 		try {
 			const { default: tp } = await import('@/helpers/trackPlayerIndex')
 			;(tp as any).setQuality?.(v)
 		} catch { /* ignore */ }
 	}, [setQualityRaw])
-	const [volume, setVolume] = useSetting('player.volume', 1)
-	const [rate, setRate] = useSetting('player.playbackRate', 1)
+	const [volume, setVolumeRaw] = useSetting('player.volume', 1)
+	const [rate, setRateRaw] = useSetting('player.playbackRate', 1)
 	const [saveTime, setSaveTime] = useSetting('player.isSavePlayTime', true)
 	const [autoSkip, setAutoSkip] = useSetting('player.autoSkipOnError', true)
-	const [stopEnd, setStopEnd] = useSetting('player.waitPlayEndStop', false)
 	const [showTrans, setShowTrans] = useSetting('player.isShowLyricTranslation', false)
-	const [showRoma, setShowRoma] = useSetting('player.isShowLyricRoma', false)
+	// 音量/倍速：写设置的同时立即作用于当前播放器（否则要等下一次启动才生效）
+	const setVolume = React.useCallback(async(v: number) => {
+		setVolumeRaw(v)
+		try {
+			const { default: tp } = await import('@/helpers/trackPlayerIndex')
+			;(tp as any).setVolume?.(v)
+		} catch { /* ignore */ }
+	}, [setVolumeRaw])
+	const setRate = React.useCallback(async(v: number) => {
+		setRateRaw(v)
+		try {
+			const { default: tp } = await import('@/helpers/trackPlayerIndex')
+			;(tp as any).setRate?.(v)
+		} catch { /* ignore */ }
+	}, [setRateRaw])
 	return (
 		<>
 			<SettingRow label={tr('音质', 'Audio Quality')}><SettingSelect value={quality} onChange={setQuality} options={[
 				{ value: '128k', label: '128k' }, { value: '320k', label: '320k' }, { value: 'flac', label: 'flac' },
 			]} /></SettingRow>
 			<SettingRow label={tr('音量', 'Volume')}><SettingSlider value={Number(volume)} min={0} max={1} step={0.01} onChange={setVolume} format={v => `${Math.round(v * 100)}%`} /></SettingRow>
-			<SettingRow label={tr('播放倍速', 'Playback Speed')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
+			<SettingRow label={tr('播放倍速', 'Playback Speed')} hint={tr('立即作用于当前播放', 'Applies to the current track immediately')}><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
 			<SettingRow
 				label={tr('保存播放进度', 'Save Playback Position')}
 				hint={tr('启动后恢复上次播放的曲目与位置', 'Restore last track and position on launch')}
@@ -231,26 +237,18 @@ const PlayerSection = () => {
 			>
 				<SettingSwitch value={autoSkip} onChange={setAutoSkip} />
 			</SettingRow>
-			<SettingRow label={tr('播放结束停止', 'Stop When Finished')}><SettingSwitch value={stopEnd} onChange={setStopEnd} /></SettingRow>
 			<SettingRow label={tr('显示歌词翻译', 'Show Lyric Translation')}><SettingSwitch value={showTrans} onChange={setShowTrans} /></SettingRow>
-			<SettingRow label={tr('显示歌词音译', 'Show Lyric Romanization')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={showRoma} onChange={setShowRoma} /></SettingRow>
 		</>
 	)
 }
 
 const ListSection = () => {
-	const [actionBtns, setActionBtns] = useSetting('list.actionButtonsVisible', true)
-	const [clickPlay, setClickPlay] = useSetting('list.isClickPlayList', true)
 	const [showSource, setShowSource] = useSetting('list.isShowSource', true)
-	const [saveScroll, setSaveScroll] = useSetting('list.isSaveScrollLocation', true)
 	const [addPos, setAddPos] = useSetting('list.addMusicLocationType', 'top')
 	return (
 		<>
-			<SettingRow label={tr('显示操作按钮', 'Show Action Buttons')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={actionBtns} onChange={setActionBtns} /></SettingRow>
-			<SettingRow label={tr('点击整行播放', 'Tap Row to Play')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={clickPlay} onChange={setClickPlay} /></SettingRow>
-			<SettingRow label={tr('显示来源', 'Show Source')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={showSource} onChange={setShowSource} /></SettingRow>
-			<SettingRow label={tr('记住滚动位置', 'Remember Scroll Position')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSwitch value={saveScroll} onChange={setSaveScroll} /></SettingRow>
-			<SettingRow label={tr('添加音乐位置', 'Add Music Position')} hint={tr('暂不支持（仅保存）', 'Saved only, not supported yet')}><SettingSelect value={addPos} onChange={setAddPos} options={[
+			<SettingRow label={tr('显示来源', 'Show Source')} hint={tr('歌曲列表里的音源角标', 'Source badge in song lists')}><SettingSwitch value={showSource} onChange={setShowSource} /></SettingRow>
+			<SettingRow label={tr('添加音乐位置', 'Add Music Position')} hint={tr('加入歌单时插入顶部还是底部', 'Insert at top or bottom when adding to a playlist')}><SettingSelect value={addPos} onChange={setAddPos} options={[
 				{ value: 'top', label: tr('顶部', 'Top') }, { value: 'bottom', label: tr('底部', 'Bottom') },
 			]} /></SettingRow>
 		</>
@@ -1079,6 +1077,14 @@ const SettingsSectionScreen = () => {
 						try {
 							const tp: any = (await import('@/helpers/trackPlayerIndex')).default
 							tp.setQuality?.(String(parsed))
+						} catch { /* ignore */ }
+					}
+					// 音量/倍速：与设置页滑块一致，立即作用于播放器（dev 深链验证用）
+					if (k === 'player.playbackRate' || k === 'player.volume') {
+						try {
+							const tp: any = (await import('@/helpers/trackPlayerIndex')).default
+							if (k === 'player.playbackRate') tp.setRate?.(Number(parsed))
+							else tp.setVolume?.(Number(parsed))
 						} catch { /* ignore */ }
 					}
 					logInfo(`[jk/dev] set ${k}=${rawV}`)
