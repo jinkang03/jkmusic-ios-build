@@ -284,17 +284,21 @@ const MiniLyric = () => {
 							</Text>
 						)}
 						{isCurrent && findTrans(item?.time) ? (
-							// 翻译用绝对定位：行高固定，滚动动画才不会因翻译行忽高忽低而顿挫。
-							// 进度与原文同一时间轴 → 逐字时翻译也一起向右推进。
+							// 翻译行只做整行高亮，不参与逐字填充：
+							// 主歌词的 seg 时间轴对不上翻译文本（尤其中英文长度差异），
+							// 强行逐字会让译文出现「跳字/停在半句」的错觉。
 							<View style={{ position: 'absolute', left: 0, right: 0, top: ROW_HEIGHT - 8 }}>
-								<KaraokeFillText
-									text={String(findTrans(item?.time) ?? '')}
-									progress={lineProgress}
-									activeColor={c.primary}
-									inactiveColor={c.textMuted}
-									textStyle={{ textAlign: 'center', fontSize: Math.max(11, curSize - 5) }}
-									opacity={0.9}
-								/>
+								<Text
+									numberOfLines={1}
+									style={{
+										textAlign: 'center',
+										fontSize: Math.max(11, curSize - 5),
+										color: c.primary,
+										opacity: 0.9,
+									}}
+								>
+									{String(findTrans(item?.time) ?? '')}
+								</Text>
 							</View>
 						) : null}
 					</Pressable>

@@ -105,7 +105,7 @@ type AltCandidate = {
 
 const platformLabel = (id: string) => ALL_PLATFORMS.find(p => p.id === id)?.label ?? id
 
-const findPlayableAlt = async (
+export const findPlayableAlt = async (
 	musicItem: IMusic.IMusicItem,
 	quality: string,
 	requestType: ResolveSourceRequestType,
@@ -121,7 +121,16 @@ const findPlayableAlt = async (
 	}
 
 	const currentPlatform = readFromSource(musicItem)
-	const platforms = ALL_PLATFORMS.filter(p => p.id !== currentPlatform)
+	// 只保留「确实有脚本支持」的平台：没有脚本的平台取流必然失败，
+	// 留着只会让兜底多等一个超时（例如只装 HelloWorld 时它不支持 wy）
+	let supported: Set<string> | null = null
+	try {
+		const { hasSource } = await import('@/jk/sourceRegistry')
+		supported = new Set(ALL_PLATFORMS.map(p => p.id).filter(id => hasSource(id)))
+	} catch { /* 取不到就退回全平台 */ }
+	const platforms = ALL_PLATFORMS.filter(p =>
+		p.id !== currentPlatform && (!supported || supported.has(p.id)),
+	)
 	if (!platforms.length) return null
 
 	const { getPooledMusicUrl } = await import('@/jk/sourceRegistry')
@@ -171,7 +180,7 @@ const findPlayableAlt = async (
 					id: String(e.id),
 					name: String(e.name || title),
 					singer: String(e.singer || artist),
-					meta: { songmid: String(e.id), id: String(e.id), source: e.source, hash: String(e.id) },
+					meta: { songmid: String(e.id), id: String(e.id), source: e.source },
 					fromIndex: true,
 				})
 			}
@@ -250,7 +259,8 @@ const findPlayableAlt = async (
 							c.id,
 							q,
 							c.platform,
-							{ ...(c.meta ?? {}), songmid: c.id, id: c.id, source: c.platform, hash: c.id },
+							// 不要把 hash 强行写成 id：kg 的 hash 与 id 不同，脚本会优先取 hash
+							{ ...(c.meta ?? {}), songmid: c.id, id: c.id, source: c.platform },
 						),
 						createTimeoutPromise(7000),
 					]) as string

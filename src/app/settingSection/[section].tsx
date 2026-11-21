@@ -376,6 +376,8 @@ const DownloadSection = () => {
 	const [dlSize, setDlSize] = React.useState(0)
 	const [dlCount, setDlCount] = React.useState(0)
 	const [limitMb, setLimitMb] = useSetting('download.cacheLimitMb', 500)
+	// 下载音质与播放音质完全分离（播放读 music.quality，下载读这个）
+	const [dlQuality, setDlQuality] = useSetting('download.quality', '128k')
 	const [status, setStatus] = React.useState('')
 	const [showGoFavorites, setShowGoFavorites] = React.useState(false)
 	const router = useRouter()
@@ -454,6 +456,18 @@ const DownloadSection = () => {
 						<Text style={{ color: c.primary, fontSize: macFont.caption }}>{tr('刷新', 'Refresh')}</Text>
 					</Pressable>
 				</View>
+			</SettingRow>
+			<SettingRow
+				label={tr('下载音质', 'Download Quality')}
+				hint={tr('只影响下载，与播放音质独立', 'Download only; independent of playback quality')}
+			>
+				<SettingSelect
+					value={String(dlQuality)}
+					onChange={(v) => setDlQuality(v)}
+					options={[
+						{ value: '128k', label: '128k' }, { value: '320k', label: '320k' }, { value: 'flac', label: 'flac' },
+					]}
+				/>
 			</SettingRow>
 			<SettingRow label={tr('缓存上限', 'Cache Limit')} hint={tr('超出后按最久未使用淘汰', 'Evicts least recently used first')}>
 				<SettingSelect

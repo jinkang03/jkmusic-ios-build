@@ -99,10 +99,17 @@ function requestRefresh() {
  * 桌面版不会把「作词：… / 作曲：…」这类制作信息当成歌词行显示，
  * 但源里经常带这些行（且会导致翻译/逐字按 index 对齐时错位）。
  */
-const META_LINE = /^\s*(作词|作曲|编曲|词|曲|制作人|出品|监制|混音|母带|录音|合声|和声|和音|配唱|吉他|贝斯|鼓|键盘|弦乐|人声|统筹|企划|发行|OP|SP)[^\n]{0,10}[:：]/
+// 元信息行：中文制作名单 + 英文 Credits + 翻译来源声明。
+// 这些行带时间戳但内容是署名，显示出来会挤占歌词位（实测 tx/kw 都会返回）。
+const META_LINE = /^\s*(?:作词|作曲|编曲|词|曲|制作人|出品|监制|混音|母带|录音|合声|和声|和音|配唱|吉他|贝斯|鼓|键盘|弦乐|人声|统筹|企划|发行|OP|SP|Lyrics?\s+by|Composed\s+by|Written\s+by|Arranged\s+by|Produced\s+by|Music\s+by|Lyricist|Composer|Performed\s+by|Vocal)[^\n]{0,24}[:：]/i
+// 整行声明（没有冒号）：以下歌词翻译由…提供 / 翻译由…提供
+const META_NOTICE = /^\s*(?:以下歌词|歌词翻译|翻译由|本歌词|翻译[:：]|.*歌词翻译.*提供)/
 
 const stripMetaLines = <T extends { lrc?: string }>(lines: T[]): T[] =>
-	lines.filter(line => !META_LINE.test(String(line?.lrc ?? '')))
+	lines.filter(line => {
+		const text = String(line?.lrc ?? '')
+		return !META_LINE.test(text) && !META_NOTICE.test(text)
+	})
 
 async function refreshLyric(fromStart?: boolean, forceRequest = false, positionOverride?: number) {
 	const musicItem = myTrackPlayer.getCurrentMusic()

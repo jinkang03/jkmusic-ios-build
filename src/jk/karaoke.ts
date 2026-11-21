@@ -11,7 +11,7 @@ export const parseKaraokeLine = (line: string, lineTimeMs: number): KaraokeSeg[]
 	try {
 		const raw = String(line ?? '')
 		if (!raw || raw.indexOf('<') < 0) return []
-		const segs: KaraokeSeg[] = []
+		const rawSegs: KaraokeSeg[] = []
 		SEG_RE.lastIndex = 0
 		let m: RegExpExecArray | null
 		while ((m = SEG_RE.exec(raw)) !== null) {
@@ -20,9 +20,15 @@ export const parseKaraokeLine = (line: string, lineTimeMs: number): KaraokeSeg[]
 			const text = m[3] ?? ''
 			// <0,0> 之类是占位段，跳过
 			if (!text) continue
-			segs.push({ start: lineTimeMs + (Number.isFinite(start) ? start : 0), dur: Number.isFinite(dur) ? dur : 0, text })
+			rawSegs.push({ start: Number.isFinite(start) ? start : 0, dur: Number.isFinite(dur) ? dur : 0, text })
 		}
-		return segs
+		if (!rawSegs.length) return []
+		// 时间基准自适应：
+		//   - kw 经 lrcTools.parse 转换后是「相对行开始」的毫秒（需要加 lineTimeMs）；
+		//   - 部分源/原始 krc 直接给「相对歌曲开始」的绝对毫秒（不能再加）。
+		// 判据：首段起点已经接近或超过行时间，说明数据本身是绝对时间。
+		const absolute = lineTimeMs > 0 && rawSegs[0].start >= lineTimeMs * 0.8
+		return rawSegs.map(seg => ({ ...seg, start: absolute ? seg.start : lineTimeMs + seg.start }))
 	} catch {
 		return []
 	}

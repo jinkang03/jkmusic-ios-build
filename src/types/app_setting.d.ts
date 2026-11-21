@@ -329,6 +329,7 @@ declare global {
       /**
        * 文件命名方式
        */
+      'download.quality': IMusic.IQualityKey
       'download.fileName': '歌名 - 歌手' | '歌手 - 歌名' | '歌名'
 
       /**

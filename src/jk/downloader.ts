@@ -10,7 +10,13 @@ import { showToast } from '@/utils/utils'
 import { upsertTask, removeTask } from '@/jk/downloadTasksStore'
 
 /** 音质归一：把 2000k / hires / flac24bit 等统一成 128k|320k|flac */
-export const normalizeQuality = (raw: string, sizeBytes?: number): string => {
+export const normalizeQuality = (raw: string, sizeBytes?: number, fileName?: string): string => {
+	// 扩展名是硬证据：sidecar 里的 quality 可能是旧版本写错的（实测 4.1MB 被标成 320k）
+	const name = String(fileName ?? '').toLowerCase()
+	if (/\.(flac|wav)$/.test(name)) return 'flac'
+	if (/\.(mp3|m4a|aac|ogg)$/.test(name)) {
+		if (sizeBytes) return sizeBytes > 7e6 ? '320k' : '128k'
+	}
 	const v = String(raw ?? '').toLowerCase()
 	if (v === 'flac' || v === '2000k' || v === 'flac24bit' || v === 'hires') return 'flac'
 	if (v === '320k') return '320k'
@@ -20,7 +26,8 @@ export const normalizeQuality = (raw: string, sizeBytes?: number): string => {
 }
 
 export const downloadTrack = async(track: any, opts?: { quality?: string, listName?: string }) => {
-	const requested = String(opts?.quality ?? getSetting('music.quality', '128k'))
+	// 下载音质与播放音质完全分离：播放用 music.quality，下载用 download.quality
+	const requested = String(opts?.quality ?? getSetting('download.quality', '128k'))
 	// 连续失败 3 次后停止，避免无限重试
 	const prevTask = (await import('@/jk/downloadTasksStore')).downloadTasksStore.getValue()[String(track?.id)]
 	if ((prevTask?.attempts ?? 0) >= 3) {

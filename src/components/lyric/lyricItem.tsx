@@ -1,9 +1,7 @@
 import { ThemeColors } from '@/constants/tokens'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import rpx from '@/utils/rpx'
-import KaraokeFillText from '@/components/mac/KaraokeFillText'
 import KaraokeSegLine from '@/components/mac/KaraokeSegLine'
-import { karaokeLineProgress } from '@/jk/karaoke'
 import * as Haptics from 'expo-haptics'
 import React, { memo, useCallback, useMemo, useRef } from 'react'
 import { Animated, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native'
@@ -86,9 +84,6 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 							nowMs={karaokeNowMs ?? 0}
 							activeColor={colors.primary}
 							inactiveColor={colors.text}
-							fallbackProgress={karaokeSegs?.length
-								? karaokeLineProgress(karaokeSegs, karaokeNowMs ?? 0)
-								: 0}
 							numberOfLines={2}
 							textStyle={{ fontSize: Math.round((fontSize || rpx(28)) * 1.06), textAlign: 'center', fontWeight: '600' }}
 						/>
@@ -123,25 +118,20 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 					</Text>
 				)}
 				{translation ? (
-					highlight ? (
-						<View style={{ paddingHorizontal: rpx(64) }}>
-							<KaraokeFillText
-								text={translation}
-								progress={karaokeSegs?.length
-									? karaokeLineProgress(karaokeSegs, karaokeNowMs ?? 0)
-									: 0}
-								activeColor={colors.primary}
-								inactiveColor={colors.text}
-								numberOfLines={1}
-								textStyle={{ fontSize: Math.max(12, (fontSize || rpx(28)) - 6), textAlign: 'center' }}
-								opacity={0.75}
-							/>
-						</View>
-					) : (
-						<Text style={[lyricStyles.translation, { fontSize: Math.max(12, (fontSize || rpx(28)) - 6), opacity: fadeOpacity * 0.7 }]}>
-							{translation}
-						</Text>
-					)
+					// 翻译行只整行高亮：主歌词的 seg 时间轴不能直接套到译文上
+					<Text
+						numberOfLines={1}
+						style={[
+							lyricStyles.translation,
+							{
+								fontSize: Math.max(12, (fontSize || rpx(28)) - 6),
+								opacity: highlight ? 0.9 : fadeOpacity * 0.7,
+								color: highlight ? colors.primary : colors.text,
+							},
+						]}
+					>
+						{translation}
+					</Text>
 				) : null}
 			</View>
 		</TouchableWithoutFeedback>

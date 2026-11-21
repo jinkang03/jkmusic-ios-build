@@ -122,6 +122,13 @@ export default function Lyric(props: IProps) {
 
 	// 用来缓存高度
 	const itemHeightsRef = useRef<IItemHeights>({})
+	// 歌词身份：切歌或换词后必须清掉旧行高，否则 getItemLayout 会按上一首的高度算 offset，
+	// 表现就是「滚动位置整体偏移」（全屏歌词停在错误位置、当前行在屏幕外）
+	const lyricSignature = `${lyrics.length}:${String((lyrics[0] as any)?.lrc ?? '').slice(0, 16)}`
+	React.useEffect(() => {
+		const blank = itemHeightsRef.current.blankHeight
+		itemHeightsRef.current = blank ? { blankHeight: blank } : {}
+	}, [lyricSignature])
 	const lastAutoScrollAtRef = useRef(0)
 	const lastAutoScrollIndexRef = useRef(-1)
 
@@ -232,6 +239,14 @@ export default function Lyric(props: IProps) {
 		const t = setTimeout(() => scrollToCurrentLrcItem(), 160)
 		return () => clearTimeout(t)
 	}, [scrollEnabled, scrollToCurrentLrcItem])
+
+	// 行高测量完成后的最终校准：getItemLayout 在 onLayout 之前只能用估算高度，
+	// 测量齐了再滚一次，避免停在偏几行的位置
+	useEffect(() => {
+		if (!lyrics.length || !scrollEnabled) return
+		const t = setTimeout(() => scrollToCurrentLrcItem(), 420)
+		return () => clearTimeout(t)
+	}, [lyricSignature, scrollEnabled, scrollToCurrentLrcItem])
 
 	const getItemLayout = useCallback((_: unknown, index: number) => {
 		const itemHeights = itemHeightsRef.current

@@ -38,6 +38,9 @@ interface CacheItem {
 	mtime: number
 	title?: string
 	artist?: string
+	/** 归一化后的音质：128k / 320k / flac / unknown */
+	quality?: string
+	folder?: string
 }
 
 const DownloadsScreen = () => {
@@ -70,7 +73,7 @@ const DownloadsScreen = () => {
 				mtime: item.mtime,
 				title: item.meta?.title,
 				artist: item.meta?.artist,
-				quality: normalizeQuality(String(item.meta?.quality ?? ''), item.size),
+				quality: normalizeQuality(String(item.meta?.quality ?? ''), item.size, item.name),
 				folder: item.folder,
 			})) as any)
 			const { bytes } = await getDownloadSize()
@@ -147,8 +150,12 @@ const DownloadsScreen = () => {
 		}
 	}
 
-	// 手动下载都是已完成项；"正在下载"走上面的任务卡片
-	const filtered = items
+	// 手动下载都是已完成项；"正在下载"走上面的任务卡片。
+	// 音质胶囊必须真正参与过滤，否则选了 128k 仍然显示全部（P 系列回归）
+	const filtered = items.filter(it => {
+		if (quality && String(it.quality ?? '') !== quality) return false
+		return true
+	})
 	const shown = filter === 'downloading' ? [] : filtered
 
 	return (

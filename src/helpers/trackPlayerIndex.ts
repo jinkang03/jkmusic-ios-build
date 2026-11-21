@@ -205,6 +205,8 @@ function reset() {
 	playbackIntentStore.setValue('stop')
 	trackSourceLoadingStore.setValue(null)
 	nativeQueue = null
+	clearPlayWatchdog()
+	altTriedRef.clear()
 	ReactNativeTrackPlayer.clear()
 }
 
@@ -362,6 +364,8 @@ async function setupTrackPlayer() {
 		playerSubscriptions.push(
 			ReactNativeTrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (data) => {
 				if (!isCurrentProgressEvent(data)) return
+				// 进度真的在走 → 源可用，撤掉看门狗
+				if (Number((data as any)?.position ?? 0) > 0.5) clearPlayWatchdog()
 				const now = Date.now()
 				if (now - lastProgressSaveAt < PROGRESS_SAVE_INTERVAL_MS) return
 				lastProgressSaveAt = now
@@ -419,6 +423,51 @@ async function haltWithNotice(message = '所有平台均不可用，点击播放
 }
 
 /** 播放失败时的情况 */
+/**
+ * 播放看门狗：取流成功 ≠ 能播。
+ * 实测有些源返回的地址 AVPlayer 拉不动，既不报错也不出声（时长 0、进度不动），
+ * 12 秒后按失败处理，走「换源」而不是干等。
+ */
+let playWatchdogTimer: any = null
+const clearPlayWatchdog = () => {
+	if (playWatchdogTimer) clearTimeout(playWatchdogTimer)
+	playWatchdogTimer = null
+}
+
+/** 已尝试过换源的曲目（同一首只换一次，避免来回横跳） */
+const altTriedRef = new Set<string>()
+
+const tryAltSource = async(musicItem: any): Promise<boolean> => {
+	const key = `${musicItem?.platform ?? ''}:${musicItem?.id ?? ''}`
+	if (!key || altTriedRef.has(key)) return false
+	altTriedRef.add(key)
+	try {
+		const { findPlayableAlt } = await import('@/player/MusicSourceResolver')
+		const { getSetting } = await import('@/jk/settingsStore')
+		const quality = String(getSetting('music.quality', '128k'))
+		logInfo('[jk/play] 播放失败，尝试换源', key)
+		const alt: any = await findPlayableAlt(musicItem, quality, 'current')
+		if (!alt?.url) {
+			logInfo('[jk/play] 换源无可用结果', key)
+			return false
+		}
+		logInfo('[jk/play] 换源成功', `${musicItem?.platform} -> ${alt.source}`, String(alt.title ?? ''))
+		showToast('提示', `该源无法播放，已用${alt.label ?? alt.source}播放`, 'info')
+		void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({
+			from: String(musicItem?.platform ?? ''),
+			to: String(alt.source ?? ''),
+			toId: String(alt.id ?? ''),
+			title: String(musicItem?.title ?? ''),
+		})).catch(() => undefined)
+		setTrackSource({ ...(musicItem as any), url: alt.url } as any)
+		ReactNativeTrackPlayer.play()
+		return true
+	} catch (err) {
+		logError('[jk/play] 换源异常', String((err as any)?.message ?? err))
+		return false
+	}
+}
+
 async function failToPlay() {
 	// 每次进入失败恢复都计一次；连续 3 次由 skipToNext 的硬保护拦下
 	notePlaybackFailure('failToPlay')
@@ -445,6 +494,8 @@ async function failToPlay() {
 		autoSkip = getSetting<boolean>('player.autoSkipOnError', false) === true
 	} catch { /* 默认 false */ }
 	if (!autoSkip) {
+		// 先尝试换平台（取流成功但播放失败时，原逻辑只会停住等用户手动换源）
+		if (await tryAltSource(failedMusic)) return
 		logInfo('[jk/play] autoSkipOnError=false，停在当前曲目（可点播放重试）')
 		await haltWithNotice('播放失败，点击播放重试')
 		return
@@ -690,6 +741,31 @@ const setTrackSource = (track: Track) => {
 		// A source may finish resolving after Stop. Retain it for a later Play,
 		// without letting setMediaItems change the requested stopped state.
 		ReactNativeTrackPlayer.stop()
+	}
+
+	// 只有「要播放」时才监控：12 秒内没进入 Playing / 进度不动 → 按失败处理
+	clearPlayWatchdog()
+	if (intent === 'play') {
+		playWatchdogTimer = setTimeout(() => {
+			playWatchdogTimer = null
+			void (async() => {
+				try {
+					if (trackSourceLoadingStore.getValue() !== token) return
+					if (!isCurrentMusic(track as IMusic.IMusicItem)) return
+					if (playbackIntentStore.getValue() !== 'play') return
+					const progress: any = ReactNativeTrackPlayer.getProgress?.() ?? {}
+					const position = Number(progress?.position ?? 0)
+					const duration = Number(progress?.duration ?? 0)
+					const state = ReactNativeTrackPlayer.getPlaybackState?.()
+					// RNTP 的枚举没有 Playing（idle/ready/buffering/ended/error），
+					// 用「进度是否真的在走」判断更可靠
+					const ready = position > 0.5
+					if (ready) return
+					logError('[jk/play] 看门狗超时：12s 未就绪 position=', String(position), 'duration=', String(duration), 'state=', String(state))
+					await failToPlay()
+				} catch { /* ignore */ }
+			})()
+		}, 12000)
 	}
 }
 /**

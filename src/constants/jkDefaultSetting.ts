@@ -114,6 +114,7 @@ export const jkDefaultSetting = {
 	"list.isSaveScrollLocation": true,
 	"list.addMusicLocationType": "top",
 	"list.actionButtonsVisible": false,
+	"download.quality": "128k",
 	"download.enable": false,
 	"download.isSavePathGroupByListName": false,
 	"download.savePath": "/Users/jinkang/Desktop",
