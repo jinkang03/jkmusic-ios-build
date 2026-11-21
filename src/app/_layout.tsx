@@ -151,7 +151,8 @@ const ThemedAppShell = () => {
 
 	return (
 		<SafeAreaProvider>
-			<GestureHandlerRootView style={{ flex: 1 }}>
+			{/* 无壁纸时的浅色保底底；有壁纸时被 WallpaperBackground 覆盖 */}
+			<GestureHandlerRootView style={{ flex: 1, backgroundColor: '#F7F7F9' }}>
 				{/* 功能页面壁纸（最底层；play 页不受影响） */}
 				<WallpaperBackground />
 				<ThemeProvider value={navTheme}>
@@ -175,8 +176,10 @@ const RootNavigation = () => {
 		<ThemeOverrideProvider resolvedTheme="light">
 		<Stack
 			key={language}
-			// 功能页统一「白色半透明玻璃」底：壁纸只轻微透出，不会让整页发暗
-			screenOptions={{ contentStyle: { backgroundColor: 'rgba(255,255,255,0.72)' } }}
+			// 页面本身透明：壁纸清晰可见，玻璃质感只由卡片/胶囊的 glass 提供。
+			// 之前这里加过 rgba(255,255,255,0.72)，等于给整页盖了一层白，
+			// 导致「玻璃不透明度调到 0 还是白的」，也盖住了壁纸。
+			screenOptions={{ contentStyle: { backgroundColor: 'transparent' } }}
 		>
 			<Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 			<Stack.Screen

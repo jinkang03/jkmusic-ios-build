@@ -1065,7 +1065,8 @@ const SettingsSectionScreen = () => {
 					const detail = await getBoardDetail(bsrc as any, bid, 1)
 					const tracks = (detail.list ?? []).map((m: any) => jkToTrack(m))
 					if (!tracks.length) throw new Error('榜单为空')
-					const first: any = tracks[0]
+					const wantIdx = Math.max(0, Number((params as any).index ?? 0) || 0)
+					const first: any = tracks[Math.min(wantIdx, tracks.length - 1)]
 					logInfo('[dev] playBoard first=', JSON.stringify({
 						id: first?.id, platform: first?.platform, title: first?.title,
 						songmid: first?.songmid, duration: first?.duration,
@@ -1118,6 +1119,14 @@ const SettingsSectionScreen = () => {
 						try {
 							const tp: any = (await import('@/helpers/trackPlayerIndex')).default
 							tp.setQuality?.(String(parsed))
+						} catch { /* ignore */ }
+					}
+					// 玻璃透明度真源是 glassAlphaStore/PersistStatus（不是 settingsStore），
+					// dev 深链要调用 setGlassAlpha，否则改了没反应
+					if (k === 'app.glassAlpha') {
+						try {
+							const { setGlassAlpha } = await import('@/constants/glass')
+							setGlassAlpha(Number(parsed))
 						} catch { /* ignore */ }
 					}
 					// 音量/倍速：与设置页滑块一致，立即作用于播放器（dev 深链验证用）

@@ -65,7 +65,11 @@ const LeaderboardScreen = () => {
 		setDetailLoading(true)
 		try {
 			const res: any = await getBoardDetail(nextSource, boardId, 1)
-			setTracks(res?.list ?? [])
+			// 必须转成 Track：原始 JKMusic 用的是 name/singer/source，
+			// 而 SongListView / playWithReplacePlayList 读的是 title/artist/platform。
+			// 不转换时 platform 为 undefined → 取流直接失败（表现就是「点了没反应、0:00」）
+			const { jkToTrack } = await import('@/jk/adapt')
+			setTracks((res?.list ?? []).map((m: any) => jkToTrack(m)))
 		} catch (err) {
 			logError('[leaderboard] getBoardDetail failed', String((err as any)?.message ?? err))
 			setTracks([])
