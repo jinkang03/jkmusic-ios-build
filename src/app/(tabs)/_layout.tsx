@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { useMemo } from 'react'
 import { useLiveActivity } from '@/hooks/useLiveActivity'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 // 首页固定为「我的列表」（不再落到搜索页/歌曲页）
@@ -19,9 +19,12 @@ export const unstable_settings = { initialRouteName: 'favorites' }
 // iOS 26/27 Apple Music 风格：底部导航是悬浮胶囊（左右留边、离底留白）
 // 60 而不是 54：54 时 icon 34 + label 14 + 上下 padding 刚好溢出，
 // 文字会压到底部圆角上（实测 1.4.x 的视觉问题）
-const TAB_BAR_HEIGHT = 44
-const TAB_BAR_SIDE = 26
+const TAB_BAR_HEIGHT = 53
+// 功能条水平长度 = 上一版 ×0.8（左右边距按屏宽比例算）
+const TAB_BAR_SIDE_RATIO = 0.155
 const TAB_BAR_BOTTOM = 14
+// 播放条水平长度 = 上一版 ×1.1（比功能条更宽）
+const PLAYER_SIDE_RATIO = 0.027
 
 const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boolean, alpha: number }) => {
 	const g = glass(isDark, alpha)
@@ -30,7 +33,7 @@ const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boo
 			style={[
 				StyleSheet.absoluteFill,
 				{
-					borderRadius: 22,
+					borderRadius: 26,
 					overflow: 'hidden',
 					borderWidth: 1,
 					borderColor: g.stroke,
@@ -54,16 +57,20 @@ const TabsNavigation = () => {
 	// 灵动岛 / 锁屏实时进度（旁路，不支持时静默跳过）
 	useLiveActivity()
 	const { bottom } = useSafeAreaInsets()
+	const { width: winWidth } = useWindowDimensions()
+	// 功能条长度 0.8×、播放条长度 1.1×（按屏宽比例换算成左右边距）
+	const tabBarSide = Math.round(winWidth * TAB_BAR_SIDE_RATIO)
+	const playerSide = Math.round(winWidth * PLAYER_SIDE_RATIO)
 	const { blurTint, colors, isDark, glassAlpha } = useAppTheme()
 	const mac = macPalette(!!isDark)
 
 	const floatingPlayerStyle = useMemo(() => ({
 		position: 'absolute' as const,
-		left: TAB_BAR_SIDE,
-		right: TAB_BAR_SIDE,
+		left: playerSide,
+		right: playerSide,
 		// 悬浮在导航胶囊上方，两者之间留 10pt
 		bottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM + Math.max(bottom, 8) + 12,
-	}), [bottom])
+	}), [bottom, playerSide])
 
 	return (
 		<>
@@ -84,11 +91,11 @@ const TabsNavigation = () => {
 					headerShown: false,
 					tabBarStyle: {
 						position: 'absolute',
-						left: TAB_BAR_SIDE,
-						right: TAB_BAR_SIDE,
+						left: tabBarSide,
+						right: tabBarSide,
 						bottom: Math.max(bottom, TAB_BAR_BOTTOM),
 						height: TAB_BAR_HEIGHT,
-						borderRadius: 22,
+						borderRadius: 26,
 						borderTopWidth: 0,
 						paddingTop: 0,
 						paddingBottom: 0,

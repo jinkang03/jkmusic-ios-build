@@ -1056,6 +1056,22 @@ const SettingsSectionScreen = () => {
 					}
 					logInfo('[dev] playDownload', track.title, 'cover=', side.coverUri ? 'yes' : 'no', 'lrc=', side.lyric ? 'yes' : 'no')
 					await (tp as any).playWithReplacePlayList(track, [track])
+				} else if (action === 'addToUserList') {
+					// 验证「添加到歌单」的数据层：直接调 libraryStore.addToList
+					const lib = await import('@/jk/libraryStore')
+					const lists = lib.getUserLists()
+					if (!lists.length) throw new Error('没有自建歌单')
+					const wantName = String((params as any).name ?? '')
+					const target = lists.find(l => l.name.includes(wantName)) ?? lists[0]
+					const m: any = {
+						id: `dev_${Date.now()}`,
+						name: 'dev 测试曲',
+						singer: 'dev',
+						source: 'kw',
+						meta: { songmid: '228908' },
+					}
+					lib.addToList(target.id, [m], 'top')
+					logInfo('[dev] addToUserList ok name=', target.name, 'len=', lib.getListById(target.id).length)
 				} else if (action === 'playBoard') {
 					// 验证榜单取流：dump 第一首的 Track 字段并尝试播放
 					const bsrc = String((params as any).source ?? 'kw')

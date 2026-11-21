@@ -12,6 +12,7 @@ import { logInfo } from '@/helpers/logger'
 import { showToast } from '@/utils/utils'
 import { tr } from '@/utils/i18n'
 import { LIST_IDS, addToList, getUserLists } from '@/jk/libraryStore'
+import { getSetting } from '@/jk/settingsStore'
 import { takePendingMusic } from '@/jk/pendingMusic'
 import { addToList as addToLibList } from '@/jk/libraryStore'
 
@@ -38,8 +39,10 @@ const AddToPlaylistScreen = () => {
 			router.back()
 			return
 		}
-		if (id === 'love') addToLibList(LIST_IDS.LOVE, [m], 'bottom')
-		else addToList(id, [m], 'bottom')
+		// 插入位置跟随「添加音乐位置」设置（之前固定 bottom，选了顶部也不生效）
+		const pos = getSetting('list.addMusicLocationType', 'top') as 'top' | 'bottom'
+		if (id === 'love') addToLibList(LIST_IDS.LOVE, [m], pos)
+		else addToList(id, [m], pos)
 		logInfo('[addToPlaylist] added', m.id, 'source=', (m as any).source, 'to', id, name)
 		showToast(tr('提示', 'Notice'), tr(`已添加到 ${name}`, `Added to ${name}`), 'success')
 		router.back()

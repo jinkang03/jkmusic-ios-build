@@ -74,17 +74,34 @@ const ColorPickerModal = ({ visible, initialColor, followWallpaper, onClose, onP
 
 	const color = hsvToHex(h, s, v)
 
+	// 面板尺寸用 ref 同步：PanResponder 的回调是创建时闭包，直接读 state 会一直是 0
+	const panelRef = useRef(panel)
+	useEffect(() => { panelRef.current = panel }, [panel])
+	const hueRef = useRef(hueBar)
+	useEffect(() => { hueRef.current = hueBar }, [hueBar])
+
+	// 拖动基准：按下时的色值 + 尺寸。移动时用 gestureState.dx/dy 累加，
+	// 不再读 locationX/Y（手指移动时该值会随视图重算，表现为「滑不动/跳变」）
+	const svBase = useRef({ s: 0, v: 0, w: 1, h: 1 })
+	const hueBase = useRef({ h: 0, w: 1 })
+
 	const svPan = useRef(
 		PanResponder.create({
 			onStartShouldSetPanResponder: () => true,
 			onMoveShouldSetPanResponder: () => true,
 			onPanResponderGrant: (e) => {
-				setS(clamp01(e.nativeEvent.locationX / Math.max(1, panel.w)))
-				setV(1 - clamp01(e.nativeEvent.locationY / Math.max(1, panel.h)))
+				const w = Math.max(1, panelRef.current.w)
+				const h = Math.max(1, panelRef.current.h)
+				const s0 = clamp01(e.nativeEvent.locationX / w)
+				const v0 = 1 - clamp01(e.nativeEvent.locationY / h)
+				svBase.current = { s: s0, v: v0, w, h }
+				setS(s0)
+				setV(v0)
 			},
-			onPanResponderMove: (e) => {
-				setS(clamp01(e.nativeEvent.locationX / Math.max(1, panel.w)))
-				setV(1 - clamp01(e.nativeEvent.locationY / Math.max(1, panel.h)))
+			onPanResponderMove: (_e, g) => {
+				const { s: s0, v: v0, w, h } = svBase.current
+				setS(clamp01(s0 + g.dx / w))
+				setV(clamp01(v0 - g.dy / h))
 			},
 		}),
 	).current
@@ -94,10 +111,14 @@ const ColorPickerModal = ({ visible, initialColor, followWallpaper, onClose, onP
 			onStartShouldSetPanResponder: () => true,
 			onMoveShouldSetPanResponder: () => true,
 			onPanResponderGrant: (e) => {
-				setH(clamp01(e.nativeEvent.locationX / Math.max(1, hueBar.w)) * 360)
+				const w = Math.max(1, hueRef.current.w)
+				const h0 = clamp01(e.nativeEvent.locationX / w) * 360
+				hueBase.current = { h: h0, w }
+				setH(h0)
 			},
-			onPanResponderMove: (e) => {
-				setH(clamp01(e.nativeEvent.locationX / Math.max(1, hueBar.w)) * 360)
+			onPanResponderMove: (_e, g) => {
+				const { h: h0, w } = hueBase.current
+				setH(clamp01(h0 / 360 + g.dx / w) * 360)
 			},
 		}),
 	).current
