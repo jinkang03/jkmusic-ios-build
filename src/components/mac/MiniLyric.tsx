@@ -8,7 +8,7 @@
  * 这里只做「当前行 ± 2」五行纯 map 渲染，不用 FlatList，不引入新依赖。
  */
 import React, { useMemo } from 'react'
-import { Animated, Easing, Pressable, Text, View } from 'react-native'
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import LyricManager from '@/helpers/lyricManager'
 import myTrackPlayer, { nowLyricState } from '@/helpers/trackPlayerIndex'
 import { macFont, macPalette } from '@/constants/macTokens'
@@ -19,6 +19,9 @@ import { nowLxLyricState } from '@/player/PlayerStore'
 import { seekPreviewStore } from '@/player/seekPreview'
 import { parseKaraokeLine, buildKaraokeMap, findKaraokeSegs, karaokeLineProgress } from '@/jk/karaoke'
 import KaraokeFillText from './KaraokeFillText'
+import KaraokeSegLine from './KaraokeSegLine'
+import MaskedView from '@react-native-masked-view/masked-view'
+import { LinearGradient } from 'expo-linear-gradient'
 import { fetchLyric } from '@/jk/lyric'
 import { logInfo } from '@/helpers/logger'
 
@@ -37,6 +40,7 @@ const MiniLyric = () => {
 	const [delayScroll] = useSetting('playDetail.isDelayScroll', false)
 	const [fontSizeKey] = useSetting('lyric.detailFontSize', 1)
 	const [showTrans] = useSetting('player.isShowLyricTranslation', false)
+	const [lyricDelay] = useSetting('lyric.delaySeconds', 0)
 	// 字号档位：当前行 [16,18,20,22]，其它行 [13,15,16,18]
 	const curSize = [16, 18, 20, 22][Number(fontSizeKey)] ?? 16
 	const otherSize = [13, 15, 16, 18][Number(fontSizeKey)] ?? 13
@@ -67,7 +71,8 @@ const MiniLyric = () => {
 	const { position: karaokePos } = myTrackPlayer.useProgress(0.05)
 	const seekPreview = seekPreviewStore.useValue()
 	// 拖动进度条时：歌词按预览位置走（松手后才真正 seek），避免「拉完对不上」
-	const karaokeMs = Math.max(0, Math.round(Number(seekPreview ?? karaokePos ?? 0) * 1000))
+	// 与 mac 一致：进度统一减去「歌词延迟」再对齐时间轴
+	const karaokeMs = Math.max(0, Math.round((Number(seekPreview ?? karaokePos ?? 0) - Number(lyricDelay ?? 0)) * 1000))
 	// 当前行改由「播放位置」计算：LyricManager 的 index 依赖 progress 事件，
 	// 暂停/seek 后会冻结在旧值（P127 实测：seek 到 14s 仍停在 line=0）。
 	const currentIndex = useMemo(() => {
@@ -193,6 +198,16 @@ const MiniLyric = () => {
 	for (let i = 0; i < windowSize; i++) rows.push(lyrics[start + i] ?? null)
 
 	return (
+		<MaskedView
+			style={{ flex: 1 }}
+			maskElement={
+				<LinearGradient
+					colors={['transparent', '#fff', '#fff', 'transparent']}
+					locations={[0, 0.2, 0.8, 1]}
+					style={StyleSheet.absoluteFill}
+				/>
+			}
+		>
 		<View
 			style={{ flex: 1, justifyContent: 'center', overflow: 'hidden' }}
 			onLayout={({ nativeEvent }) => {
@@ -229,14 +244,21 @@ const MiniLyric = () => {
 							const t = Number(item?.time ?? 0)
 							if (t > 0) void myTrackPlayer.seekTo(t)
 						}}
-						style={{ height: ROW_HEIGHT, justifyContent: 'center' }}
+						style={{
+							height: ROW_HEIGHT,
+							justifyContent: 'center',
+							// 与 mac 一致：离当前行越远越小（缩放不改变布局）
+							transform: [{ scale: isCurrent ? 1 : distance === 1 ? 0.97 : 0.94 }],
+						}}
 					>
 						{isCurrent ? (
-							<KaraokeFillText
+							<KaraokeSegLine
 								text={String(item?.lrc ?? item?.content ?? '')}
-								progress={lineProgress}
+								segs={karaokeSegs}
+								nowMs={karaokeMs}
 								activeColor={c.primary}
 								inactiveColor={c.textMuted}
+								fallbackProgress={lineProgress}
 								textStyle={{
 									textAlign: 'center',
 									fontSize: zoomActive ? curSize : otherSize,
@@ -276,6 +298,7 @@ const MiniLyric = () => {
 			})}
 			</Animated.View>
 		</View>
+		</MaskedView>
 	)
 }
 

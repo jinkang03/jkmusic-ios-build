@@ -12,6 +12,8 @@ import { useThemeColors } from '@/hooks/useAppTheme'
 import useDelayFalsy from '@/hooks/useDelayFalsy'
 import PersistStatus from '@/store/PersistStatus'
 import { useSetting } from '@/jk/settingsStore'
+import MaskedView from '@react-native-masked-view/masked-view'
+import { LinearGradient } from 'expo-linear-gradient'
 import { tr } from '@/utils/i18n'
 import { logInfo } from '@/helpers/logger'
 import delay from '@/utils/delay'
@@ -83,7 +85,9 @@ export default function Lyric(props: IProps) {
 	const karaokeMap = useMemo(() => buildKaraokeMap(lxRaw), [lxRaw])
 	const { position } = myTrackPlayer.useProgress(0.05)
 	const seekPreview = seekPreviewStore.useValue()
-	const karaokeMs = Math.max(0, Number(seekPreview ?? position ?? 0) * 1000)
+	const [lyricDelay] = useSetting('lyric.delaySeconds', 0)
+	// 与 mac 一致：统一减去歌词延迟
+	const karaokeMs = Math.max(0, (Number(seekPreview ?? position ?? 0) - Number(lyricDelay ?? 0)) * 1000)
 	// 当前行按播放位置二分查找：LyricManager 的 index 依赖 progress 事件，
 	// 暂停/seek 后会滞后，表现为「歌词不滚动 / 逐字不亮」。
 	const activeIndex = useMemo(() => {
@@ -324,6 +328,16 @@ export default function Lyric(props: IProps) {
 						<ActivityIndicator size="large" color={colors.loading} />
 					</View>
 				) : lyrics?.length ? (
+					<MaskedView
+						style={{ flex: 1 }}
+						maskElement={
+							<LinearGradient
+								colors={['transparent', '#fff', '#fff', 'transparent']}
+								locations={[0, 0.18, 0.82, 1]}
+								style={StyleSheet.absoluteFill}
+							/>
+						}
+					>
 					<LyricFlatList
 						ref={(_) => {
 							listRef.current = _
@@ -365,6 +379,7 @@ export default function Lyric(props: IProps) {
 					getItemLayout={getItemLayout}
 					renderItem={renderLyricItem}
 					/>
+					</MaskedView>
 				) : (
 					<View style={styles.fullCenter}>
 						<Text style={[styles.white, fontSizeStyle]}>{tr('暂无歌词', 'No lyrics')}</Text>

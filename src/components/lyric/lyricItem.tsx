@@ -2,6 +2,7 @@ import { ThemeColors } from '@/constants/tokens'
 import { useThemeColors } from '@/hooks/useAppTheme'
 import rpx from '@/utils/rpx'
 import KaraokeFillText from '@/components/mac/KaraokeFillText'
+import KaraokeSegLine from '@/components/mac/KaraokeSegLine'
 import { karaokeLineProgress } from '@/jk/karaoke'
 import * as Haptics from 'expo-haptics'
 import React, { memo, useCallback, useMemo, useRef } from 'react'
@@ -79,16 +80,17 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 						}}
 						style={[lyricStyles.item, { paddingVertical: rpx(10) }]}
 					>
-						<KaraokeFillText
+						<KaraokeSegLine
 							text={String(text ?? '')}
-							progress={karaokeSegs?.length
-								? karaokeLineProgress(karaokeSegs, karaokeNowMs ?? 0)
-								: 0}
+							segs={karaokeSegs}
+							nowMs={karaokeNowMs ?? 0}
 							activeColor={colors.primary}
 							inactiveColor={colors.text}
+							fallbackProgress={karaokeSegs?.length
+								? karaokeLineProgress(karaokeSegs, karaokeNowMs ?? 0)
+								: 0}
 							numberOfLines={2}
-							// 当前行稍微放大（mac 风格），填充效果更明显
-							textStyle={{ fontSize: Math.round((fontSize || rpx(28)) * 1.08), textAlign: 'center', fontWeight: '600' }}
+							textStyle={{ fontSize: Math.round((fontSize || rpx(28)) * 1.06), textAlign: 'center', fontWeight: '600' }}
 						/>
 					</View>
 				) : (
@@ -103,6 +105,8 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 							{
 								fontSize: fontSize || rpx(28),
 								opacity: highlight ? 1 : fadeOpacity,
+								// 与 mac 一致：离当前行越远越小
+								transform: [{ scale: distance === undefined ? 1 : distance === 1 ? 0.97 : 0.94 }],
 							},
 							highlight
 								? [
