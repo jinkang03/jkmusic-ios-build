@@ -1056,6 +1056,22 @@ const SettingsSectionScreen = () => {
 					}
 					logInfo('[dev] playDownload', track.title, 'cover=', side.coverUri ? 'yes' : 'no', 'lrc=', side.lyric ? 'yes' : 'no')
 					await (tp as any).playWithReplacePlayList(track, [track])
+				} else if (action === 'playBoard') {
+					// 验证榜单取流：dump 第一首的 Track 字段并尝试播放
+					const bsrc = String((params as any).source ?? 'kw')
+					const bid = String((params as any).id ?? '')
+					const { getBoardDetail } = await import('@/jk/musicSdk')
+					const { jkToTrack } = await import('@/jk/adapt')
+					const detail = await getBoardDetail(bsrc as any, bid, 1)
+					const tracks = (detail.list ?? []).map((m: any) => jkToTrack(m))
+					if (!tracks.length) throw new Error('榜单为空')
+					const first: any = tracks[0]
+					logInfo('[dev] playBoard first=', JSON.stringify({
+						id: first?.id, platform: first?.platform, title: first?.title,
+						songmid: first?.songmid, duration: first?.duration,
+					}))
+					const tp: any = (await import('@/helpers/trackPlayerIndex')).default
+					await tp.playWithReplacePlayList(first, tracks)
 				} else if (action === 'toggleLove') {
 					// 验证播放页收藏：对当前曲目 toggle 我的收藏
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')

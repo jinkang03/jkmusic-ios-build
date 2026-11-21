@@ -2,7 +2,7 @@
 import '@/shims/globalPolyfills'
 import { ensureDefaults } from '@/jk/settingsStore'
 import { playbackService } from '@/constants/playbackService'
-import { AppThemeProvider, useAppTheme } from '@/hooks/useAppTheme'
+import { AppThemeProvider, ThemeOverrideProvider, useAppTheme, usePageTheme } from '@/hooks/useAppTheme'
 import WallpaperBackground from '@/components/WallpaperBackground'
 import LyricManager from '@/helpers/lyricManager'
 import { useLogTrackPlayerState } from '@/hooks/useLogTrackPlayerState'
@@ -80,7 +80,8 @@ const App = () => {
 }
 
 const ThemedAppShell = () => {
-	const { colors, isDark, statusBarStyle, wallpaper } = useAppTheme()
+	// 功能页固定浅色透感，不跟随系统深浅（播放页自己 override 为深色）
+	const { colors, isDark, statusBarStyle, wallpaper } = usePageTheme()
 	const { hasShareIntent } = useShareIntentContext()
 	const navigationState = useRootNavigationState()
 
@@ -170,6 +171,8 @@ const RootNavigation = () => {
 
 	return (
 		//每个 Stack.Screen 组件定义了一个可导航的屏幕
+		// 功能页统一浅色；player 页内部会再 override 成 dark
+		<ThemeOverrideProvider resolvedTheme="light">
 		<Stack key={language}>
 			<Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 			<Stack.Screen
@@ -274,6 +277,7 @@ const RootNavigation = () => {
 				}}
 			/>
 		</Stack>
+		</ThemeOverrideProvider>
 	)
 }
 

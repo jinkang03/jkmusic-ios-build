@@ -52,7 +52,7 @@ const SongListCard = ({
 				paddingVertical: 10,
 				paddingHorizontal: macSpace.pageX / 2,
 				backgroundColor: pressed ? c.fillSubtle : 'transparent',
-				borderBottomWidth: 0.5,
+				borderBottomWidth: 0,
 				borderBottomColor: c.divider,
 			})}
 		>

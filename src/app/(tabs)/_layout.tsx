@@ -19,9 +19,9 @@ export const unstable_settings = { initialRouteName: 'favorites' }
 // iOS 26/27 Apple Music 风格：底部导航是悬浮胶囊（左右留边、离底留白）
 // 60 而不是 54：54 时 icon 34 + label 14 + 上下 padding 刚好溢出，
 // 文字会压到底部圆角上（实测 1.4.x 的视觉问题）
-const TAB_BAR_HEIGHT = 56
-const TAB_BAR_SIDE = 12
-const TAB_BAR_BOTTOM = 4
+const TAB_BAR_HEIGHT = 52
+const TAB_BAR_SIDE = 18
+const TAB_BAR_BOTTOM = 12
 
 const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boolean, alpha: number }) => {
 	const g = glass(isDark, alpha)
@@ -30,7 +30,7 @@ const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boo
 			style={[
 				StyleSheet.absoluteFill,
 				{
-					borderRadius: 28,
+					borderRadius: 26,
 					overflow: 'hidden',
 					borderWidth: 1,
 					borderColor: g.stroke,
@@ -62,7 +62,7 @@ const TabsNavigation = () => {
 		left: TAB_BAR_SIDE,
 		right: TAB_BAR_SIDE,
 		// 悬浮在导航胶囊上方，两者之间留 10pt
-		bottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM + Math.max(bottom, 8) + 14,
+		bottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM + Math.max(bottom, 8) + 12,
 	}), [bottom])
 
 	return (
@@ -86,7 +86,7 @@ const TabsNavigation = () => {
 						right: TAB_BAR_SIDE,
 						bottom: Math.max(bottom, TAB_BAR_BOTTOM),
 						height: TAB_BAR_HEIGHT,
-						borderRadius: 28,
+						borderRadius: 26,
 						borderTopWidth: 0,
 						paddingTop: 0,
 						paddingBottom: 0,
@@ -109,7 +109,7 @@ const TabsNavigation = () => {
 						headerShown: false,
 						title: tr('搜索', 'Search'),
 						tabBarIcon: ({ color, focused }) => (
-							<View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
+							<View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
 								<Ionicons name={focused ? 'search' : 'search-outline'} size={20} color={color} />
 							</View>
 						),
@@ -121,7 +121,7 @@ const TabsNavigation = () => {
 						headerShown: false,
 						title: tr('歌单', 'Playlists'),
 						tabBarIcon: ({ color, focused }) => (
-							<View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
+							<View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
 								<Ionicons name={focused ? 'albums' : 'albums-outline'} size={20} color={color} />
 							</View>
 						),
@@ -133,7 +133,7 @@ const TabsNavigation = () => {
 						headerShown: false,
 						title: tr('排行榜', 'Charts'),
 						tabBarIcon: ({ color, focused }) => (
-							<View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
+							<View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
 								<Ionicons name={focused ? 'stats-chart' : 'stats-chart-outline'} size={20} color={color} />
 							</View>
 						),
@@ -145,7 +145,7 @@ const TabsNavigation = () => {
 						headerShown: false,
 						title: tr('我的列表', 'My Lists'),
 						tabBarIcon: ({ color, focused }) => (
-							<View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
+							<View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
 								<Ionicons name={focused ? 'heart' : 'heart-outline'} size={20} color={color} />
 							</View>
 						),
@@ -157,7 +157,7 @@ const TabsNavigation = () => {
 						headerShown: false,
 						title: tr('下载', 'Downloads'),
 						tabBarIcon: ({ color, focused }) => (
-							<View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
+							<View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
 								<Ionicons name={focused ? 'download' : 'download-outline'} size={20} color={color} />
 							</View>
 						),
@@ -169,7 +169,7 @@ const TabsNavigation = () => {
 						headerShown: false,
 						title: tr('设置', 'Settings'),
 						tabBarIcon: ({ color, focused }) => (
-							<View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
+							<View style={{ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
 								<Ionicons name={focused ? 'settings' : 'settings-outline'} size={20} color={color} />
 							</View>
 						),

@@ -129,3 +129,27 @@ export const useThemeMode = () => {
 	return { themeMode, resolvedTheme, setThemeMode }
 }
 
+/**
+ * 功能页主题：**固定浅色透感**，不跟随系统/设置的深浅色。
+ *
+ * 播放页（player.tsx 及播放控件）仍用 useAppTheme()，保持跟随封面/深色的原有表现。
+ * 这样「搜索/歌单/排行榜/我的列表/下载/设置/各类弹窗」始终是浅色玻璃，
+ * 切到深色只会影响播放页，不会让整个 App 变黑。
+ */
+export const usePageTheme = (): AppThemeContextValue => {
+	const t = useAppTheme()
+	const lightColors = useMemo(() => getThemeColors('light'), [])
+	return useMemo(
+		() => (t.isDark
+			? {
+				...t,
+				resolvedTheme: 'light' as const,
+				isDark: false,
+				colors: lightColors,
+				blurTint: lightColors.blurTint,
+				statusBarStyle: 'dark' as const,
+			}
+			: t),
+		[t, lightColors],
+	)
+}

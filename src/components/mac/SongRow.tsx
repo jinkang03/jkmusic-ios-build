@@ -41,8 +41,8 @@ const SongRow = ({ index, title, artist, album, duration, badge, active, onPress
 				height: macSpace.rowHeight,
 				paddingHorizontal: macSpace.pageX / 2,
 				backgroundColor: pressed ? c.fillSubtle : 'transparent',
-				borderBottomWidth: 0.5,
-				borderBottomColor: c.divider,
+				// 行间不要分割线（用户反馈视觉太碎）
+				borderBottomWidth: 0,
 			})}
 		>
 			<Text style={{ width: COL_INDEX, color: active ? c.primary : c.textMuted, fontSize: macFont.caption }}>{index}</Text>

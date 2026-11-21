@@ -902,6 +902,8 @@ const PlayerScreenContent = () => {
 const PlayerScreen = () => {
 	return (
 		<ThemeOverrideProvider resolvedTheme="dark">
+			{/* 功能页统一 dark 状态栏，播放页是深色背景，状态栏要回到浅色文字 */}
+			<StatusBar style="light" />
 			<PlayerScreenContent />
 		</ThemeOverrideProvider>
 	)
