@@ -1,3 +1,53 @@
+## v1.4.3（2026-11-21）
+
+| 项 | 值 |
+|---|---|
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.3-unsigned-20261121.ipa` |
+| 大小 | 18 MB |
+| sha256 | `828569287f4e3aba083cf294b05791fb6bca53c763af14e97b50985028b8c1cb` |
+| 版本 / build | 1.4.3 / 27 |
+| 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
+| commit | 见 tag `v1.4.3` |
+
+### 1.4.3 歌词对齐 mac（第 4 批）
+
+先看 mac 的实现（`PlayDetail/LyricPlayer.vue`）：
+
+```css
+.lyric { -webkit-mask-image: linear-gradient(transparent 0%, #fff 20%, #fff 80%, transparent 100%); }
+.line-content { transition: transform .4s ease, opacity .4s ease; }
+.line-content.lrc-near { transform: scale(.95); opacity: .9; }
+.line-content.lrc-far  { opacity: .38; }
+.line-content.active  { transform: scale(1.3); opacity: 1; }
+```
+
+即：**上下渐隐是容器级 CSS mask（不是 blur、不是黑色蒙层）**，**缩放是行级 transform**，
+**逐字填充是 `background-clip: text` + `background-size` 0→100%**。
+
+**a) 逐字填充改为按 seg**
+
+- 旧实现：整行文本两层叠加，用「行进度 × 总字符数」估宽度 → 中英文混排必然错位；
+- 新实现 `KaraokeSegLine`：按 `lxlyric` 的 seg 逐段渲染（中文按字、英文按词），
+  每段进度 = `(nowMs - seg.start) / seg.dur`，独立填充，与正在唱的字严格对齐；
+- 紧凑歌词与全屏歌词的当前行都改用该组件；无 seg 数据时回退整行进度。
+
+**b) 上下渐隐改为 MaskedView**
+
+- 新增依赖 `@react-native-masked-view/masked-view`（静态链接进主二进制，不新增 framework）；
+- 紧凑歌词：`transparent 0% → #fff 20% → #fff 80% → transparent`；
+- 全屏歌词：`18% / 82%`（行数更多，留白略收）；
+- 透出的是壁纸/封面，不是黑色蒙层。
+
+**c) 行缩放**
+
+- 紧凑歌词：当前行 1，邻近 0.97，更远 0.94；
+- 全屏歌词：当前行字号 ×1.06，非当前行按距离 0.97 / 0.94。
+
+**d) 歌词延迟对齐**
+
+- mac 的 `lyrics[i].time` 不含 `lyric.delaySeconds`，播放进度需自行减去；
+- 两处（紧凑/全屏）时间轴统一减 `lyric.delaySeconds`，调延迟后填充位置立刻正确。
+
 ## v1.4.2（2026-11-21）
 
 | 项 | 值 |
