@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Dimensions, StyleSheet, Text, View } from 'react-native'
 import type { FlatList as NativeFlatList, FlatListProps } from 'react-native'
 
 import { ThemeColors } from '@/constants/tokens'
@@ -116,6 +116,8 @@ export default function Lyric(props: IProps) {
 	const playing = useIsPlaying()
 
 	const listRef = useRef<NativeFlatList<ILyric.IParsedLrcItem> | null>(null)
+	// 列表可视高度：居中定位要减去 (视口高 - 行高)/2
+	const listHeightRef = useRef(0)
 
 	// 是否展示拖拽
 	const dragShownRef = useRef(false)
@@ -171,11 +173,14 @@ export default function Lyric(props: IProps) {
 				return
 			}
 
-			listRef.current.scrollToIndex({
-				index: targetIndex,
-				viewPosition: 0.5,
-				animated: true,
-			})
+			// 手算偏移而不是 viewPosition: 0.5：
+			// scrollToIndex 依赖 getItemLayout 的 offset 精确，header 未测量/行高不一致时会偏几行。
+			const layout = getItemLayout(null, targetIndex)
+			const viewport = listHeightRef.current
+			const offset = viewport > 0
+				? Math.max(0, layout.offset + layout.length / 2 - viewport / 2)
+				: Math.max(0, layout.offset)
+			listRef.current.scrollToOffset({ offset, animated: true })
 			lastAutoScrollAtRef.current = now
 			lastAutoScrollIndexRef.current = targetIndex
 		},
@@ -250,7 +255,8 @@ export default function Lyric(props: IProps) {
 
 	const getItemLayout = useCallback((_: unknown, index: number) => {
 		const itemHeights = itemHeightsRef.current
-		const headerHeight = itemHeights.blankHeight ?? 0
+		// header 在首帧还没测量时按屏宽 70% 兜底（styles.empty 用的是 paddingTop: '70%'）
+		const headerHeight = itemHeights.blankHeight ?? Math.round(Dimensions.get('window').width * 0.7)
 		let offset = headerHeight
 		for (let i = 0; i < index; i++) {
 			offset += itemHeights[i] ?? ITEM_HEIGHT
@@ -358,6 +364,9 @@ export default function Lyric(props: IProps) {
 					<LyricFlatList
 						ref={(_) => {
 							listRef.current = _
+						}}
+						onLayout={({ nativeEvent }) => {
+							listHeightRef.current = Math.round(nativeEvent.layout.height)
 						}}
 						viewabilityConfig={{
 							itemVisiblePercentThreshold: 100,
