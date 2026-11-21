@@ -37,9 +37,13 @@ export const prefetchNext = async() => {
 		logInfo('[prefetch] start next=', String(next.title ?? ''))
 		logInfo('[prefetch] 预取下一首:', String(next.title ?? ''))
 
+		// skipDownload：预取只需要「取流地址」，下面 withLimit 里才真正下载。
+		// 不加这个会下载两次（resolveSource 内部一次 + 这里一次），
+		// 白白占用带宽并和当前曲的下载互相拖慢
 		const resolved: any = await resolveSource(next, {
 			requestType: 'prefetch',
 			requestKey: `pf_${Date.now()}`,
+			skipDownload: true,
 		} as any)
 
 		if (gen !== prefetchGeneration) { logInfo('[prefetch] cancelled（解析后世代变化）'); return }

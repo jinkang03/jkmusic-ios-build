@@ -116,6 +116,17 @@ export const downloadToCache = async (
 		})
 		try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
 		await FileSystem.moveAsync({ from: partUri, to: finalUri })
+		// 魔数校验：tx 的部分 flac 链接返回加密数据（30MB+ 但头不是 fLaC），
+		// AVPlayer 打不开 → 表现为 00:00 卡住。不合法直接丢弃并抛错，交给换源。
+		{
+			const { isRecognizableAudio } = await import('./audioDuration')
+			const ok = await isRecognizableAudio(finalUri)
+			if (!ok) {
+				try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
+				logError('[cache] 文件头不是可解码音频，已丢弃:', String((musicItem as any)?.title ?? ''))
+				throw new Error('UNDECODABLE_AUDIO')
+			}
+		}
 		// 完整性校验：脚本可能只返回「试听片段」（实测 60s 片段会被当完整曲目播放，
 		// 片段播完就当正常结束自动切歌 → 歌单连跳）。片段直接删掉并报错，交给换源。
 		const expectedSeconds = parseIntervalSeconds(intervalOf(musicItem))

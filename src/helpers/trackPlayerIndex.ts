@@ -452,6 +452,23 @@ const tryAltSource = async(musicItem: any): Promise<boolean> => {
 			return false
 		}
 		logInfo('[jk/play] 换源成功', `${musicItem?.platform} -> ${alt.source}`, String(alt.title ?? ''))
+		// 必须先把换源地址下载到本地再播：本环境 AVPlayer 放不了网络流，
+		// 直接把 http url 交给播放器会立刻再失败一次（表现为无限换源）
+		let playUrl = String(alt.url ?? '')
+		try {
+			const { downloadToCache } = await import('@/player/CacheManager')
+			const { fileUriFromPath } = await import('@/helpers/localFile')
+			const localPath = await downloadToCache(
+				{ ...(musicItem as any), url: alt.url } as any,
+				undefined,
+				{ actualSource: String(alt.source ?? ''), actualId: String(alt.id ?? '') } as any,
+			)
+			playUrl = fileUriFromPath(String(localPath))
+			logInfo('[jk/play] 换源后已缓存到本地:', playUrl.slice(0, 110))
+		} catch (dlErr) {
+			logError('[jk/play] 换源后下载失败', String((dlErr as any)?.message ?? dlErr))
+			return false
+		}
 		showToast('提示', `该源无法播放，已用${alt.label ?? alt.source}播放`, 'info')
 		void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({
 			from: String(musicItem?.platform ?? ''),
@@ -459,7 +476,7 @@ const tryAltSource = async(musicItem: any): Promise<boolean> => {
 			toId: String(alt.id ?? ''),
 			title: String(musicItem?.title ?? ''),
 		})).catch(() => undefined)
-		setTrackSource({ ...(musicItem as any), url: alt.url } as any)
+		setTrackSource({ ...(musicItem as any), url: playUrl } as any)
 		ReactNativeTrackPlayer.play()
 		return true
 	} catch (err) {

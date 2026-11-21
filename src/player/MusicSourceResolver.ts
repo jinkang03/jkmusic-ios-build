@@ -28,8 +28,18 @@ type MusicUrlRequestContext = {
 }
 
 /** 音源脚本常返回 302 跳转地址，先把最终地址解析出来再交给 RNTP */
-// 同一时刻只允许一个下载；新请求递增世代号，旧下载的结果会被丢弃并清理 .part
-let downloadGeneration = 0
+/**
+ * 下载世代号：**按曲目隔离**。
+ *
+ * 之前是全局计数器，而预取会同时发起 3 个下载（`prefetch` 限流 cap=3），
+ * 每个预取都会把全局世代 +1，导致正在播的那首下载到 100% 后被判「世代过期」丢弃，
+ * 最终落到「本曲不可播」—— 表现为点歌后一直 00:00 卡住（实测日志：
+ * `下载进度 100%` → `下载世代已过期，丢弃结果` → `判定本曲不可播`）。
+ *
+ * 现在只有「同一首歌」的新请求才会作废旧请求。
+ */
+const downloadGenerations = new Map<string, number>()
+const downloadGenKey = (item: any) => `${String(item?.platform ?? '')}:${String(item?.id ?? '')}`
 
 const followRedirect = async(url: string): Promise<string> => {
 	if (!/^https?:\/\//i.test(url)) return url
@@ -636,7 +646,9 @@ export const resolveSource = async (
 			}
 			// 先下载后播放：AVPlayer 在该环境下无法流式加载（本地文件正常），
 			// 所以取到远程地址后先落到本地，再交给播放器 file:// 路径。
-			const myGeneration = ++downloadGeneration
+			const genKey = downloadGenKey(musicItem)
+			const myGeneration = (downloadGenerations.get(genKey) ?? 0) + 1
+			downloadGenerations.set(genKey, myGeneration)
 			let bufferingTimer: any = null
 			try {
 				const { downloadToCache, enforceCacheLimit } = await import('@/player/CacheManager')
@@ -676,8 +688,8 @@ export const resolveSource = async (
 				const limitMb = Number(getSetting('download.cacheLimitMb', 500)) || 500
 				logInfo('[cache] LRU 上限', `${limitMb}MB`)
 				void enforceCacheLimit(limitMb * 1024 * 1024, localPath).catch(() => undefined)
-				if (myGeneration !== downloadGeneration) {
-					logInfo('[jk/play] 下载世代已过期，丢弃结果')
+				if (downloadGenerations.get(genKey) !== myGeneration) {
+					logInfo('[jk/play] 下载世代已过期，丢弃结果', genKey)
 				} else {
 					const uri = String(localPath).startsWith('file://') ? String(localPath) : `file://${localPath}`
 					logInfo('[jk/play] 缓冲完成，改播本地:', uri.slice(0, 120))
@@ -709,7 +721,7 @@ export const resolveSource = async (
 							undefined,
 							{ actualSource: alt.source, actualId: (alt as any).id } as any,
 						)
-						if (myGeneration === downloadGeneration) {
+						if (downloadGenerations.get(genKey) === myGeneration) {
 							const retryUri = String(retryPath).startsWith('file://') ? String(retryPath) : `file://${retryPath}`
 							logInfo('[jk/play] 换源重下成功:', retryUri.slice(0, 110))
 							if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')

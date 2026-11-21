@@ -170,3 +170,34 @@ export const isTruncatedAudio = (
 	if (!expectedSeconds || expectedSeconds < 30) return false
 	return actualSeconds < expectedSeconds * 0.8
 }
+
+/**
+ * 文件头是否是可解码的音频容器。
+ *
+ * 实测 tx（QQ音乐）的部分 flac 链接返回的是**加密数据**：文件有 30MB+、下载 100%，
+ * 但头 4 字节不是 `fLaC`（是随机字节），`afinfo` 与 AVPlayer 都打不开，
+ * 表现就是点歌后一直 00:00 卡住。下载完必须校验魔数，不合法就丢掉并换源。
+ */
+export const isRecognizableAudio = async(localPath: string): Promise<boolean> => {
+	try {
+		const uri = localPath.startsWith('file://') ? localPath : `file://${localPath}`
+		const b64 = await (FileSystem as any).readAsStringAsync(uri, {
+			encoding: 'base64',
+			length: 12,
+			position: 0,
+		})
+		const bytes = b64ToBytes(String(b64 ?? ''))
+		if (!bytes || bytes.length < 4) return false
+		const head4 = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3])
+		if (head4 === 'fLaC' || head4 === 'OggS' || head4 === 'RIFF') return true
+		if (head4.startsWith('ID3')) return true
+		// MPEG 帧同步：0xFF 后高 3 位全 1
+		if (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0) return true
+		// m4a / mp4：第 4..8 字节为 'ftyp'
+		if (bytes.length >= 8 && String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]) === 'ftyp') return true
+		return false
+	} catch {
+		// 读不了不判死，交给后续时长校验
+		return true
+	}
+}
