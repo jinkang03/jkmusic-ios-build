@@ -1,57 +1,59 @@
-> **LATEST：1.4.33 / build 57**
-> 文件 `artifacts/ipa/JKMUSIC-1.4.33-unsigned-20261122.ipa`
-> sha256 `ddc9d738925b93ce10fad10340abbd86df4e1fbc05eabdc7998c3715b601bd6c`
+> **LATEST：1.4.34 / build 58**
+> 文件 `artifacts/ipa/JKMUSIC-1.4.34-unsigned-20261122.ipa`
+> sha256 `29a83542c9d04c52fe5adbef662534ac7a9c33061e3bc32713630838033c8a7f`
 > 固定别名 `artifacts/ipa/JKMUSIC-ios-unsigned.ipa` 与最新版字节相同（`./scripts/sync-latest-ipa.sh`）。
 > 安装前在 App 内确认版本号（设置 → 其他 → App Version）。
 
-## v1.4.33（2026-11-22）
+## v1.4.34（2026-11-22）
 
 | 项 | 值 |
 |---|---|
-| 产物 | `artifacts/ipa/JKMUSIC-1.4.33-unsigned-20261122.ipa` |
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.34-unsigned-20261122.ipa` |
 | 大小 | 18 MB |
-| sha256 | `ddc9d738925b93ce10fad10340abbd86df4e1fbc05eabdc7998c3715b601bd6c` |
-| 版本 / build | 1.4.33 / 57 |
+| sha256 | `29a83542c9d04c52fe5adbef662534ac7a9c33061e3bc32713630838033c8a7f` |
+| 版本 / build | 1.4.34 / 58 |
 | 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
-| commit | 见 tag `v1.4.33` |
+| commit | 见 tag `v1.4.34` |
 
-### 1.4.33 换源：从「一次性」改成「备用队列 + 逐级换源」
+### 1.4.34 流式播放的两个运行时看护（批次 3）
 
-**修复的四个逻辑缺口**
+改成流式后丢了「下载完再校验」这条防线，补两个运行时检查（每 5 秒采样一次进度）：
 
-| # | 问题 | 修法 |
-|---|---|---|
-| A1 | `altCache` 存的是 URL，第二次换源原样返回同一个已失效地址 | 缓存改存 `{source,id}` 身份，地址每次重新取 |
-| A2 | `Promise.any` 把其余成功候选直接丢弃 | 成功结果留在 `altBackups`，失败时直接 pop（0 延迟） |
-| A3 | 换源路径不拦加密后缀 | `isEncryptedAudioUrl` 两边共用，`.mgg` 候选直接跳过 |
-| A4 | 一首歌只允许换一次源，点播放重试也不重置 | 改成「每曲最多 5 次」，`play()` 时重置该曲记录 |
-
-**延迟优化**
-
-| # | 问题 | 修法 |
-|---|---|---|
-| B1 | `Promise.allSettled` 等最慢平台（每平台最多 3×6.5s） | 索引候选立刻开跑，搜索结果随到随取 |
-| B2 | 无总预算，最坏可拖到 60-80s | 换源总预算 **12s**（预取 6s），到点用已有结果 |
-| B3 | 设 128k 换源时反而去试 320k | 音质阶梯只降不升 |
-
-**实测（`_dev.forceBadUrl=true` 强制所有候选失败）**
+**a) 试听片段检测**
 
 ```
-matrix ok kw / tx / mg / wy（4 个候选全部拿到地址）
-换源成功 kg -> tx
-换源成功 kg -> mg
-换源成功 kg -> wy
-换源无可用结果
+播放到 3 秒后，比较 RNTP 的 duration 与曲目元信息里的时长；
+实际 < 应有 × 80%（且应有 >= 60s）→ 判定为试听片段 → 换源
 ```
 
-第二次播放同一首 → `tried= 1` 重新计数（证明重试会重置）。
+本地文件（`file://`）不参与，避免误判。
 
-**常规回归**
+**b) 中途停滞检测**
 
 ```
-连续切歌 10/10（0 次换源，全部原平台直连）
-连续拖动 10/10（偏差 0.34-0.37s）
-五平台各 1 首：kw 8.04 / kg 4.87 / tx 15.77 / wy 8.46 / mg 8.71
+播放意图为 play 且位置 > 0.5s：
+位置 15 秒没有前进（前后跳动 > 0.4s 视为前进，含拖动）
+→ 与起播失败同样处理：换源
+```
+
+三道防误判：
+- 播完（position ≥ duration-1.5）不判；
+- 暂停/停止期间不计时；
+- App 挂起恢复时（采样间隔 > 10s）重新计时。
+
+**开发开关（仅调试用）**
+
+- `jkmusic://settingSection/dev?action=clipsim&on=1` → 把应有时间放大到 600s，用来验证片段检测；
+- `jkmusic://settingSection/dev?action=nativePause` → 只暂停原生播放器不改意图，用来验证停滞检测。
+
+**实测**
+
+```
+片段：流式时长明显偏短 270s/600s → 换源 kw -> tx -> wy
+停滞：position=6.3 冻结 → 15s 后「播放停滞 15s」→ 换源 kw -> wy
+连续播放 70 秒：pos=69.15，停滞/片段误判 0 次，换源 0 次
+连续切歌 10/10，连续拖动 10/10，误判 0 次
+五平台：kw 7.36 / kg 4.09 / tx 15.06 / wy 8.12 / mg 6.19
 ```
 
 

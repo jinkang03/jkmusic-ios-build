@@ -169,6 +169,9 @@ function isCurrentProgressEvent(event: PlaybackProgressUpdatedEvent) {
 function setPlaybackIntent(intent: 'play' | 'pause' | 'stop') {
 	controlRevision++
 	playbackIntentStore.setValue(intent)
+	// 恢复播放/停止都重置停滞计时：暂停期间累计的「不动」不算卡住
+	streamGuardLastAdvanceAt = Date.now()
+	streamGuardLastTick = Date.now()
 }
 
 function retireTrackSkip() {
@@ -206,6 +209,7 @@ function reset() {
 	trackSourceLoadingStore.setValue(null)
 	nativeQueue = null
 	clearPlayWatchdog()
+	resetStreamGuards()
 	altTriedMap.clear()
 	ReactNativeTrackPlayer.clear()
 }
@@ -390,6 +394,7 @@ async function setupTrackPlayer() {
 				void failToPlay().catch((failure) => logError('播放错误恢复失败', failure))
 			}),
 		)
+		startStreamGuard()
 		logInfo('播放器初始化完成')
 	}
 }
@@ -432,6 +437,103 @@ let playWatchdogTimer: any = null
 const clearPlayWatchdog = () => {
 	if (playWatchdogTimer) clearTimeout(playWatchdogTimer)
 	playWatchdogTimer = null
+}
+
+/**
+ * 流式播放的两个运行时看护（不再「先下载再校验」，只能边播边判断）：
+ * 1. 试听片段：播到 3 秒后拿实际时长和元信息的时长比，明显偏短 → 换源；
+ * 2. 中途停滞：播放中位置连续 15 秒不动（且不是播完）→ 按失败处理换源。
+ */
+let streamGuardTimer: any = null
+let streamGuardLastTick = 0
+let streamGuardLastPos = -1
+let streamGuardLastAdvanceAt = 0
+let streamGuardTruncationChecked = false
+let streamGuardRecovering = false
+
+const resetStreamGuards = () => {
+	streamGuardLastTick = Date.now()
+	streamGuardLastPos = -1
+	streamGuardLastAdvanceAt = Date.now()
+	streamGuardTruncationChecked = false
+	streamGuardRecovering = false
+}
+
+const checkStreamTruncation = async(duration: number) => {
+	try {
+		const music: any = currentMusicStore.getValue()
+		if (!music) return
+		// 本地文件（下载/导入）不参与：时长本来就该一致，误判反而会换源。
+		// 流式播放时 musicItem.url 为空（地址只在播放器里），要继续检测。
+		const localUrl = String(music?.url ?? '')
+		if (localUrl && !/^https?:/i.test(localUrl)) return
+		const { parseIntervalSeconds, intervalOf, isTruncatedAudio } = await import('@/player/audioDuration')
+		const rawExpected = parseIntervalSeconds(intervalOf(music))
+		// 开发开关：把「应有的时长」放大，用来验证片段检测链路
+		const expected = (globalThis as any).__JK_CLIP_SIM__ === true
+			? Math.max(rawExpected, 600)
+			: rawExpected
+		if (!expected || expected < 60) return
+		if (!isTruncatedAudio(duration, expected)) return
+		logError('[jk/play] 流式时长明显偏短，判定为试听片段',
+			`${duration.toFixed(0)}s/${expected}s`, String(music.title ?? ''))
+		await failToPlay()
+	} catch { /* 检测失败不影响播放 */ }
+}
+
+/** 每 5 秒采样一次进度：不依赖 RNTP 进度事件的时间间隔，后台唤醒也不会误判 */
+const startStreamGuard = () => {
+	if (streamGuardTimer) return
+	resetStreamGuards()
+	streamGuardTimer = setInterval(() => {
+		try {
+			const progress: any = ReactNativeTrackPlayer.getProgress?.() ?? {}
+			const pos = Number(progress?.position ?? 0)
+			const dur = Number(progress?.duration ?? 0)
+			const now = Date.now()
+
+			if (playbackIntentStore.getValue() !== 'play') {
+				// 暂停/停止不计停滞
+				streamGuardLastAdvanceAt = now
+				streamGuardLastPos = pos
+				streamGuardLastTick = now
+				return
+			}
+			const tickGap = now - streamGuardLastTick
+			streamGuardLastTick = now
+			// App 挂起后恢复：wall clock 跳变不等于卡住，重新计时
+			if (tickGap > 10000) {
+				streamGuardLastAdvanceAt = now
+				streamGuardLastPos = pos
+				return
+			}
+			if (streamGuardRecovering) return
+
+			// 1) 片段检测：每次换源只查一次
+			if (!streamGuardTruncationChecked && dur > 0 && pos > 3) {
+				streamGuardTruncationChecked = true
+				void checkStreamTruncation(dur)
+			}
+
+			// 2) 停滞检测（播完、进度回 0 都不算）
+			const ended = dur > 0 && pos >= dur - 1.5
+			if (!ended && Math.abs(pos - streamGuardLastPos) > 0.4) {
+				streamGuardLastPos = pos
+				streamGuardLastAdvanceAt = now
+				return
+			}
+			if (ended || pos <= 0.5) return
+			if (now - streamGuardLastAdvanceAt > 15000) {
+				streamGuardLastAdvanceAt = now
+				streamGuardRecovering = true
+				logError('[jk/play] 播放停滞 15s（position=', pos.toFixed(1),
+					'duration=', dur.toFixed(1), '），尝试换源')
+				void failToPlay()
+					.catch(err => logError('[jk/play] 停滞恢复失败', String((err as any)?.message ?? err)))
+					.finally(() => { streamGuardRecovering = false })
+			}
+		} catch { /* ignore */ }
+	}, 5000)
 }
 
 /**
@@ -774,6 +876,8 @@ const setTrackSource = (track: Track) => {
 		logInfo('[jk/play] item stringify failed', String((e as any)?.message ?? e))
 	}
 	ReactNativeTrackPlayer.setMediaItems(items)
+	// 新地址/新曲目：重置片段与停滞计时
+	resetStreamGuards()
 	setCurrentMusic(track as IMusic.IMusicItem)
 	PersistStatus.set('music.musicItem', track as IMusic.IMusicItem)
 	PersistStatus.set('music.progress', 0)

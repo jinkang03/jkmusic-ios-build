@@ -1271,6 +1271,15 @@ const SettingsSectionScreen = () => {
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
 					logInfo('[jk/play] playtest url =', url.slice(0, 120))
 					await (tp as any).playWithReplacePlayList(track, [track])
+				} else if (action === 'clipsim') {
+					const g4: any = globalThis
+					g4.__JK_CLIP_SIM__ = String((params as any).on ?? '1') === '1'
+					logInfo('[jk/dev] clipsim =', String(g4.__JK_CLIP_SIM__))
+				} else if (action === 'nativePause') {
+					// 只暂停原生播放器、不改「播放意图」，用来验证 15s 停滞检测
+					const RNT = (await import('@rntp/player')).default
+					await (RNT as any).pause?.()
+					logInfo('[jk/dev] nativePause（用于验证停滞检测）')
 				} else if (action === 'forceRemote') {
 					const g1: any = globalThis
 					g1.__JK_FORCE_REMOTE__ = true
