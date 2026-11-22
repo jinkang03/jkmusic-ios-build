@@ -38,9 +38,11 @@ export interface SongListViewProps {
 	showActions?: boolean
 	/** 下载子目录：歌单名（搜索/排行榜等不传 → 试听） */
 	listName?: string
+	/** 当前歌单 id：传入后行菜单会出现「删除」并从歌单移除 */
+	listId?: string
 }
 
-const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress, showActions, listName }: SongListViewProps) => {
+const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress, showActions, listName, listId }: SongListViewProps) => {
 	const c = macPalette(!!useAppTheme().isDark)
 	const router = useRouter()
 	const params = useLocalSearchParams<{ t?: string }>()
@@ -109,7 +111,19 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress,
 				return (
 					<View style={{ flexDirection: 'row', alignItems: 'center' }}>
 						<View style={{ flex: 1 }}>{row}</View>
-						<TrackShortcutsMenu track={item as any} listName={listName}>
+						<TrackShortcutsMenu
+							track={item as any}
+							listName={listName}
+							allowDelete={!!listId}
+							onDeleteTrack={(id) => {
+								if (!listId) return
+								void import('@/jk/libraryStore').then(async m => {
+									m.removeFromList(listId, [String(id)])
+									const { showToast } = await import('@/utils/utils')
+									showToast(tr('已移除', 'Removed'), String((item as any)?.title ?? ''), 'success')
+								}).catch(() => undefined)
+							}}
+						>
 							<View style={{ width: 32, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 }}>
 								<Text style={{ color: c.textMuted, fontSize: 18 }}>⋯</Text>
 							</View>

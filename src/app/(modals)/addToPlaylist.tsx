@@ -7,7 +7,8 @@ import { Pressable, ScrollView, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { macFont, macPalette, macSpace } from '@/constants/macTokens'
-import { useAppTheme } from '@/hooks/useAppTheme'
+import { usePageTheme } from '@/hooks/useAppTheme'
+import { glass } from '@/constants/glass'
 import { logInfo } from '@/helpers/logger'
 import { showToast } from '@/utils/utils'
 import { tr } from '@/utils/i18n'
@@ -17,8 +18,10 @@ import { takePendingMusic } from '@/jk/pendingMusic'
 import { addToList as addToLibList } from '@/jk/libraryStore'
 
 const AddToPlaylistScreen = () => {
-	const { isDark } = useAppTheme()
+	// 透明玻璃 + 文字颜色跟随设置（不再用不透明的 c.bg）
+	const { isDark, glassAlpha, colors: pageColors } = usePageTheme()
 	const c = macPalette(!!isDark)
+	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
 	const insets = useSafeAreaInsets()
 	const router = useRouter()
 
@@ -49,12 +52,22 @@ const AddToPlaylistScreen = () => {
 	}
 
 	return (
-		<View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
+		<View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.22)', paddingTop: insets.top }}>
+			<View style={{
+				flex: 1,
+				marginTop: 18,
+				borderTopLeftRadius: 22,
+				borderTopRightRadius: 22,
+				backgroundColor: g.fill,
+				borderWidth: 1,
+				borderColor: g.stroke,
+				overflow: 'hidden',
+			}}>
 			<View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: macSpace.pageX, height: 52 }}>
 				<Pressable onPress={() => router.back()}>
 					<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('返回', 'Back')}</Text>
 				</Pressable>
-				<Text style={{ color: c.textStrong, fontSize: macFont.display, fontWeight: '700', marginLeft: 12 }}>{tr('添加到歌单', 'Add to Playlist')}</Text>
+				<Text style={{ color: pageColors.text, fontSize: macFont.display, fontWeight: '700', marginLeft: 12 }}>{tr('添加到歌单', 'Add to Playlist')}</Text>
 			</View>
 			<ScrollView>
 				{rows.map(item => (
@@ -68,11 +81,12 @@ const AddToPlaylistScreen = () => {
 							borderBottomWidth: 0,
 						})}
 					>
-						<Text style={{ color: c.text, fontSize: macFont.body }}>{item.name}</Text>
-						<Text style={{ color: c.textMuted, fontSize: macFont.caption }}>›</Text>
+						<Text style={{ color: pageColors.text, fontSize: macFont.body }}>{item.name}</Text>
+						<Text style={{ color: pageColors.textMuted, fontSize: macFont.caption }}>›</Text>
 					</Pressable>
 				))}
 			</ScrollView>
+			</View>
 		</View>
 	)
 }
