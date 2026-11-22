@@ -80,38 +80,19 @@ const FavoritesScreen = () => {
 						router.push(`/(tabs)/favorites/${playlist.id}` as any)
 					}}
 					onPlaylistUpdate={async (id, name) => {
-						const runUpdate = async(source?: string) => {
-							try {
-								showToast(tr('提示', 'Notice'), tr(`正在更新「${name}」…`, `Updating "${name}"…`), 'info')
-								const { updateUserListFromSource } = await import('@/jk/libraryStore')
-								const r = await updateUserListFromSource(id, source)
-								setVersion(v => v + 1)
-								if (r.ok) {
-									showToast(tr('已更新', 'Updated'), tr(`「${name}」共 ${r.count} 首`, `${r.count} songs`), 'success')
-									return
-								}
-								// 老歌单（备份导入）没有来源信息：让用户选平台，再用同名歌单反查
-								if (r.needSource) {
-									Alert.alert(
-										tr('选择来源平台', 'Pick Source'),
-										tr(`「${name}」缺少来源信息，请选择它来自哪个平台`, `Choose the platform "${name}" came from`),
-										[
-											{ text: '酷我', onPress: () => void runUpdate('kw') },
-											{ text: '酷狗', onPress: () => void runUpdate('kg') },
-											{ text: '企鹅', onPress: () => void runUpdate('tx') },
-											{ text: '网易', onPress: () => void runUpdate('wy') },
-											{ text: '咪咕', onPress: () => void runUpdate('mg') },
-											{ text: tr('取消', 'Cancel'), style: 'cancel' },
-										],
-									)
-									return
-								}
+						try {
+							showToast(tr('提示', 'Notice'), tr(`正在更新「${name}」…`, `Updating "${name}"…`), 'info')
+							const { updateUserListFromSource } = await import('@/jk/libraryStore')
+							const r = await updateUserListFromSource(id)
+							setVersion(v => v + 1)
+							if (r.ok) {
+								showToast(tr('已更新', 'Updated'), tr(`「${name}」共 ${r.count} 首`, `${r.count} songs`), 'success')
+							} else {
 								showToast(tr('更新失败', 'Update failed'), String(r.reason ?? ''), 'error')
-							} catch (err) {
-								showToast(tr('更新失败', 'Update failed'), String((err as any)?.message ?? err), 'error')
 							}
+						} catch (err) {
+							showToast(tr('更新失败', 'Update failed'), String((err as any)?.message ?? err), 'error')
 						}
-						void runUpdate()
 					}}
 					onPlaylistDelete={(id, name) => {
 						removeUserList(id)

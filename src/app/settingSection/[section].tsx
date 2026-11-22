@@ -1106,7 +1106,7 @@ const SettingsSectionScreen = () => {
 					const target = lib.getUserLists().find(l => l.name.includes(name)) ?? lib.getUserLists()[0]
 					if (!target) throw new Error('没有自建歌单')
 					logInfo('[dev] updateUserList start', target.name, 'source=', String(target.source ?? '-'), 'sid=', String(target.sourceListId ?? '-'))
-					const r = await lib.updateUserListFromSource(target.id, String((params as any).source ?? '') || undefined)
+					const r = await lib.updateUserListFromSource(target.id)
 					logInfo('[dev] updateUserList result', JSON.stringify(r))
 				} else if (action === 'playBoard') {
 					// 验证榜单取流：dump 第一首的 Track 字段并尝试播放

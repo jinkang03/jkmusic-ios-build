@@ -216,25 +216,22 @@ export type { JKMusic, JKSource }
  */
 export const updateUserListFromSource = async(
 	listId: string,
-	/** 老歌单没有来源信息时，由 UI 让用户选一个平台 */
-	forcedSource?: string,
-): Promise<{ ok: boolean, count: number, reason?: string, sourceListId?: string, needSource?: boolean }> => {
+): Promise<{ ok: boolean, count: number, reason?: string, sourceListId?: string }> => {
 	const target = state.userLists.find(item => item.id === listId)
 	if (!target) return { ok: false, count: 0, reason: '歌单不存在' }
-	const source = String(forcedSource || target.source || '') as any
-	if (!source) return { ok: false, count: 0, reason: '该歌单没有来源平台信息', needSource: true }
+	const source = String(target.source ?? '') as any
+	if (!source) {
+		return { ok: false, count: 0, reason: '该歌单没有来源平台信息，请重新从平台导入' }
+	}
 	try {
 		const sdk = await import('./musicSdk')
 		// 只认「可追溯的歌单 id/链接」：不再用歌单名搜索（同名歌单会命中别人的）
-		let rawSid = String(target.sourceListId ?? '')
-		if (forcedSource && target.source && forcedSource !== target.source) rawSid = ''
-		const sourceListId = await resolveSourceListId(rawSid)
+		const sourceListId = await resolveSourceListId(String(target.sourceListId ?? ''))
 		if (!sourceListId) {
 			return {
 				ok: false,
 				count: 0,
 				reason: '该歌单的来源是短链接，无法自动更新；请用含「id=」的完整歌单链接重新导入',
-				needSource: true,
 			}
 		}
 		const all: JKMusic[] = []
