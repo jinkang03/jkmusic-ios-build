@@ -85,18 +85,26 @@ export const clearSources = () => {
  * - 之前把 403/416 判失败，导致腾讯源被误杀、连续跳曲（1.2.x 回归）
  */
 const verifyMediaUrl = async(url: string): Promise<boolean> => {
+	const ctrl = new AbortController()
+	let timedOut = false
+	const timer = setTimeout(() => { timedOut = true; ctrl.abort() }, 3000)
 	try {
-		const ctrl = new AbortController()
-		const timer = setTimeout(() => ctrl.abort(), 3000)
-		const res = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal })
+		// 不依赖 AbortController 在 RN 里的行为：再叠加一个显式超时，
+		// 保证 3 秒内一定给出结论（实测挂死地址会让 fetch 永挂）。
+		const res = await Promise.race([
+			fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal }),
+			new Promise<never>((_, reject) => {
+				setTimeout(() => reject(new Error('VERIFY_TIMEOUT')), 3200)
+			}),
+		])
 		clearTimeout(timer)
-		const code = Number(res.status)
+		const code = Number((res as any).status)
 		return !(code === 400 || code === 404 || code === 410)
 	} catch (err: any) {
-		// 超时（3s 连响应头都没有）= 这条地址不能用于流式播放。
-		// 实测 tx 部分脚本会返回「连得上但永不响应」的地址，AVPlayer 会永远停在 0:00，
-		// 既不出错也不推进 —— 必须在选源阶段就判死，让脚本池换下一个。
-		if (String(err?.name ?? '') === 'AbortError') return false
+		clearTimeout(timer)
+		// 超时（连响应头都没有）= 这条地址不能用于流式播放：
+		// AVPlayer 会永远停在 0:00，既不出错也不推进。
+		if (timedOut || String(err?.message ?? '') === 'VERIFY_TIMEOUT') return false
 		// 其它网络抖动不判死（DNS 瞬断等），交给播放看门狗兜底
 		return true
 	}

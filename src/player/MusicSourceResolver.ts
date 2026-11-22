@@ -57,7 +57,11 @@ const followRedirect = async(url: string): Promise<string> => {
 }
 
 
-const preloadCache = new Map<string, string>()
+const preloadCache = new Map<string, { url: string, at: number }>()
+/** 正在进行的预取（切歌时如果刚好还没完成，最多等 1.2s 拿结果） */
+const preloadInFlight = new Map<string, Promise<void>>()
+/** 预取地址有效期：脚本地址带 vkey，放太久会失效 */
+const PRELOAD_TTL_MS = 120 * 1000
 const CURRENT_SOURCE_REQUEST_TIMEOUT_MS = 5000
 const PRELOAD_SOURCE_REQUEST_TIMEOUT_MS = 12000
 
@@ -513,24 +517,57 @@ function makePreloadKey(item: IMusic.IMusicItem): string {
 }
 
 export const getPreloadedUrl = (item: IMusic.IMusicItem): string | undefined => {
-	return preloadCache.get(makePreloadKey(item))
+	const key = makePreloadKey(item)
+	const hit = preloadCache.get(key)
+	if (!hit) return undefined
+	if (Date.now() - hit.at > PRELOAD_TTL_MS) {
+		preloadCache.delete(key)
+		return undefined
+	}
+	return hit.url
 }
 
 export const preloadSource = async (item: IMusic.IMusicItem): Promise<void> => {
 	const key = makePreloadKey(item)
 	if (preloadCache.has(key)) return
-	try {
-		const result = await resolveSource(item, { requestType: 'preload' })
-		if (result.url && !result.url.includes('fake')) {
-			preloadCache.set(key, result.url)
-			if (preloadCache.size > 10) {
-				const firstKey = preloadCache.keys().next().value
-				if (firstKey) preloadCache.delete(firstKey)
+	const running = preloadInFlight.get(key)
+	if (running) return running
+	const task = (async() => {
+		try {
+			const result = await resolveSource(item, { requestType: 'preload' })
+			if (result.url && !result.url.includes('fake')) {
+				preloadCache.set(key, { url: result.url, at: Date.now() })
+				logInfo('[preload] ready', String((item as any)?.title ?? ''), String(result.url).slice(0, 70))
+				if (preloadCache.size > 10) {
+					const firstKey = preloadCache.keys().next().value
+					if (firstKey) preloadCache.delete(firstKey)
+				}
 			}
+		} catch {
+			// preload failures are silent
 		}
-	} catch {
-		// preload failures are silent
-	}
+	})()
+	preloadInFlight.set(key, task)
+	try { await task } finally { if (preloadInFlight.get(key) === task) preloadInFlight.delete(key) }
+}
+
+/**
+ * 取预取地址；如果预取还在进行中，最多等 waitMs 毫秒。
+ * 用于「刚好卡在切歌那一秒」的情况，避免明明快好了却重新走一遍取流。
+ */
+export const awaitPreloadedUrl = async(
+	item: IMusic.IMusicItem,
+	waitMs = 1200,
+): Promise<string | undefined> => {
+	const hit = getPreloadedUrl(item)
+	if (hit) return hit
+	const running = preloadInFlight.get(makePreloadKey(item))
+	if (!running) return undefined
+	await Promise.race([
+		running,
+		new Promise<void>(resolve => setTimeout(resolve, waitMs)),
+	])
+	return getPreloadedUrl(item)
 }
 
 /**
@@ -594,9 +631,25 @@ export const resolveSource = async (
 		return { url: localFile.fileUri, wasCached: false }
 	}
 
-	const forceRemote = (globalThis as any).__JK_FORCE_REMOTE__ === true
 	// 手动下载必须按「请求的音质」重新取流：命中播放缓存会拿到别的音质（实测 128k 下成 flac）
 	const isDownloadRequest = requestType === 'download'
+
+	// 末段预取命中：放在 isCached（磁盘 stat）之前，切歌时省掉取流 + 磁盘检查。
+	// 预取地址本身已经过「缓存优先」判断（预取时走的就是 resolveSource）。
+	const preloaded = (isCurrentSourceRequest(requestType) && !isDownloadRequest)
+		? await awaitPreloadedUrl(musicItem, 1200)
+		: getPreloadedUrl(musicItem)
+	if (preloaded && !isDownloadRequest) {
+		preloadCache.delete(preloadKey)
+		if (isCurrentSourceRequest(requestType)) {
+			logInfo('[jk/play] 使用末段预取地址起播:', String(preloaded).slice(0, 100))
+		} else {
+			logInfo(`[sourceResolver][${requestType}] 使用预加载的音源:`, preloaded)
+		}
+		return { url: preloaded, wasCached: false }
+	}
+
+	const forceRemote = (globalThis as any).__JK_FORCE_REMOTE__ === true
 	const cached = (forceRemote || isDownloadRequest) ? false : await isCached(musicItem)
 	if (cached) {
 		const localPath = getLocalFilePath(musicItem)
@@ -642,22 +695,6 @@ export const resolveSource = async (
 	}
 
 	// 只在本地与磁盘缓存都未命中时，才复用预加载的远端音源。
-	// 下载请求不复用（预取地址用的是当前播放音质）。
-	// 注意：本环境 AVPlayer 放不了网络流，current 请求拿到预取地址也要先下载，
-	// 不能直接把 http 地址交给播放器（否则必然 PlaybackError → 被判失败）。
-	let preloadedUrl: string | null = null
-	const preloaded = getPreloadedUrl(musicItem)
-	if (preloaded && !isDownloadRequest) {
-		preloadCache.delete(preloadKey)
-		if (isCurrentSourceRequest(requestType)) {
-			preloadedUrl = preloaded
-			logInfo('[sourceResolver] 使用预取地址（将先下载再播放）:', String(preloaded).slice(0, 100))
-		} else {
-			logInfo(`[sourceResolver][${requestType}] 使用预加载的音源:`, preloaded)
-			return { url: preloaded, wasCached: false }
-		}
-	}
-
 	if (!musicItem.url || musicItem.url === 'Unknown' || musicItem.url.includes('fake')) {
 		const nowMusicApi = musicApiSelectedStore.getValue()
 		if (nowMusicApi == null) {
@@ -750,10 +787,6 @@ export const resolveSource = async (
 			}
 
 			let switchedAlt: { source: string, id: string } | null = null
-			if (!resp_url && preloadedUrl) {
-				resp_url = preloadedUrl
-				logInfo('[jk/play] 预取地址可用，跳过重复取流，直接下载')
-			}
 			if (!resp_url) {
 				// 主源整条链路失败：换其它源播同一首（跨源兜底），避免点了没声音
 				const alt = await findPlayableAlt(musicItem, String(options.quality ?? qualityStore.getValue() ?? '128k'), requestType)

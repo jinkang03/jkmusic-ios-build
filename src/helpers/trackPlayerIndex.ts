@@ -76,7 +76,7 @@ import {
 	ensureDirExists,
 } from '@/player/CacheManager'
 
-import { resolveSource, preloadSource } from '@/player/MusicSourceResolver'
+import { resolveSource, preloadSource, getPreloadedUrl } from '@/player/MusicSourceResolver'
 import { bindMusicApi, getPooledMusicUrl, setSourcePool } from '@/jk/sourceRegistry'
 
 const NEXT_TRACK_PRELOAD_DELAY_MS = 8000
@@ -370,7 +370,23 @@ async function setupTrackPlayer() {
 			ReactNativeTrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (data) => {
 				if (!isCurrentProgressEvent(data)) return
 				// 进度真的在走 → 源可用，撤掉看门狗
-				if (Number((data as any)?.position ?? 0) > 0.5) clearPlayWatchdog()
+				if (Number((data as any)?.position ?? 0) > 0.5) {
+					clearPlayWatchdog()
+					const musicNow: any = currentMusicStore.getValue()
+					const key = `${musicNow?.platform}:${musicNow?.id}`
+					const posNow = Number((data as any)?.position ?? 0)
+					const durNow = Number((data as any)?.duration ?? 0)
+					preloadNextInAdvance(posNow, durNow)
+					warmNextStream(posNow, durNow)
+					if (latPlayAt && key !== latAudibleKey) {
+						latAudibleKey = key
+						const pos = Number((data as any)?.position ?? 0)
+						const nowMs = Date.now()
+						logInfo('[lat] audible +' + (nowMs - latPlayAt) + 'ms',
+							'media→audible=' + (latMediaSetAt ? (nowMs - latMediaSetAt) : '-') + 'ms',
+							'pos=' + pos.toFixed(1))
+					}
+				}
 				const now = Date.now()
 				if (now - lastProgressSaveAt < PROGRESS_SAVE_INTERVAL_MS) return
 				lastProgressSaveAt = now
@@ -464,6 +480,56 @@ let streamGuardTruncationChecked = false
 let streamGuardRecovering = false
 /** 已停住等用户手动重试：期间不再自动触发换源（否则会每 12s 弹一次提示） */
 let streamGuardHalted = false
+
+/**
+ * 末段预取：只解析下一首的**播放地址**（不下载），切歌时直接起播。
+ * 实测预取本身要 3–6s（含脚本池 4s 超时 + 预检），20 秒留足余量；
+ * 每首只触发一次，且只在播放中触发。
+ */
+const PRELOAD_REMAINING_SECONDS = 20
+let preloadTriggeredFor = ''
+/** 末段「预热连接」：切歌前 3 秒对预取地址发一次 2 字节 Range，
+ *  把 DNS/TLS/首字节提前走完，缩短 AVPlayer 起播时间。不下载音频内容。 */
+const WARM_REMAINING_SECONDS = 3
+let warmedFor = ''
+
+const warmNextStream = (position: number, duration: number) => {
+	try {
+		if (!duration || duration <= 0) return
+		if (playbackIntentStore.getValue() !== 'play') return
+		const remain = duration - position
+		if (remain > WARM_REMAINING_SECONDS || remain <= 0) return
+		const cur: any = currentMusicStore.getValue()
+		const key = `${cur?.platform ?? ''}:${cur?.id ?? ''}`
+		if (!key || key === ':' || warmedFor === key) return
+		const repeat = repeatModeStore.getValue()
+		const next: any = getPlayListMusicAt(currentIndex + (repeat === MusicRepeatMode.SINGLE ? 0 : 1))
+		if (!next) return
+		const url = getPreloadedUrl(next)
+		if (!url || !/^https?:/i.test(url)) return
+		warmedFor = key
+		logInfo('[preload] 预热下一首连接:', String(next.title ?? ''), 'remain=', remain.toFixed(1) + 's')
+		void fetch(url, { headers: { Range: 'bytes=0-1' } }).catch(() => undefined)
+	} catch { /* ignore */ }
+}
+
+const preloadNextInAdvance = (position: number, duration: number) => {
+	try {
+		if (!duration || duration <= 0) return
+		if (playbackIntentStore.getValue() !== 'play') return
+		const remain = duration - position
+		if (remain > PRELOAD_REMAINING_SECONDS || remain <= 0.2) return
+		const cur: any = currentMusicStore.getValue()
+		const key = `${cur?.platform ?? ''}:${cur?.id ?? ''}`
+		if (!key || key === ':' || preloadTriggeredFor === key) return
+		preloadTriggeredFor = key
+		const repeat = repeatModeStore.getValue()
+		const next: any = getPlayListMusicAt(currentIndex + (repeat === MusicRepeatMode.SINGLE ? 0 : 1))
+		if (!next) return
+		logInfo('[preload] 末段预取下一首:', String(next.title ?? ''), 'remain=', remain.toFixed(1) + 's')
+		void preloadSource(next as any)
+	} catch { /* 预取失败不影响当前播放 */ }
+}
 
 const resetStreamGuards = () => {
 	streamGuardHalted = false
@@ -566,6 +632,15 @@ const startStreamGuard = () => {
 const altTriedMap = new Map<string, Set<string>>()
 /** 单曲换源上限（≈可用平台数，防止死循环） */
 const ALT_MAX_TRIES = 5
+
+/**
+ * 延迟埋点（只打日志）：把「点歌 → 出声」拆成
+ * play() → resolveSource 返回 → setMediaItems → 第一次 position>0.5。
+ */
+let latPlayAt = 0
+let latResolvedAt = 0
+let latMediaSetAt = 0
+let latAudibleKey = ''
 
 const songKeyOf = (item?: any) => `${item?.platform ?? ''}:${item?.id ?? ''}`
 
@@ -908,8 +983,15 @@ const setTrackSource = (track: Track) => {
 		logInfo('[jk/play] item stringify failed', String((e as any)?.message ?? e))
 	}
 	ReactNativeTrackPlayer.setMediaItems(items)
+	latMediaSetAt = Date.now()
+	if (latPlayAt) {
+		logInfo('[lat] media +' + (latMediaSetAt - latPlayAt) + 'ms',
+			latResolvedAt ? '+' + (latMediaSetAt - latResolvedAt) + 'ms after resolve' : '')
+	}
 	// 新地址/新曲目：重置片段与停滞计时
 	resetStreamGuards()
+	preloadTriggeredFor = ''
+	warmedFor = ''
 	setCurrentMusic(track as IMusic.IMusicItem)
 	PersistStatus.set('music.musicItem', track as IMusic.IMusicItem)
 	PersistStatus.set('music.progress', 0)
@@ -1365,6 +1447,12 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		// 让「播放失败，点击播放重试」能重新走一遍所有平台
 		resetAltTried(musicItem)
 		setPlaybackIntent('play')
+		latPlayAt = Date.now()
+		if (latQueueAt) logInfo('[lat] queue +' + (latPlayAt - latQueueAt) + 'ms')
+		latQueueAt = 0
+		latResolvedAt = 0
+		latMediaSetAt = 0
+		latAudibleKey = ''
 
 		// 1. If already playing this track
 		if (isCurrentMusic(musicItem)) {
@@ -1413,6 +1501,8 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		const { url: sourceUrl, wasCached } = await resolveSource(musicItem, {
 			requestType: 'current',
 		})
+		latResolvedAt = Date.now()
+		if (latPlayAt) logInfo('[lat] resolve +' + (latResolvedAt - latPlayAt) + 'ms', wasCached ? 'cache' : 'stream')
 
 		// 5. Race condition guard
 		if (!isCurrentMusic(musicItem) || trackSourceLoadingStore.getValue() !== trackSourceLoadingToken) {
@@ -1537,10 +1627,13 @@ const cacheAndImportMusic = async (track: IMusic.IMusicItem) => {
  * @param musicItem 音乐
  * @param newPlayList 替代列表
  */
+let latQueueAt = 0
+
 const playWithReplacePlayList = async (
 	musicItem: IMusic.IMusicItem,
 	newPlayList: IMusic.IMusicItem[],
 ) => {
+	latQueueAt = Date.now()
 	// 切歌/手动点歌 → 作废进行中的预取（世代递增）
 	void import('@/player/prefetch').then(m => m.bumpPrefetchGeneration?.()).catch(() => undefined)
 	// 用户主动点歌 = 一次新的尝试，清零连续失败计数
