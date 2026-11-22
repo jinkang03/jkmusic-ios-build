@@ -7,7 +7,7 @@
 import PersistStatus from '@/store/PersistStatus'
 import { GlobalState } from '@/utils/stateMapper'
 
-const DEFAULT_ALPHA = 0.55
+const DEFAULT_ALPHA = 0.1
 const MIN_ALPHA = 0
 const MAX_ALPHA = 1
 

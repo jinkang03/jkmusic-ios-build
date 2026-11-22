@@ -307,8 +307,28 @@ export const resolveSourceListId = async(raw: string): Promise<string> => {
 	const direct = s.match(/[?&]id=(\d+)/)
 	if (direct) return direct[1]
 	if (/^https?:/i.test(s)) {
-		const pick = (text: string) => String(text ?? '').match(/[?&]id=(\d+)/)?.[1] ?? ''
-		// 1) 短链是 302：手动模式下读 location 头（QQ 的 /base/fcgi-bin/u?__=xxx 就是这种）
+		// 各平台的歌单 id 提取规则（顺序很重要：先具体路径，再通用参数）
+		const PATTERNS: RegExp[] = [
+			/[?&]id=(\d+)/,
+			/[?&]pid=(\d+)/,
+			/[?&]specialid=(\d+)/i,
+			/[?&]disstid=(\d+)/,
+			/playlist_detail\/(\d+)/,
+			/special\/single\/(\d+)/,
+			/collection_\d+_(\d+)/,
+			/playlist\/(\d+)/,
+			/playlist\?id=(\d+)/,
+			/\/(\d{6,})\b/,
+		]
+		const pick = (text: string) => {
+			const t = String(text ?? '')
+			for (const re of PATTERNS) {
+				const m = t.match(re)
+				if (m?.[1]) return m[1]
+			}
+			return ''
+		}
+		// 1) 短链多为 302：手动模式读 location 头（tx 的 /base/fcgi-bin/u?__=xxx 等）
 		try {
 			const res = await fetch(s, { method: 'GET', redirect: 'manual' as any })
 			const loc = typeof (res as any)?.headers?.get === 'function'
@@ -324,9 +344,7 @@ export const resolveSourceListId = async(raw: string): Promise<string> => {
 			if (hit) return hit
 		} catch { /* ignore */ }
 		// 3) 原始链接里本来就带 id
-		const direct = pick(s)
-		if (direct) return direct
-		return ''
+		return pick(s)
 	}
 	return s
 }

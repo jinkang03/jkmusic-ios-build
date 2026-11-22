@@ -945,6 +945,36 @@ const SettingsSectionScreen = () => {
 					lib.removeUserList(listId)
 					const after = lib.getUserLists().length
 					logInfo('[dev] removeList id=', listId, 'before=', before, 'after=', after)
+				} else if (action === 'probeList') {
+					// 各平台歌单详情探测：source + 链接/id → 看能否拉到
+					const src = String((params as any).source ?? 'kw')
+					let raw = String((params as any).id ?? '')
+					if (!raw) {
+						// 没传 id：从该平台的公开歌单列表取第一个真实歌单
+						const sdk2 = await import('@/jk/musicSdk')
+						const list: any = await sdk2.getSongLists(src as any, { page: 1 })
+						const first = (list?.list ?? list ?? [])[0]
+						raw = String(first?.id ?? first?.specialid ?? '')
+						logInfo('[dev] probeList auto pick', String(first?.name ?? ''), '->', raw)
+					}
+					const lib = await import('@/jk/libraryStore')
+					const sdk = await import('@/jk/musicSdk')
+					const sid = await lib.resolveSourceListId(raw)
+					logInfo('[dev] probeList resolve', raw, '->', sid)
+					const all: any[] = []
+					let err = ''
+					for (let page = 1; page <= 3; page++) {
+						try {
+							const res: any = await sdk.getSongListDetail(src as any, sid, page)
+							const chunk = res?.list ?? []
+							all.push(...chunk)
+							if (chunk.length < 100) break
+						} catch (e) {
+							err = String((e as any)?.message ?? e)
+							break
+						}
+					}
+					logInfo('[dev] probeList', src, sid, 'count=', all.length, 'err=', err)
 				} else if (action === 'importLxmc') {
 					const FS = await import('expo-file-system/legacy')
 					const path = `${FS.documentDirectory}lx_list.lxmc`

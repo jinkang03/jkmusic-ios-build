@@ -1,50 +1,60 @@
-> **LATEST：1.4.29 / build 53**
-> 文件 `artifacts/ipa/JKMUSIC-1.4.29-unsigned-20261122.ipa`
-> sha256 `fe375b2241e5656bbc1ed983aca868de2a277acef10f3b54a76bc8286b21b4ab`
+> **LATEST：1.4.30 / build 54**
+> 文件 `artifacts/ipa/JKMUSIC-1.4.30-unsigned-20261122.ipa`
+> sha256 `6cef28e28ede627ef9004e833f44feb5b850f4e7879e261caa8d51f9057f3ea6`
 > 固定别名 `artifacts/ipa/JKMUSIC-ios-unsigned.ipa` 与最新版字节相同（`./scripts/sync-latest-ipa.sh`）。
 > 安装前在 App 内确认版本号（设置 → 其他 → App Version）。
 
-## v1.4.29（2026-11-22）
+## v1.4.30（2026-11-22）
 
 | 项 | 值 |
 |---|---|
-| 产物 | `artifacts/ipa/JKMUSIC-1.4.29-unsigned-20261122.ipa` |
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.30-unsigned-20261122.ipa` |
 | 大小 | 18 MB |
-| sha256 | `fe375b2241e5656bbc1ed983aca868de2a277acef10f3b54a76bc8286b21b4ab` |
-| 版本 / build | 1.4.29 / 53 |
+| sha256 | `6cef28e28ede627ef9004e833f44feb5b850f4e7879e261caa8d51f9057f3ea6` |
+| 版本 / build | 1.4.30 / 54 |
 | 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
-| commit | 见 tag `v1.4.29` |
+| commit | 见 tag `v1.4.30` |
 
-### 1.4.29 歌单更新：短链解析 + tx 接口兜底
+### 1.4.30 全平台歌单更新 + 新安装默认外观
 
-**a) QQ 短链能解析了**
+**a) 全平台歌单（原来只有 tx 能做）**
 
-之前 `resolveSourceListId` 对 `c6.y.qq.com/base/fcgi-bin/u?__=xxx` 返回空。
-实际抓包发现：**GET 该短链返回 302**，`location` 是
-`https://i.y.qq.com/n2/m/share/details/taoge.html?...&id=9644109902` —— id 就在里面。
+`resolveSourceListId` 扩展为通用解析：
 
-（之前用 HEAD 请求看到的是 200，所以误判为「JS 落地页」）
+| 平台 | 支持的形式 |
+|---|---|
+| kw | `playlist_detail/<id>`、`?pid=`、纯 id |
+| kg | `special/single/<id>.html`、`?specialid=`、`collection_3_<id>`、`id_xxx` |
+| wy | `playlist?id=`、`#/playlist?id=`、纯 id |
+| mg | `/music/playlist/<id>`、纯 id |
+| tx | `?id=`、`disstid=`、短链 302 |
 
-修复：
-- `fetch(url, { redirect: 'manual' })` 读 `location` 头；
-- 兜底 `fetch(url)` 跟随后的 `res.url`；
-- 再兜底原始链接里的 `id=`。
+通用兜底：先带 `redirect:'manual'` 读 302 的 `location`，再跟随取最终 URL，最后取原链接里的 id。
 
-**b) tx 部分歌单稳定报 `try max num`**
+**b) 五平台实测（`probeList`，用各平台真实歌单）**
 
-`getSongListDetail`（`disstid` 接口）对部分歌单连续失败，重试 3 次仍 `try max num`；
-但 `fcg_v8_playlist_cp.fcg` 对同一 id 正常返回。
+```
+kg  id_9946011            813 首 ✅
+mg  234332827              50 首 ✅
+kw  digest-8__3678202180  101 首 ✅
+wy  18428485896            68 首 ✅
+tx  9644770211             50 首 ✅（完整链接）
+```
 
-修复：tx 平台在 `getSongListDetail` 全失败后，用
-`getPlayListFromQ(sourceListId)`（另一套公开接口）兜底并转换字段。
+**c) 新安装默认外观**
 
-**c) 实测（4 个歌单全部可更新）**
+| 项 | 默认值 |
+|---|---|
+| 主题壁纸 | 内置 `assets/default-wallpaper.jpg`（1280×1600，**226KB**，<2MB） |
+| 壁纸磨砂 | **10** |
+| 玻璃不透明度 | **10%** |
+| 玻璃透明度 | **10%** |
+| 文字颜色 | **#FFFFFF** |
 
-| 歌单 | sourceListId | 结果 |
-|---|---|---|
-| 试音个人精选 | 完整链接 → 9644770211 | ✅ 50 首 |
-| 經典 | 短链 → 9644109902 | ✅ 43 首 |
-| just do it | 短链 → 9644083255 | ✅ 176 首（走兜底接口） |
-| DJ合集 | 短链 → 9644114020 | ✅ 247 首（走兜底接口） |
+实现：`themeStore.ensureDefaultWallpaper()` 在启动时执行一次，
+只在「用户从未设置过壁纸」时把内置图复制到 `Documents/wallpaper-default.jpg` 并写入设置；
+之后一切以设置为准（不会再覆盖）。
+
+实测：卸载重装后首屏即是该壁纸 + 磨砂 10 + 玻璃 10% + 白字。
 
 

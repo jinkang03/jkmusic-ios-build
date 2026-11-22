@@ -46,8 +46,8 @@ export const accentStore = new GlobalState<string>(
 
 /** 功能页面文字颜色（空 = 跟随主题/壁纸默认） */
 export const textColorStore = new GlobalState<string>(
-	// 新功能：空 = 走默认（壁纸开启时白字）
-	'',
+	// 默认白色（用户要求）；清空后走「跟随玻璃透明度自动反转」
+	(PersistStatus.get('app.textColor' as any) as string) || '#FFFFFF',
 )
 
 export const setTextColor = (color: string) => {
@@ -103,8 +103,8 @@ const logAccent = (color: string) => {
 const storedWallpaper = (PersistStatus.get('app.wallpaper' as any) as WallpaperState) || null
 export const wallpaperStore = new GlobalState<WallpaperState>(
 	storedWallpaper && typeof storedWallpaper === 'object'
-		? { uri: String(storedWallpaper.uri ?? ''), blur: Number(storedWallpaper.blur ?? 12), opacity: Number(storedWallpaper.opacity ?? 70) }
-		: { uri: '', blur: 12, opacity: 70 },
+		? { uri: String(storedWallpaper.uri ?? ''), blur: Number(storedWallpaper.blur ?? 10), opacity: Number(storedWallpaper.opacity ?? 10) }
+		: { uri: '', blur: 10, opacity: 10 },
 )
 
 export const setMacTheme = (id: MacThemeId) => {
@@ -202,6 +202,34 @@ export const getMacTheme = () => macThemeStore.getValue()
 
 export default {
 	MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore,
-	setMacTheme, setAccentColor, setTextColor, getTextColor, setWallpaper, saveWallpaperFrom, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha,
+	setMacTheme, setAccentColor, setTextColor, getTextColor, setWallpaper, saveWallpaperFrom, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha, ensureDefaultWallpaper,
 	wallpaperAccentStore, setWallpaperAccent, ensureWallpaperAccent,
+}
+
+/**
+ * 首次安装的默认壁纸（assets/default-wallpaper.jpg，已压缩到 200KB）。
+ * 只在「用户从未设置过壁纸」时执行一次，之后一切以设置为准。
+ */
+export async function ensureDefaultWallpaper() {
+	try {
+		if (PersistStatus.get('app.defaultWallpaperSeeded' as any) === true) return
+		const cur = wallpaperStore.getValue()
+		if (cur?.uri) {
+			PersistStatus.set('app.defaultWallpaperSeeded' as any, true)
+			return
+		}
+		const { Asset } = await import('expo-asset')
+		const FS = await import('expo-file-system/legacy')
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const mod = require('../../assets/default-wallpaper.jpg')
+		const asset = Asset.fromModule(mod)
+		await asset.downloadAsync()
+		const src = asset.localUri ?? asset.uri
+		const dest = `${FS.documentDirectory}wallpaper-default.jpg`
+		await FS.copyAsync({ from: src, to: dest })
+		const next = { uri: 'wallpaper-default.jpg', blur: 10, opacity: 10 }
+		wallpaperStore.setValue(next)
+		PersistStatus.set('app.wallpaper' as any, next)
+		PersistStatus.set('app.defaultWallpaperSeeded' as any, true)
+	} catch { /* 壁纸种子失败不阻塞启动 */ }
 }

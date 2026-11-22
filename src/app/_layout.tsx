@@ -1,7 +1,7 @@
 // 必须最先加载：为 JKMUSIC 的 musicSdk 提供全局 Buffer / TextEncoder
 import '@/shims/globalPolyfills'
 import { ensureDefaults } from '@/jk/settingsStore'
-import { textColorStore } from '@/jk/themeStore'
+import { textColorStore, ensureDefaultWallpaper } from '@/jk/themeStore'
 import { playbackService } from '@/constants/playbackService'
 import { AppThemeProvider, ThemeOverrideProvider, useAppTheme, usePageTheme } from '@/hooks/useAppTheme'
 import WallpaperBackground from '@/components/WallpaperBackground'
@@ -299,5 +299,7 @@ try {
 } catch (err) {
 	console.log('[jk/settings] ensureDefaults failed', err)
 }
+// 首次安装写入默认壁纸（只执行一次，之后以设置为准）
+void ensureDefaultWallpaper()
 
 export default App
