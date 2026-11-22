@@ -177,8 +177,8 @@ const BasicSection = () => {
 			>
 				<SettingSlider
 					value={Math.round((Number(glassAlpha ?? 0.55)) * 100)}
-					min={10}
-					max={95}
+					min={0}
+					max={100}
 					step={1}
 					onChange={(v) => setGlassAlpha(Number(v) / 100)}
 					format={(v) => `${Math.round(v)}%`}

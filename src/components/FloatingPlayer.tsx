@@ -90,14 +90,24 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 			activeOpacity={0.9}
 			style={[styles.container, { borderColor: g.stroke, backgroundColor: g.fill }, style]}
 		>
-			<BlurView intensity={95} tint={blurTint} style={styles.blurContainer}>
+			<BlurView
+				intensity={Math.round(Math.min(1, Math.max(0, Number(glassAlpha ?? 0.55))) * 100)}
+				tint={blurTint}
+				style={styles.blurContainer}
+			>
 				{/* 液态玻璃高光：顶部一道白色渐隐，配合细描边形成「玻璃厚度」 */}
-				<LinearGradient
-					pointerEvents="none"
-					colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0.06)', 'transparent']}
-					locations={[0, 0.35, 1]}
-					style={StyleSheet.absoluteFill}
-				/>
+				{Number(glassAlpha ?? 0.55) > 0.02 ? (
+					<LinearGradient
+						pointerEvents="none"
+						colors={[
+							`rgba(255,255,255,${(Number(glassAlpha ?? 0.55) * 0.42).toFixed(3)})`,
+							`rgba(255,255,255,${(Number(glassAlpha ?? 0.55) * 0.08).toFixed(3)})`,
+							'transparent',
+						]}
+						locations={[0, 0.35, 1]}
+						style={StyleSheet.absoluteFill}
+					/>
+				) : null}
 				{/* 左段：封面 + 标题/歌手 */}
 				<View style={styles.leftSection}>
 					<View style={styles.artworkBox}>

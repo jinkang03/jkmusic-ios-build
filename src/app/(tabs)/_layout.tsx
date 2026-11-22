@@ -69,6 +69,8 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
 	const mac = macPalette(!!isDark)
 	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
 	const side = Math.round(winWidth * TAB_BAR_SIDE_RATIO)
+	// 高光强度跟随玻璃透明度：a=0 时完全没有白色，a=1 时最强
+	const ga = Math.min(1, Math.max(0, Number(glassAlpha ?? 0.55)))
 	return (
 		<View
 			pointerEvents="box-none"
@@ -90,13 +92,17 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
 					flexDirection: 'row',
 				}}
 			>
-				<BlurView intensity={100} tint={blurTint} style={StyleSheet.absoluteFill} />
-				<LinearGradient
-					pointerEvents="none"
-					colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0.06)', 'transparent']}
-					locations={[0, 0.4, 1]}
-					style={StyleSheet.absoluteFill}
-				/>
+				{ga > 0.02 ? (
+					<BlurView intensity={Math.round(ga * 100)} tint={blurTint} style={StyleSheet.absoluteFill} />
+				) : null}
+				{ga > 0.02 ? (
+					<LinearGradient
+						pointerEvents="none"
+						colors={[`rgba(255,255,255,${(ga * 0.45).toFixed(3)})`, `rgba(255,255,255,${(ga * 0.08).toFixed(3)})`, 'transparent']}
+						locations={[0, 0.4, 1]}
+						style={StyleSheet.absoluteFill}
+					/>
+				) : null}
 				{state.routes.filter((route: any) => !HIDDEN_TAB_ROUTES.includes(String(route.name))).map((route: any) => {
 					const focused = route.key === state.routes[state.index]?.key
 					const { options } = descriptors[route.key] ?? {}
