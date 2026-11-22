@@ -202,34 +202,8 @@ export const getMacTheme = () => macThemeStore.getValue()
 
 export default {
 	MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore,
-	setMacTheme, setAccentColor, setTextColor, getTextColor, setWallpaper, saveWallpaperFrom, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha, ensureDefaultWallpaper,
+	setMacTheme, setAccentColor, setTextColor, getTextColor, setWallpaper, saveWallpaperFrom, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha,
 	wallpaperAccentStore, setWallpaperAccent, ensureWallpaperAccent,
 }
 
-/**
- * 首次安装的默认壁纸（assets/default-wallpaper.jpg，已压缩到 200KB）。
- * 只在「用户从未设置过壁纸」时执行一次，之后一切以设置为准。
- */
-export async function ensureDefaultWallpaper() {
-	try {
-		if (PersistStatus.get('app.defaultWallpaperSeeded' as any) === true) return
-		const cur = wallpaperStore.getValue()
-		if (cur?.uri) {
-			PersistStatus.set('app.defaultWallpaperSeeded' as any, true)
-			return
-		}
-		const { Asset } = await import('expo-asset')
-		const FS = await import('expo-file-system/legacy')
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const mod = require('../../assets/default-wallpaper.jpg')
-		const asset = Asset.fromModule(mod)
-		await asset.downloadAsync()
-		const src = asset.localUri ?? asset.uri
-		const dest = `${FS.documentDirectory}wallpaper-default.jpg`
-		await FS.copyAsync({ from: src, to: dest })
-		const next = { uri: 'wallpaper-default.jpg', blur: 10, opacity: 10 }
-		wallpaperStore.setValue(next)
-		PersistStatus.set('app.wallpaper' as any, next)
-		PersistStatus.set('app.defaultWallpaperSeeded' as any, true)
-	} catch { /* 壁纸种子失败不阻塞启动 */ }
-}
+

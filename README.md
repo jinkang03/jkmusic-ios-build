@@ -104,7 +104,6 @@ jkmusic://settingSection/dev?action=artistTest&name=<歌手>
 |---|---|
 | [`docs/RELEASE-IPA.md`](docs/RELEASE-IPA.md) | 每个版本的改动、sha256、实测结果 |
 | [`docs/REGRESSION.md`](docs/REGRESSION.md) | 按版本记录的回归清单 |
-| [`docs/JKMUSIC-PORT.md`](docs/JKMUSIC-PORT.md) | 桌面版 → iOS 的移植说明 |
 | [`docs/development.md`](docs/development.md) | 开发环境与调试 |
 | [`docs/mac-ui-spec.md`](docs/mac-ui-spec.md) | 桌面版 UI 规格对照 |
 

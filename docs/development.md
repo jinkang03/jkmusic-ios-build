@@ -65,7 +65,7 @@ cd ..
 删除图标与主题切换后的 action hash 更新。保留自定义颜色和 Android 行为；
 源码、CommonJS、ESM 入口及 source map 随同补丁同步。
 `node scripts/check-menu-icons.mjs` 的 18 项颜色传递与事件保持检查通过。
-2026-09-14，用户安装 `CyMusic-ios16-menu-icons-candidate-20260914.ipa` 后，
+2026-09-14，用户安装 `JKMUSIC` 的候选包 后，
 确认 iOS 16.6 实机菜单图标恢复。该包只替换生产 JS bundle，原生程序与资源保持一致。
 实测支持显式着色方案有效；旧系统内部具体的着色失败机制仍未直接观测。
 修改原生补丁需要重新构建 iOS App；此次新增逻辑位于 JS，测试包可复用
@@ -87,7 +87,7 @@ cd ..
 [精确跳转实现与验证](maintenance/2026-09-10-precise-seeking.md)。
 
 项目保留了 `ios/` 原生工程，其中包含 `user-api-preload.js` 和分享扩展。
-自定义 JavaScriptCore 引擎与现代原生接口位于 `modules/cymusic-native/`，通过
+自定义 JavaScriptCore 引擎与现代原生接口位于 `modules/` 下的原生模块，通过
 Expo 自动链接加入原生构建。修改 Expo 配置后，需要同步检查原生工程；
 不要运行 `expo prebuild` 重新生成原生工程：SDK 57 默认执行 clean，
 `--no-clean` 也可能重写自定义分享扩展。
@@ -140,8 +140,8 @@ npx expo run:ios --no-install
 ## 构建未签名 iOS 应用
 
 ```bash
-xcodebuild -workspace ios/CyMusic.xcworkspace \
-  -scheme CyMusic -configuration Release -sdk iphoneos \
+xcodebuild -workspace ios/JKMUSIC.xcworkspace \
+  -scheme JKMUSIC -configuration Release -sdk iphoneos \
   -derivedDataPath ios/build \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM=""
