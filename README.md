@@ -1,35 +1,85 @@
 <p align="center">
-  <img src="1024.png" width="112" alt="CyMusic 图标" />
+  <img src="1024.png" width="112" alt="JKMUSIC" />
 </p>
 
-<h1 align="center">CyMusic</h1>
+<h1 align="center">JKMUSIC for iOS</h1>
 
 <p align="center">
-  一款支持自定义音源、滚动歌词与本地音乐的 iOS 播放器。
+  把 JKMUSIC 桌面版（Vue3）的事件驱动架构与 UI 移植到 iOS：五平台音源聚合、流式播放、逐字歌词、歌单同步、手动下载。
 </p>
 
 <p align="center">
-  <a href="https://github.com/gyc-12/Cymusic/actions/workflows/build-ios.yml"><img src="https://github.com/gyc-12/Cymusic/actions/workflows/build-ios.yml/badge.svg?branch=main" alt="iOS 构建状态" /></a>
+  <img src="https://img.shields.io/badge/version-1.4.40%20(build%2064)-111111" alt="1.4.40 / 64" />
   <img src="https://img.shields.io/badge/iOS-16.4%2B-111111?logo=apple&logoColor=white" alt="iOS 16.4 及以上" />
   <img src="https://img.shields.io/badge/Expo-57-000020?logo=expo&logoColor=white" alt="Expo 57" />
   <img src="https://img.shields.io/badge/React_Native-0.86-61DAFB?logo=react&logoColor=111111" alt="React Native 0.86" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/Source_License-Apache_2.0-blue" alt="CyMusic 自有源码：Apache 2.0" /></a>
 </p>
 
 <p align="center">
-  <a href="#下载">下载</a> ·
-  <a href="#应用预览">应用预览</a> ·
-  <a href="#开始使用">开始使用</a> ·
-  <a href="#开发指南">开发指南</a> ·
-  <a href="https://github.com/gyc-12/Cymusic/issues">反馈问题</a>
+  <a href="#最新构建">最新构建</a> ·
+  <a href="#功能">功能</a> ·
+  <a href="#构建">构建</a> ·
+  <a href="#文档">文档</a> ·
+  <a href="#底座cymusic">底座</a>
 </p>
 
-CyMusic 将音乐浏览、播放、歌词和个人歌单放在一起，支持深色、浅色与跟随系统的外观。
-当前 `main` 基于 **Expo 57、React Native 新架构和 RNTP v5**，保留原有 App 的主要功能。
+## 最新构建
 
-> [!NOTE]
-> **官方 App 永久免费，仅限个人非商业使用，禁止商业用途。**
-> App 不内置音频播放源；在线播放需要自行导入音源。RNTP v5 适用独立许可证，详见[许可与使用范围](#许可与使用范围)。
+| 项 | 值 |
+|---|---|
+| 版本 / build | **1.4.40 / 64** |
+| IPA | [`artifacts/ipa/JKMUSIC-1.4.40-unsigned-20261122.ipa`](artifacts/ipa/JKMUSIC-1.4.40-unsigned-20261122.ipa) |
+| 固定别名 | [`artifacts/ipa/JKMUSIC-ios-unsigned.ipa`](artifacts/ipa/JKMUSIC-ios-unsigned.ipa)（与最新版字节相同） |
+| sha256 | `e04a6787eb6e6c41078dae8929b87322c01d7099807c691ae964ecdf4c782450` |
+| 架构 | arm64 + `JKMUSICWidget.appex` + `ShareExtension.appex`，最低 iOS 16.4 |
+| 签名 | **未签名**，安装前需自签（AltStore / Sideloadly / 企业证书） |
+
+安装后在 App 内确认版本号：**设置 → 其他 → App Version**。
+
+## 功能
+
+- **五平台音源聚合**：酷我 / 酷狗 / QQ音乐 / 网易云 / 咪咕，脚本池并发取流、自动换源。
+- **流式播放**：点歌直接起播（实测 0.9–2.4s），不预先下载整首。
+- **末段预取**：剩余 20 秒解析下一首地址、剩余 3 秒预热连接，切歌间隙 0.25–1.05s。
+- **逐字歌词**：按桌面版 `font-player` 模型实现，整行内嵌分段 + 颜色插值。
+- **歌单**：链接导入（kw/kg/tx/wy/mg）、平台同步更新、单曲移除、lxmc 备份导入。
+- **缓存**：起播后自动缓存当前曲，歌曲名后打勾；超出上限按 LRU 只淘汰最老的。
+- **手动下载**：可选 128k / 320k / flac，落盘 `Documents/downloads/<歌单名>/`，带 json/lrc/jpg sidecar。
+- **外观**：自定义壁纸、磨砂、玻璃透明度、文字颜色；播放页固定封面背景。
+- **系统集成**：锁屏/控制中心、灵动岛（Live Activity）、分享扩展、桌面小组件。
+
+## 构建
+
+```bash
+# 依赖（首次）
+npm ci
+export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+(cd ios && ~/.gem/ruby/2.6.0/bin/pod install)
+
+# 模拟器验证
+EXPO_PUBLIC_JK_DEV_IMPORT=1 ./scripts/dev-sim.sh
+
+# 出未签名 IPA（自动同步版本号/别名/断言）
+./scripts/build-ios.sh
+```
+
+版本号统一用 `./scripts/sync-version.sh <version> <build>` 修改（同时更新 `app.json`、`project.pbxproj`、`src/constants/buildInfo.ts`）。
+
+## 文档
+
+| 文档 | 内容 |
+|---|---|
+| [`docs/RELEASE-IPA.md`](docs/RELEASE-IPA.md) | 每个版本的改动、sha256、回归结果 |
+| [`docs/REGRESSION.md`](docs/REGRESSION.md) | 按版本记录的回归清单（构建前过一遍） |
+| [`docs/JKMUSIC-PORT.md`](docs/JKMUSIC-PORT.md) | 桌面版 → iOS 的移植说明 |
+| [`docs/development.md`](docs/development.md) | 开发环境与调试入口 |
+| [`docs/mac-ui-spec.md`](docs/mac-ui-spec.md) | 桌面版 UI 规格对照 |
+
+---
+
+## 底座：CyMusic
+
+以下为底座项目 CyMusic 的原始说明。本项目在其上完成了 JKMUSIC 的架构与 UI 移植。
 
 ## 应用预览
 
@@ -72,8 +122,9 @@ CyMusic 将音乐浏览、播放、歌词和个人歌单放在一起，支持深
 
 | 渠道 | 用途 |
 | --- | --- |
-| [GitHub Releases](https://github.com/gyc-12/Cymusic/releases) | 获取已发布版本与对应说明。 |
-| [main 分支构建](https://github.com/gyc-12/Cymusic/actions/workflows/build-ios.yml?query=branch%3Amain) | 获取当前源码的 IPA；打开最近一次成功运行，在 **Artifacts** 下载 `CyMusic-unsigned-ipa`。 |
+| [`artifacts/ipa/`](artifacts/ipa/) | 本仓库直接提供每个版本的未签名 IPA，文件名带版本与日期。 |
+| [`JKMUSIC-ios-unsigned.ipa`](artifacts/ipa/JKMUSIC-ios-unsigned.ipa) | 固定别名，始终指向最新版。 |
+| [`docs/RELEASE-IPA.md`](docs/RELEASE-IPA.md) | 每个版本的改动与 sha256。 |
 
 本 README 介绍 `main` 分支。Releases 与 `main` 可能处于不同版本；如需 Expo 57 / RNTP v5 版本，请选择对应的 `main` 构建。
 Actions 产物是**未签名 IPA**，安装到真机前需要自己的有效签名和 App Group 配置。
