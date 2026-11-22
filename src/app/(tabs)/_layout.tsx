@@ -19,9 +19,9 @@ export const unstable_settings = { initialRouteName: 'favorites' }
 // iOS 26/27 Apple Music 风格：底部导航是悬浮胶囊（左右留边、离底留白）
 // 60 而不是 54：54 时 icon 34 + label 14 + 上下 padding 刚好溢出，
 // 文字会压到底部圆角上（实测 1.4.x 的视觉问题）
-const TAB_BAR_HEIGHT = 53
-// 功能条水平长度 = 上一版 ×0.8（左右边距按屏宽比例算）
-const TAB_BAR_SIDE_RATIO = 0.155
+const TAB_BAR_HEIGHT = 64
+// 功能条与播放条视觉对齐：左右边距用同一个比例（0.027 ≈ 10pt）
+const TAB_BAR_SIDE_RATIO = 0.027
 const TAB_BAR_BOTTOM = 14
 // 播放条水平长度 = 上一版 ×1.1（比功能条更宽）
 const PLAYER_SIDE_RATIO = 0.027
