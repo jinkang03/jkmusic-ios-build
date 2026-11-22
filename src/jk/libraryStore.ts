@@ -220,6 +220,7 @@ export const updateUserListFromSource = async(
 	const target = state.userLists.find(item => item.id === listId)
 	if (!target) return { ok: false, count: 0, reason: '歌单不存在' }
 	const source = String(target.source ?? '') as any
+	let logLastError = ''
 	if (!source) {
 		return { ok: false, count: 0, reason: '该歌单没有来源平台信息，请重新从平台导入' }
 	}
@@ -231,17 +232,59 @@ export const updateUserListFromSource = async(
 			return {
 				ok: false,
 				count: 0,
-				reason: '该歌单的来源是短链接，无法自动更新；请用含「id=」的完整歌单链接重新导入',
+				reason: '无法从歌单链接解析出 id，请换用完整的歌单分享链接',
 			}
 		}
-		const all: JKMusic[] = []
-		for (let page = 1; page <= 20; page++) {
-			const res: any = await sdk.getSongListDetail(source, sourceListId, page)
-			const chunk: JKMusic[] = res?.list ?? []
-			all.push(...chunk)
-			if (chunk.length < 100) break
+		// 第三方接口偶发限流（tx 的 getListDetail 会连抛 try max num），整体重试两次
+		const fetchAll = async(): Promise<JKMusic[]> => {
+			const acc: JKMusic[] = []
+			for (let page = 1; page <= 20; page++) {
+				const res: any = await sdk.getSongListDetail(source, sourceListId, page)
+				const chunk: JKMusic[] = res?.list ?? []
+				acc.push(...chunk)
+				if (chunk.length < 100) break
+			}
+			return acc
 		}
-		if (!all.length) return { ok: false, count: 0, reason: '平台返回空歌单', sourceListId }
+		let all: JKMusic[] = []
+		for (let attempt = 0; attempt < 3 && !all.length; attempt++) {
+			if (attempt) await new Promise(r => setTimeout(r, 800))
+			try {
+				all = await fetchAll()
+			} catch (e) {
+				logLastError = String((e as any)?.message ?? e)
+			}
+			if (all.length) break
+		}
+		if (!all.length && source === 'tx') {
+			// tx 的 getListDetail 对部分歌单会稳定报 try max num（接口侧差异），
+			// 用另一套公开接口（fcg_v8_playlist_cp）兜底
+			try {
+				const { getPlayListFromQ } = await import('@/helpers/userApi/getMusicSource')
+				const resp: any = await getPlayListFromQ(sourceListId)
+				const songs: any[] = resp?.songs ?? []
+				if (songs.length) {
+					all = songs.map((s: any) => ({
+						id: String(s.id ?? ''),
+						name: String(s.title ?? ''),
+						singer: String(s.artist ?? ''),
+						source: 'tx',
+						interval: s.duration ? String(s.duration) : null,
+						meta: {
+							songmid: String(s.id ?? ''),
+							source: 'tx',
+							albumName: String(s.album ?? ''),
+							picUrl: String(s.artwork ?? ''),
+						},
+					})) as any
+				}
+			} catch (e) {
+				logLastError = String((e as any)?.message ?? e)
+			}
+		}
+		if (!all.length) {
+			return { ok: false, count: 0, reason: logLastError ? `平台接口失败：${logLastError}` : '平台返回空歌单', sourceListId }
+		}
 		setUserLists(state.userLists.map(item => (
 			item.id === listId
 				? { ...item, source, sourceListId, list: all, locationUpdateTime: Date.now() }
@@ -264,17 +307,26 @@ export const resolveSourceListId = async(raw: string): Promise<string> => {
 	const direct = s.match(/[?&]id=(\d+)/)
 	if (direct) return direct[1]
 	if (/^https?:/i.test(s)) {
+		const pick = (text: string) => String(text ?? '').match(/[?&]id=(\d+)/)?.[1] ?? ''
+		// 1) 短链是 302：手动模式下读 location 头（QQ 的 /base/fcgi-bin/u?__=xxx 就是这种）
+		try {
+			const res = await fetch(s, { method: 'GET', redirect: 'manual' as any })
+			const loc = typeof (res as any)?.headers?.get === 'function'
+				? String((res as any).headers.get('location') ?? '')
+				: ''
+			const hit = pick(loc)
+			if (hit) return hit
+		} catch { /* 继续尝试跟随 */ }
+		// 2) 自动跟随：最终 URL 里带 id
 		try {
 			const res = await fetch(s, { method: 'GET' })
-			const finalUrl = String((res as any)?.url ?? '')
-			const m = finalUrl.match(/[?&]id=(\d+)/) ?? s.match(/[?&]id=(\d+)/)
-			if (m) return m[1]
-			// QQ 短链（.../u?__=xxx）返回的是 JS 落地页，服务端拿不到歌单 id。
-			// 返回空让上层提示「请用含 id= 的完整链接重新导入」，而不是拿短链当 id 去请求。
-			return ''
-		} catch {
-			return ''
-		}
+			const hit = pick(String((res as any)?.url ?? ''))
+			if (hit) return hit
+		} catch { /* ignore */ }
+		// 3) 原始链接里本来就带 id
+		const direct = pick(s)
+		if (direct) return direct
+		return ''
 	}
 	return s
 }
