@@ -1,57 +1,52 @@
-> **LATEST：1.4.39 / build 63**
-> 文件 `artifacts/ipa/JKMUSIC-1.4.39-unsigned-20261122.ipa`
-> sha256 `2f892c175b01a7f44fb4f71fcf33f45082bc579df98f1b514cc6f8274ce9cd3e`
+> **LATEST：1.4.40 / build 64**
+> 文件 `artifacts/ipa/JKMUSIC-1.4.40-unsigned-20261122.ipa`
+> sha256 `e04a6787eb6e6c41078dae8929b87322c01d7099807c691ae964ecdf4c782450`
 > 固定别名 `artifacts/ipa/JKMUSIC-ios-unsigned.ipa` 与最新版字节相同（`./scripts/sync-latest-ipa.sh`）。
 > 安装前在 App 内确认版本号（设置 → 其他 → App Version）。
 
-## v1.4.39（2026-11-22）
+## v1.4.40（2026-11-22）
 
 | 项 | 值 |
 |---|---|
-| 产物 | `artifacts/ipa/JKMUSIC-1.4.39-unsigned-20261122.ipa` |
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.40-unsigned-20261122.ipa` |
 | 大小 | 18 MB |
-| sha256 | `2f892c175b01a7f44fb4f71fcf33f45082bc579df98f1b514cc6f8274ce9cd3e` |
-| 版本 / build | 1.4.39 / 63 |
+| sha256 | `e04a6787eb6e6c41078dae8929b87322c01d7099807c691ae964ecdf4c782450` |
+| 版本 / build | 1.4.40 / 64 |
 | 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
-| commit | 见 tag `v1.4.39` |
+| commit | 见 tag `v1.4.40` |
 
-### 1.4.39 下载音质 + 播放缓存与「已缓存」标记
+### 1.4.40 歌手页 / 歌单导入 / 队列与缓存标记 / LRU
 
-**a) 手动下载音质**
+**a) 播放页点歌手没反应**
 
-| 问题 | 修法 |
-|---|---|
-| sidecar 记录成 `quality: unknown`（脚本上报 unknown 时被直接采用） | 下载完按**真实文件**（扩展名 + 大小）校正，脚本 unknown 时回退到请求值 |
-| 下载音质筛选不生效 | sidecar 现在一定有真实音质，下载页直接按它分类 |
-| 下载没显式指定音质时可能落到播放音质 | `resolveSource` 对 download 请求强制读 `download.quality`，绝不用 `music.quality` |
-| 脚本给了 50KB 的片段也照存 | 下载后 < 500KB 直接判失败 |
+- 原因：QQ 歌手搜索接口返回的歌手名带括号（`松隆子 (松たか子)`），原来的严格相等匹配失败；
+  接口偶发不响应时也没有兜底。
+- 修法：去括号后再匹配 + 6 秒超时；查不到 mid 时退到搜索页，保证点歌手一定有反应。
+- 实测：`松隆子 → 000hlGvC24a1ed`，歌手页正常显示歌曲。
 
-**实测**
+**b) 歌单导入**
 
-```
-quality=128k → 4.1MB  mp3  sidecar quality=128k
-quality=320k → 10.3MB mp3  sidecar quality=320k
-quality=flac → 52.8MB flac sidecar quality=flac
-download.quality=128k + music.quality=flac → 4.1MB（未跟随播放音质）
-dlprobe 计数 {128k:1, 320k:1, flac:1, unknown:0}
-下载页选 320k → 只显示 320k 那一条
-```
+| 平台 | 问题 | 修法 | 实测 |
+|---|---|---|---|
+| kg | 新版分享链接用 `gcid_xxx`，没有数字 id，接口全部签名失败 | 解析分享页 SSR 的 `window.$output` | 10 首（分享页上限，共 146，会提示） |
+| tx | `disstid` 接口对部分歌单稳定 `try max num` | 导入路径接入 `fcg_v8_playlist_cp` 兜底（一次返回整张，最多 1000） | 1000 首 |
+| wy | 长链接被 URL 编码一次后 `id=` 解析不到 | `resolveSourceListId` 先 decodeURIComponent | 46 首 |
 
-**b) 播放过的歌自动缓存 + 已缓存标记**
+另外：所有导入路径加了去重（`source:id`），分页接口不认 page 时不会重复堆积。
 
-- 起播 8 秒后（不阻塞播放）后台把当前曲写入 `musicCache`；
-- 写入完成立即在歌曲名后打 ✓（`circle-check`）；
-- 启动时从 `musicCache/index.json` 重建标记；
-- 清缓存 / 删除单个下载时同步取消标记；
-- 再次播放同一首走 `file://`，不再取流。
+**c) wy 歌单点歌不切换 + 全部显示已缓存**
 
-**实测**
+- 根因：wy 歌单详情走 SDK 通道时返回的条目**只有 songmid、没有 id**，
+  而 wy 分支没有过 `normalizeMusic` → 每首歌 id 都是 `undefined`：
+  - 点任意一首都被判定为「当前曲」，所以不切换；
+  - 缓存 key 全是 `wy:undefined`，播一首就整列打勾。
+- 修法：wy 歌单详情也过 `normalizeMusic`。
+- 实测：Maps → Good Time 正常切换；`dumpList` 46 首、unique 46。
 
-```
-[cache] 起播后缓存当前曲: 春泥
-[cache] 标记已缓存 kw:213955314
-二次播放：使用缓存的音频路径播放: file://...
-重启后：[cache] 已缓存索引 3 首
-```
+**d) 缓存 LRU**
+
+- 之前 `enforceCacheLimit` 从未被调用；现在每次缓存完成后按 `download.cacheLimitMb` 淘汰。
+- 只删最老的直到低于上限，新缓存保留；删除文件的同时删索引、取消「已缓存」勾。
+- 实测（上限 60MB）：新增 25MB 后 `LRU 淘汰 1 个文件，剩余 25.2MB`，旧文件、索引、勾一起消失。
 
 

@@ -227,10 +227,45 @@ export const getSongListDetail = async(source: JKSource, id: string, page = 1) =
 			if (!(r?.list?.length > 0)) throw new Error('wy getListDetail 返回空列表')
 			return r
 		}, async() => wyApi.wySongListDetail(id, page))
-		return res
+		// 关键：wy 的 SDK 返回条目只有 songmid、没有 id，必须统一归一化。
+		// 否则导入后每首歌 id 都是 undefined → 点任意一首都被当成「当前曲」，
+		// 而且缓存 key 全变成 wy:undefined → 播一首就整列打勾。
+		const list = (res?.list ?? res?.musicList ?? []).map((music: any) => normalizeMusic(music, 'wy'))
+		return {
+			...res,
+			list,
+			total: res?.total ?? list.length,
+			page,
+		}
 	}
 	if (!mod?.songList?.getListDetail) throw new Error(`${source} 不支持歌单详情`)
-	const res: any = await mod.songList.getListDetail(id, page)
+	let res: any
+	try {
+		res = await mod.songList.getListDetail(id, page)
+	} catch (err) {
+		// tx 的 disstid 接口对部分歌单稳定报 try max num：
+		// 用另一套公开接口（fcg_v8_playlist_cp）兜底，导入/更新都走这里
+		if (source !== 'tx') throw err
+		// fcg_v8_playlist_cp 一次返回整张歌单（最多 1000 首），不支持分页：
+		// 第 1 页返回全部，后续页返回空，避免导入循环把同一页重复 push
+		if (page > 1) return { list: [], total: 0, page, info: {} }
+		const { getPlayListFromQ } = await import('@/helpers/userApi/getMusicSource')
+		const resp: any = await getPlayListFromQ(id)
+		const songs: any[] = resp?.songs ?? []
+		if (!songs.length) throw err
+		const list = songs.map((s: any) => normalizeMusic({
+			id: String(s.id ?? ''),
+			name: String(s.title ?? ''),
+			singer: String(s.artist ?? ''),
+			source: 'tx',
+			interval: s.duration ? String(s.duration) : null,
+			songmid: String(s.id ?? ''),
+			albumName: String(s.album ?? ''),
+			picUrl: String(s.artwork ?? ''),
+		}, 'tx'))
+		logInfo('[musicSdk] tx 歌单兜底(fcg_v8_playlist_cp)', id, 'count=', list.length)
+		return { list, total: list.length, page, info: { name: String(resp?.name ?? '') } }
+	}
 	const normalizedList = (res?.list ?? res?.musicList ?? []).map((music: any) => normalizeMusic(music, source))
 	void import('./crossSourceIndex').then(m => m.remember(normalizedList)).catch(() => undefined)
 	return {

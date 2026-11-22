@@ -1,4 +1,5 @@
 import { httpFetch } from '../../request'
+import { logInfo } from '@/helpers/logger'
 import { decodeName, formatPlayTime, sizeFormate, dateFormat, formatPlayCount } from '../../index'
 import infSign from './vendors/infSign.min'
 import { signatureParams } from './util'
@@ -736,8 +737,68 @@ export default {
     return this.getUserListDetailByLink(body, link)
   },
 
+  /**
+   * kg 新版分享链接（gcid_xxx）没有数字 specialid，官方接口都签不出来。
+   * 分享页本身把歌单元数据和前 10 首 SSR 在 window.$output 里，直接解析它。
+   * 注意：分享页只暴露前 10 首（listinfo.count 才是总数）。
+   */
+  async getListDetailByGcid(gcid, page) {
+    const { body } = await httpFetch(`https://m.kugou.com/songlist/${gcid}/?iszlist=1`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      },
+    }).promise
+    const m = /window\.\$output\s*=\s*(\{[\s\S]*?\});\s*<\/script>/.exec(body)
+    if (!m) throw new Error('kg gcid 页面解析失败')
+    let out
+    try { out = JSON.parse(m[1]) } catch { throw new Error('kg gcid 数据解析失败') }
+    const info = out?.info ?? {}
+    const songs = info?.songs ?? []
+    const list = songs.map(item => {
+      const singers = (item.singerinfo ?? []).map(x => x.name).filter(Boolean)
+      const singer = singers.join('、')
+      let name = String(item.name ?? item.remark ?? '')
+      // kg 的 name 常是「歌手 - 歌名」，去掉前缀避免列表显示重复
+      if (singer && name.startsWith(singer + ' - ')) name = name.slice(singer.length + 3)
+      return {
+      singer,
+      name,
+      albumName: item.albuminfo?.name ?? '',
+      albumId: item.album_id,
+      source: 'kg',
+      interval: formatPlayTime((item.timelen ?? 0) / 1000),
+      songmid: item.hash,
+      hash: item.hash,
+      img: String(item.cover ?? '').replace('{size}', '400'),
+      lrc: null,
+      otherSource: null,
+      types: [],
+      _types: {},
+      typeUrl: {},
+      }
+    })
+    const total = Number(info?.listinfo?.count ?? list.length) || list.length
+    if (total > list.length) {
+      logInfo(`[kg] gcid 分享页只提供 ${list.length} 首（共 ${total} 首）`)
+    }
+    return {
+      list,
+      page: 1,
+      limit: 10000,
+      // 返回真实总数，调用方据此提示「分享页只提供前 N 首」
+      total,
+      source: 'kg',
+      info: {
+        name: info?.listinfo?.name,
+        img: info?.listinfo?.pic,
+        desc: info?.listinfo?.intro,
+        author: info?.listinfo?.list_create_username,
+      },
+    }
+  },
   async getListDetail(id, page) { // 获取歌曲列表内的音乐
     id = id.toString()
+    if (/^gcid_/i.test(id)) return this.getListDetailByGcid(id, page)
     if (id.includes('special/single/')) {
       id = id.replace(this.regExps.listDetailLink, '$1')
     } else if (/https?:/.test(id)) {

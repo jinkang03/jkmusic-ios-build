@@ -1271,6 +1271,73 @@ const SettingsSectionScreen = () => {
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
 					logInfo('[jk/play] playtest url =', url.slice(0, 120))
 					await (tp as any).playWithReplacePlayList(track, [track])
+				} else if (action === 'importList') {
+					const url = String((params as any).url ?? '')
+					if (!url) throw new Error('缺少 url')
+					const detect = () => {
+						if (/y\.qq\.com|qq\.com\/n3\/other\/pages\/details/i.test(url)) return 'tx'
+						if (/kuwo\.cn|k\.kuwo\.cn/i.test(url)) return 'kw'
+						if (/kugou\.com/i.test(url)) return 'kg'
+						if (/163\.cn|music\.163/i.test(url)) return 'wy'
+						if (/migu|12530/i.test(url)) return 'mg'
+						return 'tx'
+					}
+					const source = detect()
+					const lib = await import('@/jk/libraryStore')
+					const sdk = await import('@/jk/musicSdk')
+					const sid = await lib.resolveSourceListId(url)
+					logInfo('[dev] importList source=', source, 'resolvedId=', sid)
+					if (!sid) throw new Error('无法解析歌单 id')
+					const all: any[] = []
+					const seen = new Set<string>()
+					let name = ''
+					for (let page = 1; page <= 20; page++) {
+						const res: any = await sdk.getSongListDetail(source as any, sid, page)
+						const chunk: any[] = res?.list ?? []
+						if (!name && res?.info?.name) name = String(res.info.name)
+						for (const m of chunk) {
+							const k = `${m?.source}:${m?.id}`
+							if (!m?.id || seen.has(k)) continue
+							seen.add(k)
+							all.push(m)
+						}
+						if (chunk.length < 100) break
+					}
+					const uniq = new Set(all.map((m: any) => `${m.source}:${m.id}`))
+					logInfo('[dev] importList fetched count=', all.length, 'unique=', uniq.size, 'name=', name)
+					logInfo('[dev] importList sample=', JSON.stringify(all.slice(0, 3).map((m: any) => ({ id: m.id, name: m.name, source: m.source }))))
+					const created = lib.createUserList(name || `导入歌单 ${new Date().toLocaleDateString()}`)
+					lib.setUserLists(lib.getUserLists().map(item => (
+						item.id === created.id
+							? { ...item, source, sourceListId: sid, list: all, locationUpdateTime: Date.now() }
+							: item
+					)))
+					logInfo('[dev] importList ok listId=', created.id, 'count=', all.length)
+				} else if (action === 'dumpList') {
+					const name = String((params as any).name ?? '')
+					const lib = await import('@/jk/libraryStore')
+					const lists = lib.getUserLists()
+					const hit = lists.find((l: any) => l.name === name) ?? lists.find((l: any) => l.name.includes(name))
+					if (!hit) throw new Error(`找不到歌单: ${name}`)
+					const uniq = new Set(hit.list.map((m: any) => `${m.source}:${m.id}`))
+					logInfo('[dev] dumpList name=', hit.name, 'count=', hit.list.length, 'uniqueKeys=', uniq.size)
+					logInfo('[dev] dumpList sample=', JSON.stringify(hit.list.slice(0, 5).map((m: any) => ({ id: m.id, name: m.name, source: m.source }))))
+				} else if (action === 'artistTest') {
+					const name = String((params as any).name ?? '')
+					try {
+						const u = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?p=1&n=5&w=${encodeURIComponent(name)}&format=json`
+						const r = await fetch(u, { headers: { Referer: 'https://y.qq.com/', 'User-Agent': 'Mozilla/5.0' } })
+						const txt = await r.text()
+						logInfo('[dev] artistRaw status=', r.status, 'len=', txt.length, 'head=', txt.slice(0, 160))
+						const j = JSON.parse(txt)
+						const list = j?.data?.song?.list ?? []
+						logInfo('[dev] artistRaw songs=', list.length, 'singers=', JSON.stringify(list.slice(0, 2).map((x: any) => (x?.singer ?? []).map((s: any) => s?.name))))
+					} catch (e) {
+						logError('[dev] artistRaw failed', String((e as any)?.message ?? e))
+					}
+					const { getSingerMidBySingerName } = await import('@/helpers/userApi/getMusicSource')
+					const mid = await getSingerMidBySingerName(name)
+					logInfo('[dev] artistTest', name, '->', mid || '(null)')
 				} else if (action === 'dlprobe') {
 					const { scanDownloads } = await import('@/jk/downloadStore')
 					const { normalizeQuality } = await import('@/jk/downloader')

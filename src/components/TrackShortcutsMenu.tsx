@@ -53,9 +53,15 @@ export const TrackShortcutsMenu = ({
 	)
 
 	const handleViewArtist = (artist: string) => {
-		getSingerMidBySingerName(artist).then((singerMid) => {
-			router.push(`/(modals)/${singerMid}`)
-		})
+		const name = String(artist ?? '').trim()
+		if (!name) return
+		const fallback = () => router.push({ pathname: '/(tabs)/search', params: { q: name } } as any)
+		getSingerMidBySingerName(name)
+			.then((singerMid) => {
+				if (singerMid) router.push(`/(modals)/${singerMid}` as any)
+				else fallback()
+			})
+			.catch(fallback)
 	}
 	const handleAddToStoredPlayList = (track: IMusic.IMusicItem) => {
 		// 用模块级变量传完整对象：URL 参数会丢掉 meta.songmid，导致加进歌单后无法取流

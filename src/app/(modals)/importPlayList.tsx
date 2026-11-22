@@ -100,12 +100,20 @@ const ImportPlayList = () => {
 			if (!sourceListId) throw new Error('无法从链接中解析歌单 id')
 			logInfo('[importPlayList] importing source=', source, 'id=', sourceListId)
 			const all: any[] = []
+			const seen = new Set<string>()
 			let listName = ''
+			let expectedTotal = 0
 			for (let page = 1; page <= 20; page++) {
 				const res: any = await sdk.getSongListDetail(source as any, sourceListId, page)
 				const chunk: any[] = res?.list ?? []
 				if (!listName && res?.info?.name) listName = String(res.info.name)
-				all.push(...chunk)
+				if (!expectedTotal && Number(res?.total) > 0) expectedTotal = Number(res.total)
+				for (const m of chunk) {
+					const k = `${m?.source}:${m?.id}`
+					if (!m?.id || seen.has(k)) continue
+					seen.add(k)
+					all.push(m)
+				}
 				if (chunk.length < 100) break
 			}
 			if (!all.length) throw new Error('歌单为空或链接失效')
@@ -115,7 +123,12 @@ const ImportPlayList = () => {
 					? { ...item, source, sourceListId, list: all, locationUpdateTime: Date.now() }
 					: item
 			)))
-			logInfo('[importPlayList] imported', source, sourceListId, 'count=', all.length)
+			logInfo('[importPlayList] imported', source, sourceListId, 'count=', all.length, 'total=', expectedTotal)
+			// kg 的 gcid 分享页只给前 10 首：明确告诉用户，而不是装作成功
+			if (expectedTotal > all.length) {
+				const { showToast } = await import('@/utils/utils')
+				showToast('提示', `该歌单共 ${expectedTotal} 首，分享页仅提供 ${all.length} 首`, 'info')
+			}
 			router.dismiss()
 		} catch (err) {
 			setError('导入失败，请检查链接是否正确')

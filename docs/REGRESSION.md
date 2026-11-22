@@ -3,6 +3,18 @@
 > 目的：防止「修好的问题被后续改动丢掉」。新增修复时在对应版本下追加一行。
 > 每项写清「现象 / 验证方式」，验证方式要能一条命令或一次截图完成。
 
+## 1.4.40
+
+| # | 现象 | 验证方式 |
+|---|---|---|
+| 1 | 播放页点歌手没反应 | `artistTest&name=松隆子` → 返回 mid；`jkmusic://000hlGvC24a1ed` 打开歌手页并有歌曲 |
+| 2 | kg gcid 分享链接导入失败 | `importList&url=https://m.kugou.com/songlist/gcid_xxx/?iszlist=1` → 导入 10 首，日志 `gcid 分享页只提供 10 首（共 146 首）` |
+| 3 | tx 歌单导入 try max num | `importList&url=https://y.qq.com/n/ryqq_v2/playlist/8520092613` → 1000 首、unique=1000 |
+| 4 | wy 歌单导入后点别的歌不切换 | `playUserList` idx 1 → idx 6，标题必须从 Maps 变成 Good Time |
+| 5 | wy 导入后全部显示已缓存 | 播 1 首后 `ls musicCache` 只有 1 个文件；`dumpList` uniqueKeys == count |
+| 6 | 缓存超限一次全清 | `cacheLimitMb=60` 再缓存一首 → `LRU 淘汰 1 个文件，剩余 25.2MB`，新文件保留、旧文件与索引/勾一起删除 |
+| 7 | 导入重复 | 同一歌单导入后 `unique == count`（tx 1000/1000、wy 46/46） |
+
 ## 1.4.39
 
 | # | 现象 | 验证方式 |

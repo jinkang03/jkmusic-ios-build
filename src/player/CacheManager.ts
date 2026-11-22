@@ -214,6 +214,13 @@ export const enforceCacheLimit = async(limitBytes: number, activePath?: string):
 		if (total <= limitBytes) return 0
 		entries.sort((a, b) => a.mtime - b.mtime)
 		let removed = 0
+		const index = await readCacheIndex()
+		let indexDirty = false
+		let unmarkCached: any = null
+		try {
+			const m = await import('@/jk/cacheIndexStore')
+			unmarkCached = m.unmarkCached
+		} catch { /* ignore */ }
 		for (const entry of entries) {
 			if (total <= limitBytes) break
 			if (activePath && entry.uri.endsWith(activePath.replace(/^.*\//, ''))) continue
@@ -221,8 +228,22 @@ export const enforceCacheLimit = async(limitBytes: number, activePath?: string):
 				await FileSystem.deleteAsync(entry.uri, { idempotent: true })
 				total -= entry.size
 				removed++
+				// 同步清掉索引与「已缓存」标记，避免删了文件列表还打着勾
+				const base = entry.uri.split('/').pop() ?? ''
+				const meta: any = index[base]
+				if (meta) {
+					delete index[base]
+					indexDirty = true
+					if (unmarkCached) {
+						unmarkCached(meta.actualSource ?? meta.source, meta.actualId ?? meta.songmid)
+						if (String(meta.source ?? '') !== String(meta.actualSource ?? meta.source ?? '')) {
+							unmarkCached(meta.source, meta.songmid)
+						}
+					}
+				}
 			} catch { /* ignore */ }
 		}
+		if (indexDirty) await writeCacheIndex(index)
 		logInfo(`[cache] LRU 淘汰 ${removed} 个文件，剩余 ${(total / 1024 / 1024).toFixed(1)}MB`)
 		return removed
 	} catch (err) {

@@ -407,13 +407,18 @@ const PlayerScreenContent = () => {
 	}, [lyricProgress])
 
 	const handleViewArtist = useCallback((artist: string) => {
-		if (!artist.includes('未知')) {
-			getSingerMidBySingerName(artist).then((singerMid) => {
-				if (singerMid) {
-					router.navigate(`/(modals)/${singerMid}`)
-				}
-			})
+		const name = String(artist ?? '').trim()
+		if (!name || name.includes('未知')) return
+		const fallback = () => {
+			// 查不到歌手 mid（接口失败/无结果）时退到搜索页，保证「点歌手一定有反应」
+			router.push({ pathname: '/(tabs)/search', params: { q: name } } as any)
 		}
+		getSingerMidBySingerName(name)
+			.then((singerMid) => {
+				if (singerMid) router.navigate(`/(modals)/${singerMid}` as any)
+				else fallback()
+			})
+			.catch(fallback)
 	}, [])
 
 	const handleFavorite = useCallback(() => {

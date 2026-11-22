@@ -452,10 +452,13 @@ export async function getMusicByAlbumId(albumMid: string, singerName: string): P
 }
 export async function getSingerMidBySingerName(singerName: string) {
 	// 去除歌手名称中的空格
-	const url = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?p=1&n=2&w=${encodeURIComponent(singerName)}&format=json`
+	const url = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?p=1&n=5&w=${encodeURIComponent(singerName)}&format=json`
 	try {
-		// console.log('singerName++', singerName)
-		const response = await fetch(url)
+		// 接口偶发不响应：6 秒超时，避免点了歌手没有任何反馈
+		const response = await Promise.race([
+			fetch(url, { headers: { Referer: 'https://y.qq.com/', 'User-Agent': 'Mozilla/5.0' } }),
+			new Promise<never>((_, reject) => setTimeout(() => reject(new Error('singer lookup timeout')), 6000)),
+		])
 		if (!response.ok) {
 			throw new Error('Network response was not ok')
 		}
@@ -468,16 +471,26 @@ export async function getSingerMidBySingerName(singerName: string) {
 		// logInfo(songList)
 
 		// 查找匹配歌手名和歌曲名的项
+		// 接口返回的歌手名常带括号补充（如「松隆子 (松たか子)」），先去掉括号内容再比
+		const norm = (v: any) => String(v ?? '')
+			.toLowerCase()
+			.replace(/[（(][^)）]*[)）]/g, '')
+			.replace(/\s+/g, '')
+		const target = norm(singerName)
 		for (const song of songList) {
-			// 在歌手列表中查找匹配的歌手
-			// 先尝试完全匹配
-			const exactMatch = song.singer.find((s) => s.name.toLowerCase() === singerName.toLowerCase())
+			const singers: any[] = Array.isArray(song?.singer) ? song.singer : []
+			if (!singers.length) continue
+			// 先尝试完全匹配（去括号后）
+			const exactMatch = singers.find((s) => {
+				const n = norm(s?.name)
+				return n === target || (!!target && n.includes(target))
+			})
 			if (exactMatch) {
 				return exactMatch.mid
 			}
 			// 如果没有完全匹配，再尝试模糊匹配
-			const matchingSinger = song.singer.find(
-				(s) => similarity(s.name, singerName) > 0.3, // 0.7 是相似度阈值，可以根据需要调整
+			const matchingSinger = singers.find(
+				(s) => similarity(String(s?.name ?? ''), singerName) > 0.3,
 			)
 			if (matchingSinger) {
 				logInfo('模糊匹配歌手:', matchingSinger.name)

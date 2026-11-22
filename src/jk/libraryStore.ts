@@ -301,11 +301,20 @@ export const updateUserListFromSource = async(
  * lxmc 备份里的 sourceListId 通常是完整链接（含短链），不能直接传给 getSongListDetail。
  */
 export const resolveSourceListId = async(raw: string): Promise<string> => {
-	const s = String(raw ?? '').trim()
+	let s = String(raw ?? '').trim()
 	if (!s) return ''
+	// 分享链接常被整体 URL 编码一次（%26id%3D...），先还原再解析
+	if (/%[0-9a-f]{2}/i.test(s)) {
+		try { s = decodeURIComponent(s) } catch { /* 保持原样 */ }
+	}
 	if (/^\d+$/.test(s)) return s
 	const direct = s.match(/[?&]id=(\d+)/)
 	if (direct) return direct[1]
+	// kg 新版分享链接用 gcid（全局收藏 id），没有数字 specialid：
+	// https://m.kugou.com/songlist/gcid_3z9ftcayz1cz0c6/?...
+	if (/^gcid_/i.test(s)) return s
+	const gcid = s.match(/gcid_([a-z0-9]+)/i)
+	if (gcid) return `gcid_${gcid[1]}`
 	if (/^https?:/i.test(s)) {
 		// 各平台的歌单 id 提取规则（顺序很重要：先具体路径，再通用参数）
 		const PATTERNS: RegExp[] = [

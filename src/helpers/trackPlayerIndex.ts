@@ -513,6 +513,9 @@ const maybeCacheCurrent = (position: number) => {
 				logInfo('[cache] 起播后缓存当前曲:', String(cur?.title ?? ''))
 				const m = await import('@/player/CacheManager')
 				await m.downloadToCache({ ...(cur as any), url } as any)
+				// 超出缓存上限时只淘汰最老的，保留新缓存（不再整份清空）
+				const limitMb = Number(getSetting('download.cacheLimitMb', 500)) || 500
+				await m.enforceCacheLimit(limitMb * 1024 * 1024, url)
 			} catch (err) {
 				logError('[cache] 缓存当前曲失败', String((err as any)?.message ?? err))
 			}
