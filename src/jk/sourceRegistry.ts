@@ -92,8 +92,12 @@ const verifyMediaUrl = async(url: string): Promise<boolean> => {
 		clearTimeout(timer)
 		const code = Number(res.status)
 		return !(code === 400 || code === 404 || code === 410)
-	} catch {
-		// 超时/网络抖动不判死：交给下载环节的换源重试兜底
+	} catch (err: any) {
+		// 超时（3s 连响应头都没有）= 这条地址不能用于流式播放。
+		// 实测 tx 部分脚本会返回「连得上但永不响应」的地址，AVPlayer 会永远停在 0:00，
+		// 既不出错也不推进 —— 必须在选源阶段就判死，让脚本池换下一个。
+		if (String(err?.name ?? '') === 'AbortError') return false
+		// 其它网络抖动不判死（DNS 瞬断等），交给播放看门狗兜底
 		return true
 	}
 }

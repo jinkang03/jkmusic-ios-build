@@ -1248,9 +1248,9 @@ const SettingsSectionScreen = () => {
 					setSetting('download.cacheLimitMb', 500)
 					logInfo('[jk/dev] 已清理 dev 标志')
 				} else if (action === 'badurl') {
-					const g3: any = globalThis
-					g3.__JK_FORCE_BAD_URL__ = 'https://127.0.0.1:9/x.mp3'
-					logInfo('[jk/play] 已开启坏 URL 实验（下次播放强制失败）')
+					const target = String((params as any).url ?? '')
+					setSetting('_dev.forceBadUrl', /^https?:/.test(target) ? target : true)
+					logInfo('[jk/play] 已开启坏 URL 实验:', target || '默认 127.0.0.1:9')
 				} else if (action === 'slowbuffer') {
 					const ms = Number((params as any).ms ?? 1500)
 					;(globalThis as any).__JK_SLOW_BUFFER_MS__ = ms

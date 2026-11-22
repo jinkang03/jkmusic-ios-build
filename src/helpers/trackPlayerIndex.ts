@@ -172,6 +172,7 @@ function setPlaybackIntent(intent: 'play' | 'pause' | 'stop') {
 	// 恢复播放/停止都重置停滞计时：暂停期间累计的「不动」不算卡住
 	streamGuardLastAdvanceAt = Date.now()
 	streamGuardLastTick = Date.now()
+	if (intent === 'play') streamGuardHalted = false
 }
 
 function retireTrackSkip() {
@@ -424,6 +425,10 @@ const getFakeNextTrack = (): Track => {
 async function haltWithNotice(message = '所有平台均不可用，点击播放重试') {
 	retireTrackSkip()
 	try { await ReactNativeTrackPlayer.pause() } catch { /* ignore */ }
+	// 停住后不再自动换源：等用户点播放（play() 会重新武装看护）
+	streamGuardHalted = true
+	streamGuardLastAdvanceAt = Date.now()
+	streamGuardLastPos = -1
 	showToast('播放失败', message, 'error')
 }
 
@@ -450,8 +455,11 @@ let streamGuardLastPos = -1
 let streamGuardLastAdvanceAt = 0
 let streamGuardTruncationChecked = false
 let streamGuardRecovering = false
+/** 已停住等用户手动重试：期间不再自动触发换源（否则会每 12s 弹一次提示） */
+let streamGuardHalted = false
 
 const resetStreamGuards = () => {
+	streamGuardHalted = false
 	streamGuardLastTick = Date.now()
 	streamGuardLastPos = -1
 	streamGuardLastAdvanceAt = Date.now()
@@ -507,7 +515,7 @@ const startStreamGuard = () => {
 				streamGuardLastPos = pos
 				return
 			}
-			if (streamGuardRecovering) return
+			if (streamGuardRecovering || streamGuardHalted) return
 
 			// 1) 片段检测：每次换源只查一次
 			if (!streamGuardTruncationChecked && dur > 0 && pos > 3) {
@@ -515,14 +523,27 @@ const startStreamGuard = () => {
 				void checkStreamTruncation(dur)
 			}
 
-			// 2) 停滞检测（播完、进度回 0 都不算）
+			// 2) 停滞检测（播完不算）
 			const ended = dur > 0 && pos >= dur - 1.5
 			if (!ended && Math.abs(pos - streamGuardLastPos) > 0.4) {
 				streamGuardLastPos = pos
 				streamGuardLastAdvanceAt = now
 				return
 			}
-			if (ended || pos <= 0.5) return
+			if (ended) return
+			// 2a) 从未起播：position 和 duration 都是 0（地址连上了但永远不返回数据）
+			if (pos <= 0.5 && dur <= 0) {
+				if (now - streamGuardLastAdvanceAt > 12000 && !streamGuardRecovering) {
+					streamGuardLastAdvanceAt = now
+					streamGuardRecovering = true
+					logError('[jk/play] 12s 无任何音频数据（duration=0），尝试换源')
+					void failToPlay()
+						.catch(err => logError('[jk/play] 停滞恢复失败', String((err as any)?.message ?? err)))
+						.finally(() => { streamGuardRecovering = false })
+				}
+				return
+			}
+			if (pos <= 0.5) return
 			if (now - streamGuardLastAdvanceAt > 15000) {
 				streamGuardLastAdvanceAt = now
 				streamGuardRecovering = true
@@ -898,7 +919,11 @@ const setTrackSource = (track: Track) => {
 			playWatchdogTimer = null
 			void (async() => {
 				try {
-					if (trackSourceLoadingStore.getValue() !== token) return
+					// 注意：这里不能比 trackSourceLoadingStore —— 它在 play() 的 finally
+					// 里已被清成 null，而 token 是 setTrackSource 新生成的，永远不相等，
+					// 结果是看门狗从不生效（0:00 卡死的根因）。
+					// 正确做法是比 nativeQueue.token：换曲/换源后它会被替换。
+					if (nativeQueue?.token !== token) return
 					if (!isCurrentMusic(track as IMusic.IMusicItem)) return
 					if (playbackIntentStore.getValue() !== 'play') return
 					const progress: any = ReactNativeTrackPlayer.getProgress?.() ?? {}

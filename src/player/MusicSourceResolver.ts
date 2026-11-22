@@ -259,7 +259,11 @@ export const findPlayableAlt = async (
 	const { searchBySource } = await import('@/jk/musicSdk')
 	// 开发开关：把候选地址替换成必然失败的地址，用来验证「一个接一个换源」链路
 	const { getSetting: getDevSetting } = await import('@/jk/settingsStore')
-	const forceBadUrl = getDevSetting<boolean>('_dev.forceBadUrl', false) === true
+	const badFlag = getDevSetting<any>('_dev.forceBadUrl', false)
+	const forceBadUrl = badFlag === true || (typeof badFlag === 'string' && /^https?:/.test(badFlag))
+	const forceBadValue = typeof badFlag === 'string' && /^https?:/.test(badFlag)
+		? badFlag
+		: 'https://127.0.0.1:9/x.mp3'
 
 	const targetTitleFull = normalizeMatchKey(title)
 	const targetTitleMain = stripTitleDecor(title)
@@ -345,7 +349,7 @@ export const findPlayableAlt = async (
 					logInfo(`[resolve] matrix ok platform=${c.platform} quality=${q} id=${c.id} from=${c.fromIndex ? 'index' : 'search'}`)
 					if (forceBadUrl) logInfo('[resolve] 坏 URL 实验生效（换源链路）:', c.platform, c.id)
 					accept({
-						url: forceBadUrl ? 'https://127.0.0.1:9/x.mp3' : url,
+						url: forceBadUrl ? forceBadValue : url,
 						source: c.platform,
 						id: c.id,
 						label: platformLabel(c.platform),
@@ -746,7 +750,10 @@ export const resolveSource = async (
 				return { url: fakeAudioMp3Uri, wasCached: false }
 			}
 			const { getSetting: getDevSetting } = await import('@/jk/settingsStore')
-			const badUrl = getDevSetting('_dev.forceBadUrl', false) ? 'https://127.0.0.1:9/x.mp3' : ''
+			const badFlag2 = getDevSetting<any>('_dev.forceBadUrl', false)
+			const badUrl = typeof badFlag2 === 'string' && /^https?:/.test(badFlag2)
+				? badFlag2
+				: (badFlag2 === true ? 'https://127.0.0.1:9/x.mp3' : '')
 			if (badUrl) {
 				logInfo('[jk/play] 坏 URL 实验生效:', badUrl)
 				resp_url = badUrl

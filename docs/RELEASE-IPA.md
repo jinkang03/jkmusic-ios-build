@@ -1,59 +1,62 @@
-> **LATEST：1.4.34 / build 58**
-> 文件 `artifacts/ipa/JKMUSIC-1.4.34-unsigned-20261122.ipa`
-> sha256 `29a83542c9d04c52fe5adbef662534ac7a9c33061e3bc32713630838033c8a7f`
+> **LATEST：1.4.35 / build 59**
+> 文件 `artifacts/ipa/JKMUSIC-1.4.35-unsigned-20261122.ipa`
+> sha256 `df44e8c3da85973527d5b098bfe18640b00dfe28fecc8c5dac81de34283cae3b`
 > 固定别名 `artifacts/ipa/JKMUSIC-ios-unsigned.ipa` 与最新版字节相同（`./scripts/sync-latest-ipa.sh`）。
 > 安装前在 App 内确认版本号（设置 → 其他 → App Version）。
 
-## v1.4.34（2026-11-22）
+## v1.4.35（2026-11-22）
 
 | 项 | 值 |
 |---|---|
-| 产物 | `artifacts/ipa/JKMUSIC-1.4.34-unsigned-20261122.ipa` |
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.35-unsigned-20261122.ipa` |
 | 大小 | 18 MB |
-| sha256 | `29a83542c9d04c52fe5adbef662534ac7a9c33061e3bc32713630838033c8a7f` |
-| 版本 / build | 1.4.34 / 58 |
+| sha256 | `df44e8c3da85973527d5b098bfe18640b00dfe28fecc8c5dac81de34283cae3b` |
+| 版本 / build | 1.4.35 / 59 |
 | 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
-| commit | 见 tag `v1.4.34` |
+| commit | 见 tag `v1.4.35` |
 
-### 1.4.34 流式播放的两个运行时看护（批次 3）
+### 1.4.35 修「点歌后 0:00 卡死不恢复」
 
-改成流式后丢了「下载完再校验」这条防线，补两个运行时检查（每 5 秒采样一次进度）：
+**现象**：排行榜点任意歌，进度条停在 0:00 / 0:00，不报错、不换源、没有任何提示。
 
-**a) 试听片段检测**
+**根因（三处叠加）**
 
-```
-播放到 3 秒后，比较 RNTP 的 duration 与曲目元信息里的时长；
-实际 < 应有 × 80%（且应有 >= 60s）→ 判定为试听片段 → 换源
-```
+1. **源返回了「连得上但永不响应」的地址**。实测
+   `curl http://106.0.55.102/2026-11-22-150024_110711.mp3` → 12 秒无任何响应（code=000）。
+   AVPlayer 对这种地址既不报错也不推进，永远停在 0:00。
+2. **`verifyMediaUrl` 把超时当成可用**（`catch → return true`），所以这条死地址通过了选源。
+3. **8 秒起播看门狗的守卫写错，从未生效过**：
 
-本地文件（`file://`）不参与，避免误判。
-
-**b) 中途停滞检测**
-
-```
-播放意图为 play 且位置 > 0.5s：
-位置 15 秒没有前进（前后跳动 > 0.4s 视为前进，含拖动）
-→ 与起播失败同样处理：换源
+```js
+// 旧代码
+if (trackSourceLoadingStore.getValue() !== token) return
 ```
 
-三道防误判：
-- 播完（position ≥ duration-1.5）不判；
-- 暂停/停止期间不计时；
-- App 挂起恢复时（采样间隔 > 10s）重新计时。
+`token` 是 `setTrackSource` 新生成的，而 `trackSourceLoadingStore` 在 `play()` 的 `finally`
+里已被清成 `null` —— 两者永远不相等，看门狗每次都在第一行返回。
 
-**开发开关（仅调试用）**
+**修复**
 
-- `jkmusic://settingSection/dev?action=clipsim&on=1` → 把应有时间放大到 600s，用来验证片段检测；
-- `jkmusic://settingSection/dev?action=nativePause` → 只暂停原生播放器不改意图，用来验证停滞检测。
+| # | 改动 |
+|---|---|
+| 1 | 看门狗守卫改为 `nativeQueue?.token !== token`（换曲/换源后 token 会被替换） |
+| 2 | `verifyMediaUrl`：3 秒内连响应头都没有（AbortError）→ 判死，脚本池换下一个 |
+| 3 | 停滞看护新增「从未起播」分支：position 和 duration 都是 0 超过 12s → 换源 |
+| 4 | `haltWithNotice` 置 `streamGuardHalted`：停住后不再每 12s 自动重试、重复弹提示；点播放即重新武装 |
+| 5 | 开发开关 `action=badurl&url=...` 可指定任意坏地址，用来复现挂死场景 |
 
 **实测**
 
 ```
-片段：流式时长明显偏短 270s/600s → 换源 kw -> tx -> wy
-停滞：position=6.3 冻结 → 15s 后「播放停滞 15s」→ 换源 kw -> wy
-连续播放 70 秒：pos=69.15，停滞/片段误判 0 次，换源 0 次
-连续切歌 10/10，连续拖动 10/10，误判 0 次
-五平台：kw 7.36 / kg 4.09 / tx 15.06 / wy 8.12 / mg 6.19
+挂死地址复现：
+看门狗超时：8s 未就绪 position= 0 duration= 0 state= buffering
+换源成功 kw -> wy
+看门狗超时：8s 未就绪 ...
+换源成功 kw -> tx
+...
+停住后再等 25s：换源/看门狗计数不再增加（不会无限重试）
+
+正常播放：连播 6 首，pos 8.5-10.4（12s 窗口），看门狗误报 0
 ```
 
 
