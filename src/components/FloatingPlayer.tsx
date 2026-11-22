@@ -95,7 +95,7 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 			<BlurView
 				intensity={Math.round(Math.min(1, Math.max(0, Number(glassAlpha ?? 0.55))) * 100)}
 				// 功能页统一白字 + 深色玻璃：tint 用 dark，否则 light blur 会把底色洗白
-				tint={'dark'}
+				tint={Number(glassAlpha ?? 0.55) > 0.5 ? 'light' : 'dark'}
 				style={styles.blurContainer}
 			>
 				{/* 液态玻璃高光：顶部一道白色渐隐，配合细描边形成「玻璃厚度」 */}

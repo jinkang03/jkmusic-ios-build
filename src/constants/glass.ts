@@ -44,9 +44,9 @@ export const glass = (isDark: boolean, alphaOverride?: number): GlassTokens => {
 	// 看起来像「盖了一层白遮罩」，永远不够透
 	const strokeAlpha = Math.min(1, a * 1.1)
 	return {
-		// 功能页统一「白字 + 深色玻璃」：白色填充上白字看不见，改为深色底
-		fill: isDark ? `rgba(30,30,32,${a.toFixed(3)})` : `rgba(18,18,20,${(a * 0.55).toFixed(3)})`,
-		fillStrong: isDark ? `rgba(30,30,32,${strong.toFixed(3)})` : `rgba(18,18,20,${(strong * 0.6).toFixed(3)})`,
+		// 填充始终是白色：滑块拉满 = 纯白不透明（用户要求），越透越接近壁纸
+		fill: isDark ? `rgba(30,30,32,${a.toFixed(3)})` : `rgba(255,255,255,${a.toFixed(3)})`,
+		fillStrong: isDark ? `rgba(30,30,32,${strong.toFixed(3)})` : `rgba(255,255,255,${strong.toFixed(3)})`,
 		stroke: `rgba(255,255,255,${strokeAlpha.toFixed(3)})`,
 		highlight: isDark ? `rgba(255,255,255,${(a * 0.12).toFixed(3)})` : `rgba(255,255,255,${(a * 0.9).toFixed(3)})`,
 		shadow: 'rgba(0,0,0,0.18)',

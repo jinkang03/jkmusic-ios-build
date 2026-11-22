@@ -148,6 +148,15 @@ export const usePageTheme = (): AppThemeContextValue => {
 	const t = useAppTheme()
 	const lightColors = useMemo(() => getThemeColors('light'), [])
 	const customTextColor = textColorStore.useValue()
+	// 玻璃很实（接近纯白）时白字看不见 -> 回深色字
+	const solid = Number(t.glassAlpha ?? 0.55) > 0.65
+	const lightInk = {
+		text: '#424242',
+		textMuted: '#9B9B9B',
+		placeholder: '#9B9B9B',
+		icon: '#424242',
+		separator: 'rgba(0,0,0,0.08)',
+	}
 	const paperText = customTextColor
 		? {
 			text: customTextColor,
@@ -176,12 +185,12 @@ export const usePageTheme = (): AppThemeContextValue => {
 					statusBarStyle: 'light' as const,
 				}
 			}
-			// 浅色 + 壁纸：照片上深灰字看不清，统一白色
+			// 浅色 + 壁纸：照片上深灰字看不清，统一白色；玻璃很实时回深色
 			if (hasWallpaper) {
-				return { ...t, colors: { ...t.colors, ...paperText } }
+				return { ...t, colors: { ...t.colors, ...(solid ? lightInk : paperText) } }
 			}
 			return t
 		},
-		[t, lightColors, hasWallpaper, customTextColor],
+		[t, lightColors, hasWallpaper, customTextColor, solid],
 	)
 }
