@@ -50,7 +50,12 @@ export const downloadTrack = async(track: any, opts?: { quality?: string, listNa
 		if (forceBad) logInfo('[download] forceBad url=', String(resolved?.url ?? ''))
 		const url = String(resolved?.url ?? '')
 		if (!url) throw new Error('解析未返回可下载地址')
-		const actual = normalizeQuality(String((globalThis as any).__jkActualQuality ?? requested))
+		// 脚本经常返回 'unknown'（没有 bitrate$ 参数），不能拿它覆盖用户选的音质。
+		// 先按「请求值」占位，下载完后再用真实文件（扩展名 + 大小）校正。
+		const scriptActual = String((globalThis as any).__jkActualQuality ?? '')
+		let actual = normalizeQuality(
+			scriptActual && scriptActual !== 'unknown' ? scriptActual : requested,
+		)
 
 		const ds = await import('@/jk/downloadStore')
 		const dir = ds.getDownloadDir(opts?.listName)
@@ -70,6 +75,15 @@ export const downloadTrack = async(track: any, opts?: { quality?: string, listNa
 				if (pct % 20 === 0) logInfo('[download] progress', String(track.title ?? ''), pct + '%')
 			})
 		})
+
+		// 兜底：正常歌曲至少 500KB；低于这个值基本是试听片段/坏链
+		{
+			const st0: any = await (FileSystem as any).getInfoAsync(dest)
+			if (Number(st0?.size ?? 0) < 500 * 1024) {
+				try { await (FileSystem as any).deleteAsync(dest, { idempotent: true }) } catch { /* ignore */ }
+				throw new Error('下载文件过小，可能是试听片段')
+			}
+		}
 
 		// 完整性校验：拒绝试听片段
 		const { readAudioDuration, isTruncatedAudio, parseIntervalSeconds, intervalOf } = await import('@/player/audioDuration')
@@ -102,6 +116,14 @@ export const downloadTrack = async(track: any, opts?: { quality?: string, listNa
 		} catch { /* 封面失败不影响下载 */ }
 
 		const st: any = await (FileSystem as any).getInfoAsync(dest)
+		const fileSize = Number(st?.size ?? 0)
+		const baseQuality = scriptActual && scriptActual !== 'unknown' ? scriptActual : requested
+		actual = normalizeQuality(baseQuality, fileSize, dest)
+		const RANK: Record<string, number> = { '128k': 1, '320k': 2, flac: 3 }
+		if (RANK[requested] && RANK[actual] && RANK[actual] < RANK[requested]) {
+			logInfo('[download] 源仅提供', actual, '（请求', requested + '）')
+			showToast('提示', `该源仅提供 ${actual}，已按此音质下载`, 'info')
+		}
 		await ds.writeSidecar(dest, {
 			title: String(track?.title ?? ''),
 			artist: String(track?.artist ?? ''),
@@ -111,7 +133,12 @@ export const downloadTrack = async(track: any, opts?: { quality?: string, listNa
 			source: String((track as any)?.platform ?? ''),
 			sourceId: String((track as any)?.id ?? ''),
 			quality: actual,
-			bitrate: String((globalThis as any).__jkActualQuality ?? actual),
+			// 脚本上报的 bitrate 可能和真实文件不一致（实测 128k 文件上报 2000k）：
+			// 归一化后对不上就以真实文件为准
+			bitrate: (() => {
+				const scriptQ = normalizeQuality(scriptActual)
+				return scriptActual && scriptActual !== 'unknown' && scriptQ === actual ? scriptActual : actual
+			})(),
 			fileSize: Number(st?.size ?? 0),
 			downloadedAt: Date.now(),
 			listName: String(opts?.listName ?? '试听'),

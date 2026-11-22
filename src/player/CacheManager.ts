@@ -91,7 +91,19 @@ export const upsertCacheIndex = (basename: string, entry: CacheIndexEntry) => {
 export const removeCacheIndexEntry = (basename: string) => {
 	indexQueue = indexQueue.then(async() => {
 		const index = await readCacheIndex()
-		if (index[basename]) { delete index[basename]; await writeCacheIndex(index) }
+		const entry: any = index[basename]
+		if (entry) {
+			delete index[basename]
+			await writeCacheIndex(index)
+			// 同步「已缓存」标记，避免删除后列表还打着勾
+			try {
+				const { unmarkCached } = await import('@/jk/cacheIndexStore')
+				unmarkCached(entry?.actualSource ?? entry?.source, entry?.actualId ?? entry?.songmid)
+				if (String(entry?.source ?? '') !== String(entry?.actualSource ?? entry?.source ?? '')) {
+					unmarkCached(entry?.source, entry?.songmid)
+				}
+			} catch { /* ignore */ }
+		}
 	}).catch(() => undefined)
 	return indexQueue
 }
@@ -164,6 +176,14 @@ export const downloadToCache = async (
 				source: (musicItem as any).platform,
 			})
 		} catch { /* 索引失败不影响播放 */ }
+		// 通知 UI：这首已缓存（歌曲行打勾）
+		try {
+			const { markCached } = await import('@/jk/cacheIndexStore')
+			markCached(String(opts?.actualSource ?? (musicItem as any).platform ?? ''), String(opts?.actualId ?? (musicItem as any).id ?? ''))
+			if (String((musicItem as any).platform ?? '') !== String(opts?.actualSource ?? (musicItem as any).platform ?? '')) {
+				markCached((musicItem as any).platform, (musicItem as any).id)
+			}
+		} catch { /* ignore */ }
 		logInfo('音频文件已缓存到本地:', localPath)
 		return localPath
 	} catch (error) {
@@ -240,6 +260,11 @@ export const clearCache = async () => {
 		})
 		importedLocalMusicStore.setValue(updatedImportedLocalMusic)
 		PersistStatus.set('music.importedLocalMusic', updatedImportedLocalMusic)
+		// 清空后把「已缓存」标记一起清掉
+		try {
+			const { cachedKeysStore } = await import('@/jk/cacheIndexStore')
+			cachedKeysStore.setValue(new Set())
+		} catch { /* ignore */ }
 		logInfo('缓存已清理')
 	} else {
 		logInfo('缓存目录不存在，无需清理')

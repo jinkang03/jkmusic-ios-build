@@ -18,6 +18,7 @@ import StateView from './StateView'
 import { useSetting } from '@/jk/settingsStore'
 import { sourceLabel } from '@/jk/sourceLabels'
 import type { Track } from '@/player/types'
+import { cachedKeysStore, isCachedKey } from '@/jk/cacheIndexStore'
 
 const formatDuration = (v?: number | string | null): string => {
 	if (typeof v === 'string' && v.includes(':')) return v
@@ -95,6 +96,7 @@ const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress,
 						badge={showSource && item?.platform
 							? sourceLabel(String(item.platform), true, sourceNameType === 'real' ? 'real' : 'alias')
 							: undefined}
+						cached={isCachedKey(item?.platform, item?.id)}
 						active={active}
 						onPress={() => {
 							onTrackPress?.()

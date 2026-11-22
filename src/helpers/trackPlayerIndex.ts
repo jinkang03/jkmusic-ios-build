@@ -378,6 +378,7 @@ async function setupTrackPlayer() {
 					const durNow = Number((data as any)?.duration ?? 0)
 					preloadNextInAdvance(posNow, durNow)
 					warmNextStream(posNow, durNow)
+					maybeCacheCurrent(posNow)
 					if (latPlayAt && key !== latAudibleKey) {
 						latAudibleKey = key
 						const pos = Number((data as any)?.position ?? 0)
@@ -412,6 +413,7 @@ async function setupTrackPlayer() {
 			}),
 		)
 		startStreamGuard()
+		void import('@/jk/cacheIndexStore').then(m => m.refreshCachedKeys()).catch(() => undefined)
 		logInfo('播放器初始化完成')
 	}
 }
@@ -488,6 +490,35 @@ let streamGuardHalted = false
  */
 const PRELOAD_REMAINING_SECONDS = 20
 let preloadTriggeredFor = ''
+
+/** 当前正在播放的地址（流式地址不在曲目对象里，缓存时需要它） */
+let currentMediaUrl = ''
+/** 起播后缓存当前曲：每首只触发一次 */
+let cachedTriggeredFor = ''
+
+const maybeCacheCurrent = (position: number) => {
+	try {
+		if (position < 8) return
+		if (!autoCacheLocalStore.getValue()) return
+		const cur: any = currentMusicStore.getValue()
+		const key = `${cur?.platform ?? ''}:${cur?.id ?? ''}`
+		if (!key || key === ':' || cachedTriggeredFor === key) return
+		const url = currentMediaUrl
+		if (!url || url.startsWith('file://') || url.includes('fake')) return
+		cachedTriggeredFor = key
+		void (async() => {
+			try {
+				const { isCachedKey } = await import('@/jk/cacheIndexStore')
+				if (isCachedKey(cur.platform, cur.id)) return
+				logInfo('[cache] 起播后缓存当前曲:', String(cur?.title ?? ''))
+				const m = await import('@/player/CacheManager')
+				await m.downloadToCache({ ...(cur as any), url } as any)
+			} catch (err) {
+				logError('[cache] 缓存当前曲失败', String((err as any)?.message ?? err))
+			}
+		})()
+	} catch { /* ignore */ }
+}
 /** 末段「预热连接」：切歌前 3 秒对预取地址发一次 2 字节 Range，
  *  把 DNS/TLS/首字节提前走完，缩短 AVPlayer 起播时间。不下载音频内容。 */
 const WARM_REMAINING_SECONDS = 3
@@ -982,6 +1013,8 @@ const setTrackSource = (track: Track) => {
 	} catch (e) {
 		logInfo('[jk/play] item stringify failed', String((e as any)?.message ?? e))
 	}
+	currentMediaUrl = String((track as any)?.url ?? '')
+	cachedTriggeredFor = ''
 	ReactNativeTrackPlayer.setMediaItems(items)
 	latMediaSetAt = Date.now()
 	if (latPlayAt) {

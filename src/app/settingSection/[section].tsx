@@ -1271,6 +1271,19 @@ const SettingsSectionScreen = () => {
 					const { default: tp } = await import('@/helpers/trackPlayerIndex')
 					logInfo('[jk/play] playtest url =', url.slice(0, 120))
 					await (tp as any).playWithReplacePlayList(track, [track])
+				} else if (action === 'dlprobe') {
+					const { scanDownloads } = await import('@/jk/downloadStore')
+					const { normalizeQuality } = await import('@/jk/downloader')
+					const list = await scanDownloads()
+					const rows = list.map((i: any) => ({
+						n: i.name,
+						mb: Number(((i.size ?? 0) / 1024 / 1024).toFixed(1)),
+						q: normalizeQuality(String(i.meta?.quality ?? ''), i.size, i.name),
+						br: i.meta?.bitrate ?? '',
+					}))
+					const counts: any = { '128k': 0, '320k': 0, flac: 0, unknown: 0 }
+					for (const r of rows) counts[r.q] = (counts[r.q] ?? 0) + 1
+					logInfo('[dev] dlprobe', JSON.stringify({ counts, rows }))
 				} else if (action === 'clipsim') {
 					const g4: any = globalThis
 					g4.__JK_CLIP_SIM__ = String((params as any).on ?? '1') === '1'

@@ -6,6 +6,7 @@
 import React from 'react'
 import { tr } from '@/utils/i18n'
 import { Pressable, Text, useWindowDimensions, View } from 'react-native'
+import { FontAwesome6 } from '@expo/vector-icons'
 import { macFont, macPalette, macSpace } from '@/constants/macTokens'
 import { useAppTheme } from '@/hooks/useAppTheme'
 
@@ -16,6 +17,8 @@ export interface SongRowProps {
 	album?: string
 	duration?: string
 	badge?: string
+	/** 已缓存到本地：歌名后打勾 */
+	cached?: boolean
 	active?: boolean
 	onPress?: () => void
 }
@@ -26,7 +29,7 @@ const COL_BADGE = 34
 const COL_META = '22%'
 const COL_TIME = 60
 
-const SongRow = ({ index, title, artist, album, duration, badge, active, onPress }: SongRowProps) => {
+const SongRow = ({ index, title, artist, album, duration, badge, cached, active, onPress }: SongRowProps) => {
 	const { isDark } = useAppTheme()
 	const c = macPalette(!!isDark)
 	const { width } = useWindowDimensions()
@@ -50,6 +53,14 @@ const SongRow = ({ index, title, artist, album, duration, badge, active, onPress
 				<Text numberOfLines={1} style={{ flexShrink: 1, color: active ? c.primary : c.text, fontSize: macFont.body }}>
 					{title}
 				</Text>
+				{cached ? (
+					<FontAwesome6
+						name="circle-check"
+						size={11}
+						color={c.primary}
+						style={{ marginLeft: 5 }}
+					/>
+				) : null}
 				<View style={{ width: badge ? COL_BADGE : 0, marginLeft: badge ? 6 : 0 }}>
 					{badge ? (
 						<Text numberOfLines={1} style={{ color: c.primary, fontSize: macFont.badge, borderWidth: 1, borderColor: c.primary, borderRadius: 3, paddingHorizontal: 3, textAlign: 'center' }}>

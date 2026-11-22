@@ -54,7 +54,8 @@ const DownloadsScreen = () => {
 	const [total, setTotal] = useState(0)
 	const [loading, setLoading] = useState(true)
 	// 音质胶囊是「筛选器」，不是默认下载音质（默认音质在设置里）
-	const [quality, setQuality] = React.useState('')
+	// 初始值支持 dev 深链预设（_dev.dlFilter），用于自动化验证筛选是否真的生效
+	const [quality, setQuality] = React.useState(() => String(getSetting('_dev.dlFilter', '') ?? ''))
 	const tasks = downloadTasksStore.useValue()
 	const downloading = Object.values(tasks ?? {}).filter((t: any) => t.status === 'downloading')
 	const failed = Object.values(tasks ?? {}).filter((t: any) => t.status === 'failed')

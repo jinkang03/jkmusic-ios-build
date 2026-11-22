@@ -710,7 +710,12 @@ export const resolveSource = async (
 
 		try {
 			const qualityOrder: IMusic.IQualityKey[] = ['flac', '320k', '128k']
-			const requestedQuality = options.quality ?? qualityStore.getValue()
+			// 下载请求绝不能用「播放音质」兜底：没显式指定时读 download.quality
+			let requestedQuality = options.quality ?? qualityStore.getValue()
+			if (isDownloadRequest && !options.quality) {
+				const { getSetting } = await import('@/jk/settingsStore')
+				requestedQuality = getSetting('download.quality', '128k') as any
+			}
 			let currentQualityIndex = qualityOrder.indexOf(requestedQuality)
 			let resp_url: string | null = null
 
