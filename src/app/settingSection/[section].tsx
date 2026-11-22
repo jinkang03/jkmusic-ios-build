@@ -71,15 +71,7 @@ const BasicSection = () => {
 				onChange={(v) => changeLanguage(v)}
 				options={[{ value: 'zh', label: tr('中文', 'Chinese') }, { value: 'en', label: 'English' }]}
 			/></SettingRow>
-			<SettingRow label={tr('外观', 'Appearance')}><SettingSelect
-				value={themeMode}
-				onChange={(v) => setThemeMode(v as any)}
-				options={[
-					{ value: 'system', label: tr('跟随系统', 'System') },
-					{ value: 'light', label: tr('浅色', 'Light') },
-					{ value: 'dark', label: tr('深色', 'Dark') },
-				]}
-			/></SettingRow>
+
 			{/* 强调色：唯一颜色来源；留空 = 跟随壁纸主色 */}
 			<SettingRow
 				label={tr('强调色', 'Accent Color')}
@@ -953,6 +945,16 @@ const SettingsSectionScreen = () => {
 					lib.removeUserList(listId)
 					const after = lib.getUserLists().length
 					logInfo('[dev] removeList id=', listId, 'before=', before, 'after=', after)
+				} else if (action === 'importLxmc') {
+					const FS = await import('expo-file-system/legacy')
+					const path = `${FS.documentDirectory}lx_list.lxmc`
+					const { readBackupFile, importPlayList } = await import('@/jk/backup')
+					const obj = await readBackupFile(path)
+					if (obj.type !== 'playList_v2') throw new Error(`类型不匹配：${obj.type}`)
+					const r = importPlayList(obj.data)
+					const lib = await import('@/jk/libraryStore')
+					const withSrc = lib.getUserLists().filter(l => l.sourceListId).length
+					logInfo('[dev] importLxmc', JSON.stringify(r), 'lists=', lib.getUserLists().length, 'withSourceListId=', withSrc)
 				} else if (action === 'importSource') {
 					const url = String((params as any).url ?? '')
 					if (!url) throw new Error('缺少 url')

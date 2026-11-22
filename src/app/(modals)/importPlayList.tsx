@@ -1,6 +1,6 @@
 import { unknownTrackImageUri } from '@/constants/images'
 import { ThemeColors, screenPadding } from '@/constants/tokens'
-import { logError } from '@/helpers/logger'
+import { logError, logInfo } from '@/helpers/logger'
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
 import { getPlayListFromQ } from '@/helpers/userApi/getMusicSource'
 import { useThemeColors } from '@/hooks/useAppTheme'
@@ -63,17 +63,10 @@ const ImportPlayList = () => {
 		setError(null)
 		console.log('coverImage', coverImage)
 		try {
-			const newPlaylist = {
-				id: Date.now().toString(),
-				platform: 'QQ',
-				artist: '未知歌手',
-				name: customName.trim(),
-				title: customName.trim(),
-				songs: [],
-				artwork: coverImage || unknownTrackImageUri,
-				tracks: [],
-			}
-			await myTrackPlayer.addPlayLists(newPlaylist as IMusic.PlayList)
+			// 写入 libraryStore（「我的列表」读的就是它），旧 addPlayLists 写的是没人读的旧 store
+			const lib = await import('@/jk/libraryStore')
+			const list = lib.createUserList(customName.trim())
+			logInfo('[importPlayList] created', list.id, list.name)
 			router.dismiss()
 		} catch (err) {
 			setError('创建失败，请重试')
@@ -87,19 +80,42 @@ const ImportPlayList = () => {
 		setIsLoading(true)
 		setError(null)
 		try {
-			if (!playlistUrl.includes('id=')) throw new Error('链接格式不正确')
-			if (!playlistUrl) throw new Error('链接不能为空')
-			// 发起实际的网络请求
-			const match = playlistUrl.match(/[?&]id=(\d+)/)
-			const response = await getPlayListFromQ(match ? match[1] : null)
-			// 设置数据
-			// console.log(JSON.stringify(response) + '12312312')
-			const processedResponse: any = {
-				...response,
-				title: response.title || response.name || '未知歌单', // 如果 title 为空，使用 name
+			const url = playlistUrl.trim()
+			if (!url) throw new Error('链接不能为空')
+			// 识别平台 + 提取歌单 id
+			const detect = (): { source: string, rawId: string } => {
+				if (/y\.qq\.com|qq\.com\/n3\/other\/pages\/details/i.test(url)) {
+					return { source: 'tx', rawId: url }
+				}
+				if (/kuwo\.cn|k\.kuwo\.cn/i.test(url)) return { source: 'kw', rawId: url }
+				if (/kugou\.com/i.test(url)) return { source: 'kg', rawId: url }
+				if (/163\.cn|music\.163/i.test(url)) return { source: 'wy', rawId: url }
+				if (/migu|12530/i.test(url)) return { source: 'mg', rawId: url }
+				return { source: 'tx', rawId: url }
 			}
-			setPlaylistData(processedResponse)
-			myTrackPlayer.addPlayLists(processedResponse as IMusic.PlayList)
+			const { source, rawId } = detect()
+			const lib = await import('@/jk/libraryStore')
+			const sdk = await import('@/jk/musicSdk')
+			const sourceListId = await lib.resolveSourceListId(rawId)
+			if (!sourceListId) throw new Error('无法从链接中解析歌单 id')
+			logInfo('[importPlayList] importing source=', source, 'id=', sourceListId)
+			const all: any[] = []
+			let listName = ''
+			for (let page = 1; page <= 20; page++) {
+				const res: any = await sdk.getSongListDetail(source as any, sourceListId, page)
+				const chunk: any[] = res?.list ?? []
+				if (!listName && res?.info?.name) listName = String(res.info.name)
+				all.push(...chunk)
+				if (chunk.length < 100) break
+			}
+			if (!all.length) throw new Error('歌单为空或链接失效')
+			const created = lib.createUserList(listName || `导入歌单 ${new Date().toLocaleDateString()}`)
+			lib.setUserLists(lib.getUserLists().map(item => (
+				item.id === created.id
+					? { ...item, source, sourceListId, list: all, locationUpdateTime: Date.now() }
+					: item
+			)))
+			logInfo('[importPlayList] imported', source, sourceListId, 'count=', all.length)
 			router.dismiss()
 		} catch (err) {
 			setError('导入失败，请检查链接是否正确')

@@ -225,12 +225,17 @@ export const updateUserListFromSource = async(
 	if (!source) return { ok: false, count: 0, reason: '该歌单没有来源平台信息', needSource: true }
 	try {
 		const sdk = await import('./musicSdk')
-		let sourceListId = forcedSource ? '' : String(target.sourceListId ?? '')
+		// 只认「可追溯的歌单 id/链接」：不再用歌单名搜索（同名歌单会命中别人的）
+		let rawSid = String(target.sourceListId ?? '')
+		if (forcedSource && target.source && forcedSource !== target.source) rawSid = ''
+		const sourceListId = await resolveSourceListId(rawSid)
 		if (!sourceListId) {
-			const found = await sdk.searchSongLists(source, target.name)
-			if (!found.length) return { ok: false, count: 0, reason: '平台上没搜到同名歌单' }
-			const exact = found.find(item => item.name === target.name)
-			sourceListId = String((exact ?? found[0]).id)
+			return {
+				ok: false,
+				count: 0,
+				reason: '该歌单的来源是短链接，无法自动更新；请用含「id=」的完整歌单链接重新导入',
+				needSource: true,
+			}
 		}
 		const all: JKMusic[] = []
 		for (let page = 1; page <= 20; page++) {
@@ -249,4 +254,30 @@ export const updateUserListFromSource = async(
 	} catch (err) {
 		return { ok: false, count: 0, reason: String((err as any)?.message ?? err) }
 	}
+}
+
+/**
+ * 把「歌单链接」解析成平台可用的纯 id。
+ * lxmc 备份里的 sourceListId 通常是完整链接（含短链），不能直接传给 getSongListDetail。
+ */
+export const resolveSourceListId = async(raw: string): Promise<string> => {
+	const s = String(raw ?? '').trim()
+	if (!s) return ''
+	if (/^\d+$/.test(s)) return s
+	const direct = s.match(/[?&]id=(\d+)/)
+	if (direct) return direct[1]
+	if (/^https?:/i.test(s)) {
+		try {
+			const res = await fetch(s, { method: 'GET' })
+			const finalUrl = String((res as any)?.url ?? '')
+			const m = finalUrl.match(/[?&]id=(\d+)/) ?? s.match(/[?&]id=(\d+)/)
+			if (m) return m[1]
+			// QQ 短链（.../u?__=xxx）返回的是 JS 落地页，服务端拿不到歌单 id。
+			// 返回空让上层提示「请用含 id= 的完整链接重新导入」，而不是拿短链当 id 去请求。
+			return ''
+		} catch {
+			return ''
+		}
+	}
+	return s
 }

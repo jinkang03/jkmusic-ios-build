@@ -4,8 +4,8 @@
  * 本文件由 scripts/sync-version.sh 生成，不要手改。
  */
 export const BUILD_INFO = {
-	version: '1.4.25',
-	build: '49',
+	version: '1.4.26',
+	build: '50',
 } as const
 
 export default BUILD_INFO

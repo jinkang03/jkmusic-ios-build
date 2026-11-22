@@ -184,10 +184,21 @@ export const importPlayList = (data: any[]) => {
 		} else {
 			const existing = userLists.find(item => item.id === id || item.name === raw.name)
 			if (existing) {
+				// 旧版本导入时丢了 source/sourceListId，这里补上，否则无法「更新歌单」
+				if (!existing.source && raw.source) existing.source = String(raw.source)
+				if (!existing.sourceListId && raw.sourceListId) existing.sourceListId = String(raw.sourceListId)
 				songs += mergeInto(existing.list, incoming); merged++
 			} else {
 				const list = incoming.map(toJkMusic).filter((x: any) => x.id)
-				userLists.push({ id: id || `imported_${Date.now()}_${lists}`, name: String(raw.name ?? '导入的歌单'), list })
+				userLists.push({
+					id: id || `imported_${Date.now()}_${lists}`,
+					name: String(raw.name ?? '导入的歌单'),
+					// 保留来源：lxmc 里 sourceListId 通常是歌单链接，更新时再解析成 id
+					...(raw.source ? { source: String(raw.source) } : {}),
+					...(raw.sourceListId ? { sourceListId: String(raw.sourceListId) } : {}),
+					...(raw.locationUpdateTime ? { locationUpdateTime: Number(raw.locationUpdateTime) } : {}),
+					list,
+				})
 				songs += list.length
 				lists++
 			}
