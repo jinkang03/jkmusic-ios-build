@@ -27,15 +27,15 @@ export const PlaylistListItem = ({ playlist, ...props }: PlaylistListItemProps) 
 				</View>
 
 				<View style={styles.right}>
-					<Text numberOfLines={1} style={styles.playlistNameText}>
+					<Text numberOfLines={1} style={[styles.playlistNameText, { color: mac.text }]}>
 						{playlist.title}
 					</Text>
-					<Text numberOfLines={1} style={styles.playlistMetaText}>
+					<Text numberOfLines={1} style={[styles.playlistMetaText, { color: mac.textMuted }]}>
 						{playlist.description ?? ''}
 					</Text>
 				</View>
 
-				<Ionicons name="chevron-forward" size={18} color={colors.icon} style={{ opacity: 0.4 }} />
+				<Ionicons name="chevron-forward" size={18} color={mac.textMuted} style={{ opacity: 0.6 }} />
 			</View>
 		</TouchableHighlight>
 	)

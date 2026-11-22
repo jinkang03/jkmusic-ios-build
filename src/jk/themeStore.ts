@@ -44,6 +44,20 @@ export const accentStore = new GlobalState<string>(
 	(PersistStatus.get('app.accentColor' as any) as string) || '',
 )
 
+/** 功能页面文字颜色（空 = 跟随主题/壁纸默认） */
+export const textColorStore = new GlobalState<string>(
+	// 新功能：空 = 走默认（壁纸开启时白字）
+	'',
+)
+
+export const setTextColor = (color: string) => {
+	const next = String(color ?? '')
+	textColorStore.setValue(next)
+	try { PersistStatus.set('app.textColor' as any, next) } catch { /* ignore */ }
+}
+
+export const getTextColor = () => textColorStore.getValue()
+
 export type WallpaperState = { uri: string, blur: number, opacity: number }
 
 /** 壁纸主色（保存壁纸时自动提取）；未设置壁纸或提取失败时为空 */
@@ -188,6 +202,6 @@ export const getMacTheme = () => macThemeStore.getValue()
 
 export default {
 	MAC_THEMES, ACCENT_PRESETS, macThemeStore, accentStore, wallpaperStore,
-	setMacTheme, setAccentColor, setWallpaper, saveWallpaperFrom, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha,
+	setMacTheme, setAccentColor, setTextColor, getTextColor, setWallpaper, saveWallpaperFrom, getAccentColor, getMacTheme, getWallpaperUri, themeName, isWallpaperOn, glassAlpha,
 	wallpaperAccentStore, setWallpaperAccent, ensureWallpaperAccent,
 }

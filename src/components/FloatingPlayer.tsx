@@ -2,7 +2,7 @@ import { PlayPauseButton, SkipToNextButton, SkipToPreviousButton } from '@/compo
 import myTrackPlayer, { trackSourceLoadingStore } from '@/helpers/trackPlayerIndex'
 import { unknownTrackImageUri } from '@/constants/images'
 import { ThemeColors } from '@/constants/tokens'
-import { useAppTheme, useThemeColors } from '@/hooks/useAppTheme'
+import { useAppTheme, usePageTheme, useThemeColors } from '@/hooks/useAppTheme'
 import { macPalette } from '@/constants/macTokens'
 import { glass } from '@/constants/glass'
 import { useLastActiveTrack } from '@/hooks/useLastActiveTrack'
@@ -35,9 +35,11 @@ const srcShort = (id: string) => sourceLabel(id, true)
 
 export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 	const { blurTint, isDark, glassAlpha } = useAppTheme()
+	// 文字跟随「文字颜色」设置（usePageTheme 已把自定义色合进 colors）
+	const pageTheme = usePageTheme()
 	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
 	const mac = macPalette(!!isDark)
-	const colors = useThemeColors()
+	const colors = pageTheme.colors
 	const defaultStyles = useDefaultStyles()
 	const styles = useMemo(() => createStyles(colors, defaultStyles, mac.primary), [colors, defaultStyles, mac.primary])
 	const router = useRouter()
@@ -92,7 +94,8 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 		>
 			<BlurView
 				intensity={Math.round(Math.min(1, Math.max(0, Number(glassAlpha ?? 0.55))) * 100)}
-				tint={blurTint}
+				// 功能页统一白字 + 深色玻璃：tint 用 dark，否则 light blur 会把底色洗白
+				tint={'dark'}
 				style={styles.blurContainer}
 			>
 				{/* 液态玻璃高光：顶部一道白色渐隐，配合细描边形成「玻璃厚度」 */}
@@ -150,13 +153,13 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 
 				{/* 右段：播放暂停 + 下一首 */}
 				<View style={styles.rightSection}>
-					<SkipToPreviousButton iconSize={20} />
+					<SkipToPreviousButton iconSize={20} color="#FFFFFF" />
 					{isTrackSourceLoading ? (
 						<ActivityIndicator size="small" color={colors.text} />
 					) : (
-						<PlayPauseButton iconSize={22} variant="mini" />
+						<PlayPauseButton iconSize={22} variant="mini" color="#FFFFFF" />
 					)}
-					<SkipToNextButton iconSize={20} disabled={isTrackSourceLoading} />
+					<SkipToNextButton iconSize={20} disabled={isTrackSourceLoading} color="#FFFFFF" />
 				</View>
 			</BlurView>
 		</TouchableOpacity>

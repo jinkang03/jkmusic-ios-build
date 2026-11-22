@@ -26,7 +26,7 @@ type AppThemeContextValue = {
 }
 
 // 主题色变化要触发所有用 macPalette 的页面重渲染
-import { macThemeStore, accentStore, wallpaperStore } from '@/jk/themeStore'
+import { macThemeStore, accentStore, wallpaperStore, textColorStore, getTextColor } from '@/jk/themeStore'
 import { glassAlphaStore } from '@/constants/glass'
 const storedThemeMode = PersistStatus.get('app.themeMode') ?? 'system'
 
@@ -147,17 +147,41 @@ export const useThemeMode = () => {
 export const usePageTheme = (): AppThemeContextValue => {
 	const t = useAppTheme()
 	const lightColors = useMemo(() => getThemeColors('light'), [])
+	const customTextColor = textColorStore.useValue()
+	const paperText = customTextColor
+		? {
+			text: customTextColor,
+			textMuted: `${customTextColor}${customTextColor.length === 7 ? 'A8' : ''}`,
+			placeholder: `${customTextColor}${customTextColor.length === 7 ? '8C' : ''}`,
+			icon: customTextColor,
+			separator: 'rgba(255,255,255,0.16)',
+		}
+		: {
+			text: 'rgba(255,255,255,0.94)',
+			textMuted: 'rgba(255,255,255,0.66)',
+			placeholder: 'rgba(255,255,255,0.55)',
+			icon: '#FFFFFF',
+			separator: 'rgba(255,255,255,0.16)',
+		}
+	const hasWallpaper = !!t.wallpaper?.uri
 	return useMemo(
-		() => (t.isDark
-			? {
-				...t,
-				resolvedTheme: 'light' as const,
-				isDark: false,
-				colors: lightColors,
-				blurTint: lightColors.blurTint,
-				statusBarStyle: 'dark' as const,
+		() => {
+			if (t.isDark) {
+				return {
+					...t,
+					resolvedTheme: 'light' as const,
+					isDark: false,
+					colors: { ...lightColors, ...(hasWallpaper ? paperText : {}) },
+					blurTint: lightColors.blurTint,
+					statusBarStyle: 'light' as const,
+				}
 			}
-			: t),
-		[t, lightColors],
+			// 浅色 + 壁纸：照片上深灰字看不清，统一白色
+			if (hasWallpaper) {
+				return { ...t, colors: { ...t.colors, ...paperText } }
+			}
+			return t
+		},
+		[t, lightColors, hasWallpaper, customTextColor],
 	)
 }

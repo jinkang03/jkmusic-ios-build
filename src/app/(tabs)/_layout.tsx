@@ -93,7 +93,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
 				}}
 			>
 				{ga > 0.02 ? (
-					<BlurView intensity={Math.round(ga * 100)} tint={blurTint} style={StyleSheet.absoluteFill} />
+					<BlurView intensity={Math.round(ga * 100)} tint="dark" style={StyleSheet.absoluteFill} />
 				) : null}
 				{ga > 0.02 ? (
 					<LinearGradient

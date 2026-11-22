@@ -1,6 +1,7 @@
 // 必须最先加载：为 JKMUSIC 的 musicSdk 提供全局 Buffer / TextEncoder
 import '@/shims/globalPolyfills'
 import { ensureDefaults } from '@/jk/settingsStore'
+import { textColorStore } from '@/jk/themeStore'
 import { playbackService } from '@/constants/playbackService'
 import { AppThemeProvider, ThemeOverrideProvider, useAppTheme, usePageTheme } from '@/hooks/useAppTheme'
 import WallpaperBackground from '@/components/WallpaperBackground'
@@ -169,6 +170,8 @@ const RootNavigation = () => {
 	const { colors } = useAppTheme()
 	// 语言切换后重建整棵导航树：i18n.t 是同步取值，不重建不会刷新已挂载页面
 	const language = nowLanguage.useValue()
+	// 订阅文字颜色：各页 header 的颜色在渲染时读取，不订阅改了不会立刻刷新
+	void textColorStore.useValue()
 
 	return (
 		//每个 Stack.Screen 组件定义了一个可导航的屏幕

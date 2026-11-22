@@ -2,6 +2,7 @@ import { nowLanguage, changeLanguage } from '@/utils/i18n'
 import { ACCENT_PRESETS, accentStore, wallpaperStore, wallpaperAccentStore, setAccentColor, setWallpaper, getWallpaperUri } from '@/jk/themeStore'
 import { setGlassAlpha } from '@/constants/glass'
 import ColorPickerModal from '@/components/ColorPickerModal'
+import { setTextColor, textColorStore } from '@/jk/themeStore'
 /**
  * 设置分区页：键名与桌面版一致（点分格式），值由 settingsStore 持久化。
  * 桌面版专有分区只做说明，控件照常可读写（配置会保存，只是 iOS 不生效）。
@@ -33,6 +34,8 @@ const BasicSection = () => {
 	const wallpaper = wallpaperStore.useValue()
 	const wallpaperAccent = wallpaperAccentStore.useValue()
 	const [pickerVisible, setPickerVisible] = React.useState(false)
+	const textColor = textColorStore.useValue()
+	const [textPickerVisible, setTextPickerVisible] = React.useState(false)
 	const routeParams = useLocalSearchParams<{ openPicker?: string }>()
 	React.useEffect(() => {
 		if (routeParams?.openPicker === '1') setPickerVisible(true)
@@ -140,6 +143,29 @@ const BasicSection = () => {
 				onClose={() => setPickerVisible(false)}
 				onPick={(color) => { setAccentColor(color); setPickerVisible(false) }}
 				onFollowWallpaper={() => { setAccentColor(''); setPickerVisible(false) }}
+			/>
+			{/* 文字颜色：与强调色同一套色盘，对所有功能页面的文字生效 */}
+			<SettingRow
+				label={tr('文字颜色', 'Text Color')}
+				hint={textColor ? tr('自定义', 'Custom') : tr('默认（跟随壁纸明暗）', 'Default')}
+			>
+				<View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+					<Pressable
+						onPress={() => setTextPickerVisible(true)}
+						style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
+					>
+						<Text style={{ color: c.primary, fontSize: macFont.caption }}>{tr('自定义', 'Custom')}</Text>
+						<Ionicons name="color-palette-outline" size={16} color={c.primary} />
+					</Pressable>
+					<View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: textColor || c.text, borderWidth: 0.5, borderColor: c.divider }} />
+				</View>
+			</SettingRow>
+			<ColorPickerModal
+				visible={textPickerVisible}
+				initialColor={textColor || '#FFFFFF'}
+				onClose={() => setTextPickerVisible(false)}
+				onPick={(color) => { setTextColor(color); setTextPickerVisible(false) }}
+				onFollowWallpaper={() => { setTextColor(''); setTextPickerVisible(false) }}
 			/>
 			<SettingRow
 				label={tr('主题壁纸', 'Wallpaper')}

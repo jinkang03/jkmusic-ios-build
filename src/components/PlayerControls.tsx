@@ -14,6 +14,8 @@ type PlayerButtonProps = {
 	style?: ViewStyle
 	iconSize?: number
 	disabled?: boolean
+	/** 覆盖图标颜色（播放条上固定白色，不跟随文字颜色） */
+	color?: string
 }
 
 export const PlayerControls = React.memo(({ style }: PlayerControlsProps) => {
@@ -28,7 +30,7 @@ export const PlayerControls = React.memo(({ style }: PlayerControlsProps) => {
 	)
 })
 
-export const PlayPauseButton = React.memo(({ style, iconSize = 48, variant = 'full' }: PlayerButtonProps & { variant?: 'mini' | 'full' }) => {
+export const PlayPauseButton = React.memo(({ style, iconSize = 48, variant = 'full', color }: PlayerButtonProps & { variant?: 'mini' | 'full' }) => {
 	const playing = useIsPlaying()
 	const state = usePlaybackState()
 	const intent = playbackIntentStore.useValue()
@@ -45,7 +47,7 @@ export const PlayPauseButton = React.memo(({ style, iconSize = 48, variant = 'fu
 					hitSlop={10}
 					onPress={() => shouldPause ? myTrackPlayer.pause() : void myTrackPlayer.play()}
 				>
-					<FontAwesome6 name={shouldPause ? 'pause' : 'play'} size={iconSize} color={colors.text} />
+					<FontAwesome6 name={shouldPause ? 'pause' : 'play'} size={iconSize} color={color ?? colors.text} />
 				</TouchableOpacity>
 			</View>
 		)
@@ -70,7 +72,7 @@ export const PlayPauseButton = React.memo(({ style, iconSize = 48, variant = 'fu
 	)
 })
 
-export const SkipToNextButton = React.memo(({ iconSize = 30, disabled = false }: PlayerButtonProps) => {
+export const SkipToNextButton = React.memo(({ iconSize = 30, disabled = false, color }: PlayerButtonProps) => {
 	const colors = useThemeColors()
 	const trackSkipLoading = trackSkipLoadingStore.useValue()
 	const isLoading = trackSkipLoading === 'next'
@@ -80,16 +82,16 @@ export const SkipToNextButton = React.memo(({ iconSize = 30, disabled = false }:
 		<TouchableOpacity activeOpacity={0.7} hitSlop={10} disabled={isDisabled} onPress={myTrackPlayer.skipToNext}>
 			<View style={styles.iconContainer}>
 				{isLoading ? (
-					<ActivityIndicator size="small" color={colors.text} />
+					<ActivityIndicator size="small" color={color ?? colors.text} />
 				) : (
-					<FontAwesome6 name="forward" size={iconSize} color={colors.text} />
+					<FontAwesome6 name="forward" size={iconSize} color={color ?? colors.text} />
 				)}
 			</View>
 		</TouchableOpacity>
 	)
 })
 
-export const SkipToPreviousButton = React.memo(({ iconSize = 30 }: PlayerButtonProps) => {
+export const SkipToPreviousButton = React.memo(({ iconSize = 30, color }: PlayerButtonProps) => {
 	const colors = useThemeColors()
 	const trackSkipLoading = trackSkipLoadingStore.useValue()
 	const isLoading = trackSkipLoading === 'previous'
@@ -104,9 +106,9 @@ export const SkipToPreviousButton = React.memo(({ iconSize = 30 }: PlayerButtonP
 		>
 			<View style={styles.iconContainer}>
 				{isLoading ? (
-					<ActivityIndicator size="small" color={colors.text} />
+					<ActivityIndicator size="small" color={color ?? colors.text} />
 				) : (
-					<FontAwesome6 name={'backward'} size={iconSize} color={colors.text} />
+					<FontAwesome6 name={'backward'} size={iconSize} color={color ?? colors.text} />
 				)}
 			</View>
 		</TouchableOpacity>

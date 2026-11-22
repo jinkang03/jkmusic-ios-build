@@ -1,4 +1,4 @@
-import { getAccentColor, isWallpaperOn, glassAlpha } from '@/jk/themeStore'
+import { getAccentColor, getTextColor, isWallpaperOn, glassAlpha } from '@/jk/themeStore'
 
 /**
  * 桌面版视觉令牌（唯一事实来源：docs/mac-ui-spec.md + references/mac-ui/screenshots/）。
@@ -8,9 +8,10 @@ import { getAccentColor, isWallpaperOn, glassAlpha } from '@/jk/themeStore'
 export const macColors = {
 	primary: '#E240F7',
 	bg: '#FFFFFF',
-	text: '#424242',
-	textStrong: '#1F1F1F',
-	textMuted: '#9B9B9B',
+	// 功能页固定「壁纸 + 透明玻璃 + 白字」：浅色主题的文字统一为白
+	text: 'rgba(255,255,255,0.94)',
+	textStrong: '#FFFFFF',
+	textMuted: 'rgba(255,255,255,0.66)',
 	fillSubtle: '#F6F6F6',
 	fillMuted: '#EFEFEF',
 	divider: '#EEEEEE',
@@ -65,16 +66,39 @@ export const macPalette = (isDark: boolean): MacPalette => {
 	const base = isDark ? macDarkColors : macColors
 	const themed = getAccentColor()
 	const palette = themed ? { ...base, primary: themed } : base
+	// 用户自定义文字颜色（设置 → 基本设置 → 文字颜色）：对所有功能页生效
+	const customText = getTextColor()
+	const withText = customText
+		? {
+			...palette,
+			text: customText,
+			textStrong: customText,
+			textMuted: `${customText}${customText.length === 7 ? 'A8' : ''}`,
+		}
+		: palette
 	// 壁纸开启：页面底色改成半透明玻璃（mac 的 --glass-tint / --glass-tint-dark 思路），
 	// 让下层的壁纸透出来。没开壁纸时完全保持原来的实色。
 	if (isWallpaperOn()) {
 		const a = glassAlpha()
+		// 壁纸 + 高透明玻璃时，浅色主题的深灰文字在照片上几乎看不清，
+		// 统一改成亮白色系（只在壁纸开启时生效；没开壁纸仍是原来的深色字）
+		const paperText = isDark ? {} : {
+			text: 'rgba(255,255,255,0.94)',
+			textStrong: '#FFFFFF',
+			textMuted: 'rgba(255,255,255,0.66)',
+			divider: 'rgba(255,255,255,0.16)',
+			fillSubtle: 'rgba(255,255,255,0.10)',
+			fillMuted: 'rgba(255,255,255,0.18)',
+		}
 		return {
-			...palette,
+			...withText,
+			...paperText,
+			// 自定义文字色优先级最高：覆盖上面按壁纸推导的白字
+			...(customText ? { text: customText, textStrong: customText } : {}),
 			bg: isDark ? `rgba(18,18,20,${a.toFixed(3)})` : `rgba(255,255,255,${a.toFixed(3)})`,
 		}
 	}
-	return palette
+	return withText
 }
 
 export default { colors: macColors, darkColors: macDarkColors, radius: macRadius, font: macFont, space: macSpace, palette: macPalette }
