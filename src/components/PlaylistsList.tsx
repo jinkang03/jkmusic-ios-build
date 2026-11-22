@@ -13,12 +13,15 @@ type PlaylistsListProps = {
 	onPlaylistPress: (playlist: Playlist) => void
 	/** 传入时由调用方负责删除（libraryStore）；不传则回退旧的 Cymusic store */
 	onPlaylistDelete?: (id: string, name: string) => void
+	/** 从来源平台重新拉取歌单（对应 mac 端的「更新歌单」） */
+	onPlaylistUpdate?: (id: string, name: string) => void
 } & Partial<FlatListProps<Playlist>>
 
 export const PlaylistsList = ({
 	playlists,
 	onPlaylistPress: handlePlaylistPress,
 	onPlaylistDelete,
+	onPlaylistUpdate,
 	...flatListProps
 }: PlaylistsListProps) => {
 	const utilsStyles = useUtilsStyles()
@@ -58,6 +61,26 @@ export const PlaylistsList = ({
 		),
 		[utilsStyles],
 	)
+
+	const showActions = (playlist: Playlist) => {
+		// 内置列表（试听列表 / 我的收藏）不允许删除/更新
+		if (playlist.id === 'default' || playlist.id === 'love') {
+			Alert.alert(tr('提示', 'Notice'), tr('内置列表不能删除', 'Built-in lists cannot be deleted'))
+			return
+		}
+		Alert.alert(playlist.name, undefined, [
+			{
+				text: tr('更新歌单', 'Update Playlist'),
+				onPress: () => onPlaylistUpdate?.(playlist.id, playlist.name),
+			},
+			{
+				text: tr('删除歌单', 'Delete Playlist'),
+				style: 'destructive',
+				onPress: () => showDeleteAlert(playlist),
+			},
+			{ text: tr('取消', 'Cancel'), style: 'cancel' },
+		])
+	}
 
 	const showDeleteAlert = (playlist: Playlist) => {
 		// 内置列表（试听列表 / 我的收藏）不允许删除
@@ -99,7 +122,7 @@ export const PlaylistsList = ({
 				<PlaylistListItem
 					playlist={playlist}
 					onPress={() => handlePlaylistPress(playlist)}
-					onLongPress={() => showDeleteAlert(playlist)}
+					onLongPress={() => showActions(playlist)}
 				/>
 			)}
 			{...flatListProps}

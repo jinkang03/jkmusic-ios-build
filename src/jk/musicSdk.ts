@@ -217,6 +217,15 @@ export const getSongLists = async(source: JKSource, options: { tagId?: string, s
 	return res
 }
 
+/** 歌单按名称搜索（用于「更新歌单」时反查平台歌单 id） */
+export const searchSongLists = async(source: JKSource, name: string, page = 1, limit = 20) => {
+	const mod: any = (musicSdk as any)[source]
+	if (!mod?.songList?.search) throw new Error(`${source} 不支持歌单搜索`)
+	const req: any = mod.songList.search(name, page, limit)
+	const res: any = req && typeof req.then === 'function' ? await req : await (req?.promise ?? req)
+	return (res?.list ?? []) as Array<{ id: string, name: string, source?: string, total?: number }>
+}
+
 /** 歌单详情 */
 export const getSongListDetail = async(source: JKSource, id: string, page = 1) => {
 	const mod: any = (musicSdk as any)[source]
@@ -304,5 +313,6 @@ export default {
 	getSongListTags,
 	getSongLists,
 	getSongListDetail,
+	searchSongLists,
 	getLyric,
 }

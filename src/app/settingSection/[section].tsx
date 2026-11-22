@@ -1072,6 +1072,14 @@ const SettingsSectionScreen = () => {
 					}
 					lib.addToList(target.id, [m], 'top')
 					logInfo('[dev] addToUserList ok name=', target.name, 'len=', lib.getListById(target.id).length)
+				} else if (action === 'updateUserList') {
+					const lib = await import('@/jk/libraryStore')
+					const name = String((params as any).name ?? '')
+					const target = lib.getUserLists().find(l => l.name.includes(name)) ?? lib.getUserLists()[0]
+					if (!target) throw new Error('没有自建歌单')
+					logInfo('[dev] updateUserList start', target.name, 'source=', String(target.source ?? '-'), 'sid=', String(target.sourceListId ?? '-'))
+					const r = await lib.updateUserListFromSource(target.id, String((params as any).source ?? '') || undefined)
+					logInfo('[dev] updateUserList result', JSON.stringify(r))
 				} else if (action === 'playBoard') {
 					// 验证榜单取流：dump 第一首的 Track 字段并尝试播放
 					const bsrc = String((params as any).source ?? 'kw')

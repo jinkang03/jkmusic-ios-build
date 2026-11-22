@@ -206,3 +206,47 @@ export const importPlayListData = (data: { defaultList?: JKMusic[], loveList?: J
 }
 
 export type { JKMusic, JKSource }
+
+/**
+ * 从来源平台重新拉取歌单内容并整体覆盖本地（对应 mac 端的「更新歌单」）。
+ *
+ * - 有 `sourceListId`：直接按 id 拉全部页；
+ * - 没有（老数据/备份导入）：用歌单名去平台搜索同名歌单，命中后补上 id 再拉。
+ * - 平台返回空时不动本地数据，避免把歌单清空。
+ */
+export const updateUserListFromSource = async(
+	listId: string,
+	/** 老歌单没有来源信息时，由 UI 让用户选一个平台 */
+	forcedSource?: string,
+): Promise<{ ok: boolean, count: number, reason?: string, sourceListId?: string, needSource?: boolean }> => {
+	const target = state.userLists.find(item => item.id === listId)
+	if (!target) return { ok: false, count: 0, reason: '歌单不存在' }
+	const source = String(forcedSource || target.source || '') as any
+	if (!source) return { ok: false, count: 0, reason: '该歌单没有来源平台信息', needSource: true }
+	try {
+		const sdk = await import('./musicSdk')
+		let sourceListId = forcedSource ? '' : String(target.sourceListId ?? '')
+		if (!sourceListId) {
+			const found = await sdk.searchSongLists(source, target.name)
+			if (!found.length) return { ok: false, count: 0, reason: '平台上没搜到同名歌单' }
+			const exact = found.find(item => item.name === target.name)
+			sourceListId = String((exact ?? found[0]).id)
+		}
+		const all: JKMusic[] = []
+		for (let page = 1; page <= 20; page++) {
+			const res: any = await sdk.getSongListDetail(source, sourceListId, page)
+			const chunk: JKMusic[] = res?.list ?? []
+			all.push(...chunk)
+			if (chunk.length < 100) break
+		}
+		if (!all.length) return { ok: false, count: 0, reason: '平台返回空歌单', sourceListId }
+		setUserLists(state.userLists.map(item => (
+			item.id === listId
+				? { ...item, source, sourceListId, list: all, locationUpdateTime: Date.now() }
+				: item
+		)))
+		return { ok: true, count: all.length, sourceListId }
+	} catch (err) {
+		return { ok: false, count: 0, reason: String((err as any)?.message ?? err) }
+	}
+}
