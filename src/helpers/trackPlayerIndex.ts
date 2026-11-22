@@ -452,21 +452,10 @@ const tryAltSource = async(musicItem: any): Promise<boolean> => {
 			return false
 		}
 		logInfo('[jk/play] 换源成功', `${musicItem?.platform} -> ${alt.source}`, String(alt.title ?? ''))
-		// 必须先把换源地址下载到本地再播：本环境 AVPlayer 放不了网络流，
-		// 直接把 http url 交给播放器会立刻再失败一次（表现为无限换源）
-		let playUrl = String(alt.url ?? '')
-		try {
-			const { downloadToCache } = await import('@/player/CacheManager')
-			const { fileUriFromPath } = await import('@/helpers/localFile')
-			const localPath = await downloadToCache(
-				{ ...(musicItem as any), url: alt.url } as any,
-				undefined,
-				{ actualSource: String(alt.source ?? ''), actualId: String(alt.id ?? '') } as any,
-			)
-			playUrl = fileUriFromPath(String(localPath))
-			logInfo('[jk/play] 换源后已缓存到本地:', playUrl.slice(0, 110))
-		} catch (dlErr) {
-			logError('[jk/play] 换源后下载失败', String((dlErr as any)?.message ?? dlErr))
+		// 换源后直接流式播放（不再下载）：起播失败会由看门狗再触发一次换源
+		const playUrl = String(alt.url ?? '')
+		if (!/^https?:/i.test(playUrl) && !playUrl.startsWith('file://')) {
+			logError('[jk/play] 换源返回的地址不可用', playUrl.slice(0, 80))
 			return false
 		}
 		showToast('提示', `该源无法播放，已用${alt.label ?? alt.source}播放`, 'info')
@@ -780,11 +769,11 @@ const setTrackSource = (track: Track) => {
 					// 用「进度是否真的在走」判断更可靠
 					const ready = position > 0.5
 					if (ready) return
-					logError('[jk/play] 看门狗超时：12s 未就绪 position=', String(position), 'duration=', String(duration), 'state=', String(state))
+					logError('[jk/play] 看门狗超时：8s 未就绪 position=', String(position), 'duration=', String(duration), 'state=', String(state))
 					await failToPlay()
 				} catch { /* ignore */ }
 			})()
-		}, 12000)
+		}, 8000)
 	}
 }
 /**

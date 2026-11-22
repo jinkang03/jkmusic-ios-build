@@ -637,106 +637,19 @@ export const resolveSource = async (
 				logInfo('[jk/play] skipDownload：返回远程 URL 供下载')
 				return { url: String(resp_url), wasCached: false }
 			}
-			const { getSetting: getStreamSetting } = await import('@/jk/settingsStore')
-			const streamMode = Boolean(getStreamSetting<boolean>('_dev.streamMode', false))
-			if (streamMode) {
-				logInfo('[jk/play] streamMode 生效，跳过下载直接返回远程 url')
-				if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
-				return { url: resp_url as string, wasCached: false }
+			// 流式播放：直接返回远程地址（实测 AVPlayer 能播明文 mp3/flac/m4a，
+			// 起播 <1s、连续切歌/拖动均正常）。
+			// 加密容器（QQ 音乐 .mgg/.mflac、.qmc*）AVPlayer 打不开，直接判失败交给换源。
+			const urlStr = typeof resp_url === 'string'
+				? resp_url
+				: String((resp_url as any)?.url ?? '')
+			if (/\.(mgg|mflac0?|qmc[0-9a-z]*|tm[0-6])(?:$|[?#])/i.test(urlStr)) {
+				logInfo('[jk/play] 加密音频格式，跳过流式直接换源:', urlStr.slice(0, 90))
+				throw new Error('ENCRYPTED_AUDIO')
 			}
-			// 先下载后播放：AVPlayer 在该环境下无法流式加载（本地文件正常），
-			// 所以取到远程地址后先落到本地，再交给播放器 file:// 路径。
-			const genKey = downloadGenKey(musicItem)
-			const myGeneration = (downloadGenerations.get(genKey) ?? 0) + 1
-			downloadGenerations.set(genKey, myGeneration)
-			let bufferingTimer: any = null
-			try {
-				const { downloadToCache, enforceCacheLimit } = await import('@/player/CacheManager')
-				const { bufferingStore } = await import('@/player/PlayerStore')
-				const { getSetting } = await import('@/jk/settingsStore')
-				logInfo('[jk/play] 开始缓冲下载:', musicItem.title)
-				// 缓冲态延迟 200ms 才显示：本地下载通常几十毫秒，不该闪一下
-				let bufferingShown = false
-				bufferingTimer = setTimeout(() => {
-					bufferingShown = true
-					bufferingStore.setValue({ title: String(musicItem.title ?? ''), percent: 0 })
-				}, 200)
-				const recordProgress = (percent: number) => {
-						if (bufferingShown) bufferingStore.setValue({ title: String(musicItem.title ?? ''), percent })
-					}
-				const slowMs = Number(getSetting('_dev.slowBufferMs', 0)) || 0
-				if (slowMs > 0) {
-					bufferingShown = true
-					bufferingStore.setValue({ title: String(musicItem.title ?? ''), percent: 0 })
-				}
-				// 换源下载时记录实际提供方（缓存命中时据此显示「音源：A → B」）；
-				// switchedAlt 是本函数内的局部真值，比全局 __jkActualSource 可靠
-				const actualSource = String(switchedAlt?.source ?? (globalThis as any).__jkActualSource ?? musicItem.platform ?? '')
-				const actualId = String(switchedAlt?.id ?? musicItem.id ?? '')
-				const localPath = await downloadToCache(
-					{ ...(musicItem as any), url: resp_url } as any,
-					recordProgress,
-					{ actualSource, actualId } as any,
-				)
-				if (slowMs > 0) {
-					// dev 专用：人为拉长缓冲窗口，便于截图与边界验收
-					await new Promise(r => setTimeout(r, slowMs))
-				}
-				clearTimeout(bufferingTimer)
-				bufferingStore.setValue(null)
-				// 下载完顺手做一次 LRU（上限读设置 download.cacheLimitMb，正在播的文件不删）
-				const limitMb = Number(getSetting('download.cacheLimitMb', 500)) || 500
-				logInfo('[cache] LRU 上限', `${limitMb}MB`)
-				void enforceCacheLimit(limitMb * 1024 * 1024, localPath).catch(() => undefined)
-				if (downloadGenerations.get(genKey) !== myGeneration) {
-					logInfo('[jk/play] 下载世代已过期，丢弃结果', genKey)
-				} else {
-					const uri = String(localPath).startsWith('file://') ? String(localPath) : `file://${localPath}`
-					logInfo('[jk/play] 缓冲完成，改播本地:', uri.slice(0, 120))
-					// 起播后 2 秒后台预取下一首，切歌时命中缓存走 file://
-					setTimeout(() => {
-						void import('@/player/prefetch').then(m => m.prefetchNext()).catch(() => undefined)
-					}, 2000)
-					if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
-					return { url: uri, wasCached: true }
-				}
-			} catch (err) {
-				if (bufferingTimer) clearTimeout(bufferingTimer)
-				logError('[jk/play] 缓冲下载失败，尝试换源重下', String((err as any)?.message ?? err))
-				try {
-					const { bufferingStore } = await import('@/player/PlayerStore')
-					bufferingStore.setValue(null)
-					// 取流成功但下载失败（vkey 过期 / 403 / CDN 拒绝）时换源重下一次，
-					// 不再直接回退远程流式（本环境下 AVPlayer 放不了网络流，等于判死）
-					const alt = await findPlayableAlt(
-						musicItem,
-						String(qualityStore.getValue() ?? '128k'),
-						requestType,
-					)
-					if (alt?.url) {
-						logInfo('[jk/play] 下载失败换源重试:', alt.source, alt.title)
-						const { downloadToCache: retryDownload } = await import('@/player/CacheManager')
-						const retryPath = await retryDownload(
-							{ ...(musicItem as any), url: alt.url } as any,
-							undefined,
-							{ actualSource: alt.source, actualId: (alt as any).id } as any,
-						)
-						if (downloadGenerations.get(genKey) === myGeneration) {
-							const retryUri = String(retryPath).startsWith('file://') ? String(retryPath) : `file://${retryPath}`
-							logInfo('[jk/play] 换源重下成功:', retryUri.slice(0, 110))
-							if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
-							return { url: retryUri, wasCached: true }
-						}
-					}
-				} catch (retryErr) {
-					logError('[jk/play] 换源重下仍失败', String((retryErr as any)?.message ?? retryErr))
-				}
-			}
-			// 走到这里 = 已经取到地址，但「下载失败 + 换源重下失败」。
-			// 本环境 AVPlayer 放不了网络流，回退远程 URL 等于判死，
-			// 而且会触发播放错误 → 自动下一首（连跳）。直接判本曲不可播。
-			logError('[jk/play] 下载与换源重下均失败，判定本曲不可播')
-			throw new Error('SOURCE_UNAVAILABLE')
+			if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
+			logInfo('[jk/play] 流式播放:', urlStr.slice(0, 120))
+			return { url: urlStr, wasCached: false }
 		} catch (error) {
 			if (isCurrentSourceRequest(requestType)) {
 				nowApiState.setValue('异常')

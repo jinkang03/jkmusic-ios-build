@@ -945,6 +945,16 @@ const SettingsSectionScreen = () => {
 					lib.removeUserList(listId)
 					const after = lib.getUserLists().length
 					logInfo('[dev] removeList id=', listId, 'before=', before, 'after=', after)
+				} else if (action === 'probePlayback') {
+					const tp: any = (await import('@/helpers/trackPlayerIndex')).default
+					const prog: any = tp.getProgress?.() ?? {}
+					const cur: any = tp.getCurrentMusic?.() ?? null
+					logInfo('[dev] probePlayback', JSON.stringify({
+						pos: Number(prog?.position ?? 0).toFixed(2),
+						dur: Number(prog?.duration ?? 0).toFixed(2),
+						title: String(cur?.title ?? ''),
+						platform: String(cur?.platform ?? ''),
+					}))
 				} else if (action === 'probeList') {
 					// 各平台歌单详情探测：source + 链接/id → 看能否拉到
 					const src = String((params as any).source ?? 'kw')
