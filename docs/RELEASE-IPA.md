@@ -1,48 +1,48 @@
-> **LATEST：1.4.18 / build 42**
-> 文件 `artifacts/ipa/JKMUSIC-1.4.18-unsigned-20261122.ipa`
-> sha256 `SHA18`
+> **LATEST：1.4.19 / build 43**
+> 文件 `artifacts/ipa/JKMUSIC-1.4.19-unsigned-20261122.ipa`
+> sha256 `4b902f75b7bcdb10b61671f99cead8cf498f3104fe248ebb42fe70d5adbb4558`
 > 固定别名 `artifacts/ipa/JKMUSIC-ios-unsigned.ipa` 与最新版字节相同（`./scripts/sync-latest-ipa.sh`）。
 > 安装前在 App 内确认版本号（设置 → 其他 → App Version）。
 
-## v1.4.18（2026-11-22）
+## v1.4.19（2026-11-22）
 
 | 项 | 值 |
 |---|---|
-| 产物 | `artifacts/ipa/JKMUSIC-1.4.18-unsigned-20261122.ipa` |
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.19-unsigned-20261122.ipa` |
 | 大小 | 18 MB |
-| sha256 | `de8804f3758ddf9666c91e55252775e3333b2ad3af70ca70806543a53cfcb444` |
-| 版本 / build | 1.4.18 / 42 |
+| sha256 | `4b902f75b7bcdb10b61671f99cead8cf498f3104fe248ebb42fe70d5adbb4558` |
+| 版本 / build | 1.4.19 / 43 |
 | 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
-| commit | 见 tag `v1.4.18` |
+| commit | 见 tag `v1.4.19` |
 
-### 1.4.18 批次 3：歌单从平台拉取更新
+### 1.4.19 底栏改了几次都不生效：根因是 tabBarStyle 被内部覆盖
 
-对应 mac 端 `ListUpdateModal.vue` + `store/list/syncSourceList.ts`：
-按 `source` + `sourceListId` 重新拉取平台歌单，整体覆盖本地并记录更新时间。
+**反复无效的原因**
 
-**a) 新增能力**
+1.4.16 / 1.4.17 改的都是 `tabBarStyle` 里的 `left` / `right` / `width`，
+但 `@react-navigation/bottom-tabs`（expo-router 内联版）渲染大概是：
 
-- `musicSdk.searchSongLists(source, name)`：五个平台的 `songList.search` 统一封装；
-- `libraryStore.updateUserListFromSource(listId, forcedSource?)`：
-  - 有 `sourceListId` → 直接按 id 拉全部页（每页 100，最多 20 页）；
-  - 没有 → 用歌单名搜索同名歌单，命中后补上 id；
-  - 平台返回空时不动本地数据。
-
-**b) 交互**
-
-「我的列表」长按歌单 → 弹出「更新歌单 / 删除歌单」。
-老歌单（备份导入，无来源信息）更新时弹「选择来源平台」，选完后按同名歌单反查并覆盖。
-
-**c) 实测**
-
-`试音个人精选` 分别指定平台：
-
-```
-kw -> ok count=95  sourceListId=3705864378
-kg -> ok count=78  sourceListId=id_6825944
-tx -> ok count=50  sourceListId=9644770211
+```js
+style: [styles.tabBar, { height, padding... }, tabBarStyle]
 ```
 
-列表页数量同步刷新。**注意**：同一名字在多个平台都存在时，选哪个平台就取哪个平台的歌单内容。
+`styles.tabBar` 自带整行布局与 `flex`，`left/right/width` 在绝对定位 + flex 组合下被忽略，
+所以改多少次视觉都不变（只有高度、圆角这类值生效）。
+
+**修复：自定义 tabBar**
+
+```tsx
+<Tabs tabBar={(props) => <CustomTabBar {...props} />} />
+```
+
+`CustomTabBar` 自己渲染绝对定位容器（`left/right = 屏宽 × 0.155`），
+内部玻璃胶囊 + Blur + 高光渐变不变，图标/文字按 6 个 tab 均分。
+
+**额外修的一个坑**：`state.routes` 里包含 `(tabs)` 下的遗留路由 `(songs)` 和 `radio`，
+自定义后会多出两个无效项（截图上出现 `(son... radio`）。
+用排除法过滤：`!['(songs)', 'radio'].includes(route.name)`。
+
+**结果**：功能条宽度从整屏缩到左右各约 62pt（393pt 屏），6 个 tab 完整显示，
+播放条保持 1.1 倍长度不变。
 
 

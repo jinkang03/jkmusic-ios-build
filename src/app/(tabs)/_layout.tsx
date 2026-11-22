@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { useMemo } from 'react'
 import { useLiveActivity } from '@/hooks/useLiveActivity'
-import { StyleSheet, useWindowDimensions, View } from 'react-native'
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 // 首页固定为「我的列表」（不再落到搜索页/歌曲页）
@@ -25,6 +25,8 @@ const TAB_BAR_SIDE_RATIO = 0.155
 const TAB_BAR_BOTTOM = 14
 // 播放条水平长度 = 上一版 ×1.1（比功能条更宽）
 const PLAYER_SIDE_RATIO = 0.027
+/** (tabs) 下这两个是遗留路由，不能出现在导航条里 */
+const HIDDEN_TAB_ROUTES = ['(songs)', 'radio']
 
 const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boolean, alpha: number }) => {
 	const g = glass(isDark, alpha)
@@ -53,6 +55,76 @@ const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boo
 	)
 }
 
+/**
+ * 自定义底部导航条。
+ *
+ * 为什么不用 tabBarStyle 的 left/width：@react-navigation/bottom-tabs 内部会给
+ * tabBar 设成整行布局，`left/right/width` 多次实测都被覆盖（视觉上始终全宽）。
+ * 自己渲染一个绝对定位的容器，宽度才真正可控。
+ */
+const CustomTabBar = ({ state, descriptors, navigation }: any) => {
+	const { bottom } = useSafeAreaInsets()
+	const { width: winWidth } = useWindowDimensions()
+	const { blurTint, isDark, glassAlpha } = useAppTheme()
+	const mac = macPalette(!!isDark)
+	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
+	const side = Math.round(winWidth * TAB_BAR_SIDE_RATIO)
+	return (
+		<View
+			pointerEvents="box-none"
+			style={{
+				position: 'absolute',
+				left: side,
+				right: side,
+				bottom: Math.max(bottom, TAB_BAR_BOTTOM),
+			}}
+		>
+			<View
+				style={{
+					height: TAB_BAR_HEIGHT,
+					borderRadius: 26,
+					overflow: 'hidden',
+					borderWidth: 1,
+					borderColor: g.stroke,
+					backgroundColor: g.fill,
+					flexDirection: 'row',
+				}}
+			>
+				<BlurView intensity={100} tint={blurTint} style={StyleSheet.absoluteFill} />
+				<LinearGradient
+					pointerEvents="none"
+					colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0.06)', 'transparent']}
+					locations={[0, 0.4, 1]}
+					style={StyleSheet.absoluteFill}
+				/>
+				{state.routes.filter((route: any) => !HIDDEN_TAB_ROUTES.includes(String(route.name))).map((route: any) => {
+					const focused = route.key === state.routes[state.index]?.key
+					const { options } = descriptors[route.key] ?? {}
+					const color = focused ? mac.primary : mac.textMuted
+					const label = String(options?.title ?? route.name ?? '')
+					const onPress = () => {
+						const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
+						if (!focused && !event.defaultPrevented) navigation.navigate(route.name)
+					}
+					return (
+						<Pressable
+							key={route.key}
+							onPress={onPress}
+							onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
+							style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+						>
+							<View style={{ width: 25, height: 25, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: focused ? `${mac.primary}24` : 'transparent' }}>
+								{options?.tabBarIcon?.({ focused, color, size: 20 })}
+							</View>
+							<Text style={{ color, fontSize: 9, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>{label}</Text>
+						</Pressable>
+					)
+				})}
+			</View>
+		</View>
+	)
+}
+
 const TabsNavigation = () => {
 	// 灵动岛 / 锁屏实时进度（旁路，不支持时静默跳过）
 	useLiveActivity()
@@ -76,6 +148,7 @@ const TabsNavigation = () => {
 		<>
 			<Tabs
 				initialRouteName="favorites"
+				tabBar={(props: any) => <CustomTabBar {...props} />}
 				screenOptions={{
 					// tab 场景透明：背景由壁纸 + 卡片玻璃决定
 					sceneStyle: { backgroundColor: 'transparent' },
@@ -92,7 +165,9 @@ const TabsNavigation = () => {
 					tabBarStyle: {
 						position: 'absolute',
 						left: tabBarSide,
-						right: tabBarSide,
+						// 用显式 width 而不是 right：bottom-tabs 内部会覆盖 right/left 的一侧，
+						// 只给 left+right 时视觉上仍是全宽（实测多次无效）
+						width: Math.max(200, winWidth - tabBarSide * 2),
 						bottom: Math.max(bottom, TAB_BAR_BOTTOM),
 						height: TAB_BAR_HEIGHT,
 						borderRadius: 26,
