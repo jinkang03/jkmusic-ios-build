@@ -425,10 +425,17 @@ const getFakeNextTrack = (): Track => {
 async function haltWithNotice(message = '所有平台均不可用，点击播放重试') {
 	retireTrackSkip()
 	try { await ReactNativeTrackPlayer.pause() } catch { /* ignore */ }
+	// 暂停必须同步「播放意图」，否则 UI 仍显示暂停图标：
+	// 用户点一下是「暂停」而不是「播放」，表现就是「点了没反应」。
+	setPlaybackIntent('pause')
 	// 停住后不再自动换源：等用户点播放（play() 会重新武装看护）
 	streamGuardHalted = true
 	streamGuardLastAdvanceAt = Date.now()
 	streamGuardLastPos = -1
+	// 丢掉这条已经证明不可用的地址：下次 play() 会重新取流，
+	// 而不是复用旧 media 重播同一个坏 URL（那会再等 8 秒再停一次）
+	nativeQueue = null
+	try { ReactNativeTrackPlayer.clear() } catch { /* ignore */ }
 	showToast('播放失败', message, 'error')
 }
 
@@ -475,14 +482,20 @@ const checkStreamTruncation = async(duration: number) => {
 		// 流式播放时 musicItem.url 为空（地址只在播放器里），要继续检测。
 		const localUrl = String(music?.url ?? '')
 		if (localUrl && !/^https?:/i.test(localUrl)) return
-		const { parseIntervalSeconds, intervalOf, isTruncatedAudio } = await import('@/player/audioDuration')
+		const { parseIntervalSeconds, intervalOf } = await import('@/player/audioDuration')
 		const rawExpected = parseIntervalSeconds(intervalOf(music))
 		// 开发开关：把「应有的时长」放大，用来验证片段检测链路
 		const expected = (globalThis as any).__JK_CLIP_SIM__ === true
 			? Math.max(rawExpected, 600)
 			: rawExpected
-		if (!expected || expected < 60) return
-		if (!isTruncatedAudio(duration, expected)) return
+		if (!expected || expected < 30) return
+		// 只认真正的试听片段：整 30 秒 / 整 60 秒（各留 6 秒误差），
+		// 或者比标称时长少了 40% 且至少少 1 分钟。
+		// 之前一律按 80% 判，会把「现场的短版本 / 不同编曲」误判成片段，
+		// 连着换源几次后直接停住（用户看到「已换 xx」然后暂停）。
+		const looksLikePreview = Math.abs(duration - 60) <= 6 || Math.abs(duration - 30) <= 6
+		const wayTooShort = duration < expected * 0.6 && (expected - duration) >= 60
+		if (!looksLikePreview && !wayTooShort) return
 		logError('[jk/play] 流式时长明显偏短，判定为试听片段',
 			`${duration.toFixed(0)}s/${expected}s`, String(music.title ?? ''))
 		await failToPlay()
@@ -531,18 +544,7 @@ const startStreamGuard = () => {
 				return
 			}
 			if (ended) return
-			// 2a) 从未起播：position 和 duration 都是 0（地址连上了但永远不返回数据）
-			if (pos <= 0.5 && dur <= 0) {
-				if (now - streamGuardLastAdvanceAt > 12000 && !streamGuardRecovering) {
-					streamGuardLastAdvanceAt = now
-					streamGuardRecovering = true
-					logError('[jk/play] 12s 无任何音频数据（duration=0），尝试换源')
-					void failToPlay()
-						.catch(err => logError('[jk/play] 停滞恢复失败', String((err as any)?.message ?? err)))
-						.finally(() => { streamGuardRecovering = false })
-				}
-				return
-			}
+			// 2a) 从未起播交给 8s 起播看门狗；这里只管「播起来之后又停住」
 			if (pos <= 0.5) return
 			if (now - streamGuardLastAdvanceAt > 15000) {
 				streamGuardLastAdvanceAt = now
@@ -660,7 +662,16 @@ async function failToPlay() {
 	} catch { /* 默认 false */ }
 	if (!autoSkip) {
 		// 先尝试换平台（取流成功但播放失败时，原逻辑只会停住等用户手动换源）
-		if (await tryAltSource(failedMusic)) return
+		const altOk = await tryAltSource(failedMusic)
+		// 换源可能耗时十几秒；期间用户可能已经点了别的歌或重新播放，
+		// 这时的失败结果必须作废，否则会把「刚起来的播放」再次停住。
+		if (revision !== controlRevision ||
+			!isCurrentMusic(failedMusic) ||
+			playbackIntentStore.getValue() !== 'play') {
+			logInfo('[jk/play] 换源结果已过期（用户已切歌/重播），丢弃')
+			return
+		}
+		if (altOk) return
 		logInfo('[jk/play] autoSkipOnError=false，停在当前曲目（可点播放重试）')
 		await haltWithNotice('播放失败，点击播放重试')
 		return
@@ -934,11 +945,11 @@ const setTrackSource = (track: Track) => {
 					// 用「进度是否真的在走」判断更可靠
 					const ready = position > 0.5
 					if (ready) return
-					logError('[jk/play] 看门狗超时：8s 未就绪 position=', String(position), 'duration=', String(duration), 'state=', String(state))
+					logError('[jk/play] 看门狗超时：6s 未就绪 position=', String(position), 'duration=', String(duration), 'state=', String(state))
 					await failToPlay()
 				} catch { /* ignore */ }
 			})()
-		}, 8000)
+		}, 6000)
 	}
 }
 /**
@@ -1344,6 +1355,12 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		if (!musicItem) {
 			throw new Error(PlayFailReason.PLAY_LIST_IS_EMPTY)
 		}
+		// 流式地址（http/https）是一次性的，不能存进曲目对象反复使用：
+		// 换源后 currentMusic 会带上 alt 地址，失败重试时会原样重播这条死链，
+		// 表现为「点播放没反应，等 8 秒又停」。
+		if (/^https?:/i.test(String((musicItem as any)?.url ?? ''))) {
+			musicItem = { ...(musicItem as any), url: '' }
+		}
 		// 用户/自动切歌进入新的一次播放：重置该曲的换源记录，
 		// 让「播放失败，点击播放重试」能重新走一遍所有平台
 		resetAltTried(musicItem)
@@ -1449,32 +1466,14 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 			})
 			.catch((err) => logError('获取歌词失败:', err))
 
-		// 8. Auto-cache in background
-		if (
-			sourceUrl !== fakeAudioMp3Uri &&
-			!sourceUrl.includes('fake') &&
-			!wasCached &&
-			autoCacheLocalStore.getValue() &&
-			!sourceUrl.startsWith('file://')
-		) {
-			setTimeout(() => {
-				downloadToCache(track)
-					.then((localUri) => {
-						logInfo('音乐已缓存到本地:', localUri)
-						const newTrack = { ...track, url: localUri }
-						addImportedLocalMusic([newTrack], false)
-					})
-					.catch((error) => {
-						logError('缓存音乐时出错:', error)
-					})
-			}, 5000)
-		}
+		// 8. 取消「起播后台整首缓存」：
+		// 流式播放不需要它，反而会把每首歌都下载成几十 MB，
+		// 让「下一首/再播一次」变成本地文件，看起来像「下载完再播」。
+		// 只有手动下载（downloadTrack）才写 Documents/downloads。
 
-		// 9. 仅在当前曲目为远端音源时才预加载下一首，避免播放本地/缓存歌曲时继续发起音源请求
-		const shouldPreloadNextTrack =
-			sourceUrl !== fakeAudioMp3Uri &&
-			!sourceUrl.includes('fake') &&
-			!sourceUrl.startsWith('file://')
+		// 9. 不再预加载下一首地址：流式取流本身 <1s，
+		// 后台预取会同时打多个平台的脚本，抢带宽并触发源站限流。
+		const shouldPreloadNextTrack = false
 		const nextTrack = getPlayListMusicAt(currentIndex + 1)
 		if (shouldPreloadNextTrack && nextTrack && !isSameMediaItem(nextTrack, musicItem)) {
 			setTimeout(() => {

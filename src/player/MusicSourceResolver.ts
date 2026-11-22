@@ -153,6 +153,25 @@ const altBackups = new Map<string, { list: AltFound[], at: number }>()
 
 const altKeyOf = (source: any, id: any) => `${String(source ?? '')}:${String(id ?? '')}`
 
+/**
+ * 占位地址检测。
+ * 实测部分脚本对不同歌曲返回**同一条**地址（例如
+ * `http://106.0.55.102/2026-11-22-150024_110711.mp3`），这条地址连得上但永不返回数据。
+ * 音频地址都是带签名的独立地址，两首歌拿到同一条基本只能是占位/坏链。
+ */
+const usedUrlOwner = new Map<string, string>()
+const rememberUrlOwner = (url: string, songKey: string) => {
+	usedUrlOwner.set(url, songKey)
+	if (usedUrlOwner.size > 300) {
+		const first = usedUrlOwner.keys().next().value
+		if (first) usedUrlOwner.delete(first)
+	}
+}
+const isPlaceholderForOtherSong = (url: string, songKey: string) => {
+	const owner = usedUrlOwner.get(url)
+	return !!owner && owner !== songKey
+}
+
 const rememberBackups = (cacheKey: string, list: AltFound[]) => {
 	// 存数组引用：后续并发成功的候选会继续 push 进来，换源时可以直接用
 	altBackups.set(cacheKey, { list, at: Date.now() })
@@ -346,7 +365,12 @@ export const findPlayableAlt = async (
 						logInfo('[resolve] matrix 加密格式跳过', c.platform, q, url.slice(0, 60))
 						continue
 					}
+					if (isPlaceholderForOtherSong(url, `${musicItem?.platform}:${musicItem?.id}`)) {
+						logInfo('[resolve] matrix 占位地址跳过', c.platform, q, url.slice(0, 60))
+						continue
+					}
 					logInfo(`[resolve] matrix ok platform=${c.platform} quality=${q} id=${c.id} from=${c.fromIndex ? 'index' : 'search'}`)
+					rememberUrlOwner(url, `${musicItem?.platform}:${musicItem?.id}`)
 					if (forceBadUrl) logInfo('[resolve] 坏 URL 实验生效（换源链路）:', c.platform, c.id)
 					accept({
 						url: forceBadUrl ? forceBadValue : url,
@@ -682,6 +706,23 @@ export const resolveSource = async (
 						resp_url = null
 						continue
 					}
+					// 占位地址（同一 URL 被别的歌用过）与加密容器都在这里判死，
+					// 当作「这一档音质失败」继续下一档；全部失败再走跨源兜底。
+					{
+						const songKey = `${musicItem?.platform}:${musicItem?.id}`
+						if (isEncryptedAudioUrl(resp_url)) {
+							logInfo(`${logPrefix} ${currentQuality} 返回加密容器，换下一档:`, String(resp_url).slice(0, 70))
+							resp_url = null
+							currentQualityIndex++
+							continue
+						}
+						if (isPlaceholderForOtherSong(resp_url, songKey)) {
+							logInfo(`${logPrefix} ${currentQuality} 返回占位地址（别的歌用过），换下一档:`, String(resp_url).slice(0, 70))
+							resp_url = null
+							currentQualityIndex++
+							continue
+						}
+					}
 					if (
 						isCurrentSourceRequest(requestType) &&
 						currentQuality !== qualityStore.getValue()
@@ -787,6 +828,14 @@ export const resolveSource = async (
 			if (isEncryptedAudioUrl(urlStr)) {
 				logInfo('[jk/play] 加密音频格式，跳过流式直接换源:', urlStr.slice(0, 90))
 				throw new Error('ENCRYPTED_AUDIO')
+			}
+			{
+				const songKey = `${musicItem?.platform}:${musicItem?.id}`
+				if (isPlaceholderForOtherSong(urlStr, songKey)) {
+					logInfo('[jk/play] 该地址已被其它歌曲使用过，判定为占位/坏链，换源:', urlStr.slice(0, 90))
+					throw new Error('SOURCE_UNAVAILABLE')
+				}
+				rememberUrlOwner(urlStr, songKey)
 			}
 			if (isCurrentSourceRequest(requestType)) nowApiState.setValue('正常')
 			logInfo('[jk/play] 流式播放:', urlStr.slice(0, 120))

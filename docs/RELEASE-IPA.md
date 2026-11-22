@@ -1,62 +1,71 @@
-> **LATEST：1.4.35 / build 59**
-> 文件 `artifacts/ipa/JKMUSIC-1.4.35-unsigned-20261122.ipa`
-> sha256 `df44e8c3da85973527d5b098bfe18640b00dfe28fecc8c5dac81de34283cae3b`
+> **LATEST：1.4.36 / build 60**
+> 文件 `artifacts/ipa/JKMUSIC-1.4.36-unsigned-20261122.ipa`
+> sha256 `6bcfbe2ee6f494c13072b637317f26af70bce20dfd8c5c0d0c0a9c74bb0831e7`
 > 固定别名 `artifacts/ipa/JKMUSIC-ios-unsigned.ipa` 与最新版字节相同（`./scripts/sync-latest-ipa.sh`）。
 > 安装前在 App 内确认版本号（设置 → 其他 → App Version）。
 
-## v1.4.35（2026-11-22）
+## v1.4.36（2026-11-22）
 
 | 项 | 值 |
 |---|---|
-| 产物 | `artifacts/ipa/JKMUSIC-1.4.35-unsigned-20261122.ipa` |
+| 产物 | `artifacts/ipa/JKMUSIC-1.4.36-unsigned-20261122.ipa` |
 | 大小 | 18 MB |
-| sha256 | `df44e8c3da85973527d5b098bfe18640b00dfe28fecc8c5dac81de34283cae3b` |
-| 版本 / build | 1.4.35 / 59 |
+| sha256 | `6bcfbe2ee6f494c13072b637317f26af70bce20dfd8c5c0d0c0a9c74bb0831e7` |
+| 版本 / build | 1.4.36 / 60 |
 | 架构 | arm64 + JKMUSICWidget.appex + ShareExtension.appex，最低 iOS 16.4，未签名 |
-| commit | 见 tag `v1.4.35` |
+| commit | 见 tag `v1.4.36` |
 
-### 1.4.35 修「点歌后 0:00 卡死不恢复」
+### 1.4.36 清掉残留下载路径 + 修「换源后停住」
 
-**现象**：排行榜点任意歌，进度条停在 0:00 / 0:00，不报错、不换源、没有任何提示。
+**a) 播放路径彻底不再下载**
 
-**根因（三处叠加）**
+| 位置 | 之前的行为 | 现在 |
+|---|---|---|
+| `player/prefetch.ts` | 起播后把**下一首**整首下载进 musicCache | 空实现（不再预取下载） |
+| `trackPlayerIndex` auto-cache | 起播 5 秒后把**当前曲**整首下载（几十 MB） | 删除 |
+| `trackPlayerIndex` preload | 后台预加载下一首地址（多个脚本并发，抢带宽） | 删除 |
 
-1. **源返回了「连得上但永不响应」的地址**。实测
-   `curl http://106.0.55.102/2026-11-22-150024_110711.mp3` → 12 秒无任何响应（code=000）。
-   AVPlayer 对这种地址既不报错也不推进，永远停在 0:00。
-2. **`verifyMediaUrl` 把超时当成可用**（`catch → return true`），所以这条死地址通过了选源。
-3. **8 秒起播看门狗的守卫写错，从未生效过**：
+实测：播放 3 首不同歌曲 + 拖进度后，`Documents/musicCache` 仍为空；
+`item0` 全部是 `http://`。
 
-```js
-// 旧代码
-if (trackSourceLoadingStore.getValue() !== token) return
+**b) 「已换 xx 播放」后暂停不动 —— 三个原因**
+
+1. `haltWithNotice` 只调了原生 `pause()`，**没有同步播放意图**：
+   UI 仍认为在播放，按钮显示「暂停」，用户点一下反而是暂停 → 感觉没反应。
+   → 现在同步 `setPlaybackIntent('pause')`，按钮回到「播放」，点一下就是重新播放。
+2. 停住时没有丢弃坏地址：换源后的地址被写进 `musicItem.url`，
+   下次 play() 会原样重播这条死链。→ 现在 `play()` 会剥掉 http(s) 的 url，重新取流。
+3. 上一条换源链路（最长 12s）返回失败时，会把**用户刚刚重新点起的播放**再次停住。
+   → 现在 `tryAltSource` 返回后重新校验世代，过期结果直接丢弃。
+
+**c) 占位地址检测**
+
+实测部分脚本对不同歌曲返回**同一条**地址（如 `106.0.55.102/2026-11-22-150024_110711.mp3`），
+连得上但永不响应。现在同一 URL 被不同歌曲取到即判为占位，
+在音质循环里直接换下一档（不再等 8 秒看门狗）。
+
+**d) 起播看门狗 8s → 6s**
+
+实测正常起播 0.3–2.4s，6 秒足够；坏地址的等待从 8s 降到 6s。
+
+**e) 试听片段判定收紧**
+
+只认 30/60 秒试听，或比标称少 40% 且至少少 1 分钟；
+避免把「现场版/短版本」误判成片段导致连续换源后停住。
+
+**实测（just do it 歌单，随机 8 首，冷缓存）**
+
+```
+到出声：1.3s / 5.5s / 7.6s / 2.4s / 0.9s / 1.5s / 1.9s / 2.4s
+停住 0 次   缓存文件 0 个
 ```
 
-`token` 是 `setTrackSource` 新生成的，而 `trackSourceLoadingStore` 在 `play()` 的 `finally`
-里已被清成 `null` —— 两者永远不相等，看门狗每次都在第一行返回。
-
-**修复**
-
-| # | 改动 |
-|---|---|
-| 1 | 看门狗守卫改为 `nativeQueue?.token !== token`（换曲/换源后 token 会被替换） |
-| 2 | `verifyMediaUrl`：3 秒内连响应头都没有（AbortError）→ 判死，脚本池换下一个 |
-| 3 | 停滞看护新增「从未起播」分支：position 和 duration 都是 0 超过 12s → 换源 |
-| 4 | `haltWithNotice` 置 `streamGuardHalted`：停住后不再每 12s 自动重试、重复弹提示；点播放即重新武装 |
-| 5 | 开发开关 `action=badurl&url=...` 可指定任意坏地址，用来复现挂死场景 |
-
-**实测**
+**流式证据（flac）**
 
 ```
-挂死地址复现：
-看门狗超时：8s 未就绪 position= 0 duration= 0 state= buffering
-换源成功 kw -> wy
-看门狗超时：8s 未就绪 ...
-换源成功 kw -> tx
-...
-停住后再等 25s：换源/看门狗计数不再增加（不会无限重试）
-
-正常播放：连播 6 首，pos 8.5-10.4（12s 窗口），看门狗误报 0
+item0 url = http://aqqmusic.tc.qq.com/...mp3
+musicCache = 空
+seek 107s（60%）→ pos 107.36，3 秒后 110.25，仍在播放
 ```
 
 
