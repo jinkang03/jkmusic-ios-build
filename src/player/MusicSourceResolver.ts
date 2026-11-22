@@ -61,8 +61,6 @@ const preloadCache = new Map<string, string>()
 const CURRENT_SOURCE_REQUEST_TIMEOUT_MS = 5000
 const PRELOAD_SOURCE_REQUEST_TIMEOUT_MS = 12000
 
-const ALT_CACHE_TTL_MS = 5 * 60 * 1000
-const altCache = new Map<string, { url: string, source: string, label: string, title: string, id?: string, at: number }>()
 
 const readFromSource = (m: any) => String(
 	m?.platform ?? m?.source ?? m?.lxMusic?.source ?? '',
@@ -87,7 +85,10 @@ const splitArtists = (value: any): string[] =>
 		.map(part => normalizeMatchKey(part))
 		.filter(part => part.length > 0)
 
-export const clearAltCache = () => { altCache.clear() }
+export const clearAltCache = () => {
+	altCache.clear()
+	altBackups.clear()
+}
 export const clearPreloadCache = () => { preloadCache.clear() }
 
 /**
@@ -113,21 +114,132 @@ type AltCandidate = {
 	fromIndex: boolean
 }
 
+type AltFound = {
+	url: string
+	source: string
+	id: string
+	label: string
+	title: string
+	at: number
+}
+
+/** 加密容器后缀：AVPlayer 打不开，取流后立刻判死，不浪费一次起播 */
+const ENCRYPTED_URL_RE = /\.(mgg|mflac0?|qmc[0-9a-z]*|tm[0-6])(?:$|[?#])/i
+export const isEncryptedAudioUrl = (url: any) => ENCRYPTED_URL_RE.test(String(url ?? ''))
+
+/**
+ * 音质只降不升。
+ * 之前 `[quality, '320k', '128k']` 在设 128k 时会去试 320k（等于偷偷升档）。
+ */
+const QUALITY_LADDER: Record<string, string[]> = {
+	flac: ['flac', '320k', '128k'],
+	'320k': ['320k', '128k'],
+	'128k': ['128k'],
+}
+const qualitiesFor = (quality: any) => QUALITY_LADDER[String(quality ?? '')] ?? ['128k']
+
 const platformLabel = (id: string) => ALL_PLATFORMS.find(p => p.id === id)?.label ?? id
 
+/** 换源总预算：到点就用已有结果，绝不无限等 */
+const ALT_BUDGET_MS = 12000
+const ALT_PRELOAD_BUDGET_MS = 6000
+const ALT_CACHE_TTL_MS = 5 * 60 * 1000
+const ALT_BACKUP_MAX_KEYS = 30
+
+/** 身份缓存：记住「哪首歌的哪个 id 能用」，地址每次重新取（脚本地址有时效） */
+const altCache = new Map<string, { source: string, id: string, name: string, at: number }>()
+/** 备用队列：并发阶段已经取到的地址，主链路失败时直接 pop（切换 0 延迟） */
+const altBackups = new Map<string, { list: AltFound[], at: number }>()
+
+const altKeyOf = (source: any, id: any) => `${String(source ?? '')}:${String(id ?? '')}`
+
+const rememberBackups = (cacheKey: string, list: AltFound[]) => {
+	// 存数组引用：后续并发成功的候选会继续 push 进来，换源时可以直接用
+	altBackups.set(cacheKey, { list, at: Date.now() })
+	if (altBackups.size > ALT_BACKUP_MAX_KEYS) {
+		let oldestKey = ''
+		let oldestAt = Number.MAX_SAFE_INTEGER
+		for (const [k, v] of altBackups) {
+			if (v.at < oldestAt) { oldestAt = v.at; oldestKey = k }
+		}
+		if (oldestKey) altBackups.delete(oldestKey)
+	}
+}
+
+const takeBackup = (cacheKey: string, exclude: Set<string>): AltFound | null => {
+	const entry = altBackups.get(cacheKey)
+	if (!entry) return null
+	if (Date.now() - entry.at > ALT_CACHE_TTL_MS) {
+		altBackups.delete(cacheKey)
+		return null
+	}
+	return entry.list.find(h => !exclude.has(altKeyOf(h.source, h.id)) && !exclude.has(h.url)) ?? null
+}
+
+/**
+ * 跨源兜底：当前平台取流失败时，把「歌名 + 歌手」拿到**所有其它平台**找同曲，
+ * 每个候选曲目都用「脚本池」取流（同一平台会并发尝试所有支持它的脚本）。
+ *
+ * 与旧实现的三点区别：
+ * 1. 不再等最慢的平台：索引候选立刻开跑，搜索结果谁先到谁先取流（B1）；
+ * 2. 有总预算（12s），到点就用已有结果返回，不会拖到 80s（B2）；
+ * 3. 成功结果会留在备用队列里，主链路播不出来时可以直接切下一个（A2）。
+ *
+ * @param options.exclude 已失败过的 `source:id` / 地址，避免原地重试同一首
+ */
 export const findPlayableAlt = async (
 	musicItem: IMusic.IMusicItem,
 	quality: string,
 	requestType: ResolveSourceRequestType,
+	options: { exclude?: Set<string> } = {},
 ) => {
 	const title = String(musicItem?.title ?? '')
 	const artist = String(musicItem?.artist ?? '')
 	if (!title) return null
 	const cacheKey = `${musicItem?.platform}:${normalizeMatchKey(title)}:${normalizeMatchKey(artist)}:${quality}`
-	const cached = altCache.get(cacheKey)
-	if (cached && Date.now() - cached.at < ALT_CACHE_TTL_MS) {
-		logInfo('[resolve] cross-source cached', cached.source, cached.title)
-		return cached
+	const exclude = options.exclude ?? new Set<string>()
+
+	// 1) 备用队列：并发阶段已经取到的地址，直接复用（切换 0 延迟）
+	if (requestType === 'current') {
+		const backup = takeBackup(cacheKey, exclude)
+		if (backup) {
+			logInfo('[resolve] backup hit', backup.source, backup.label, String(backup.title ?? '').slice(0, 40))
+			return backup
+		}
+	}
+
+	// 2) 身份缓存：省掉实时搜索，但地址必须重新取（脚本地址常有 vkey 时效）
+	const known = altCache.get(cacheKey)
+	if (known && Date.now() - known.at < ALT_CACHE_TTL_MS && !exclude.has(altKeyOf(known.source, known.id))) {
+		logInfo('[resolve] identity cache, refetch', known.source, known.id)
+		const { getPooledMusicUrl } = await import('@/jk/sourceRegistry')
+		for (const q of qualitiesFor(quality)) {
+			try {
+				const url = await Promise.race([
+					getPooledMusicUrl(
+						known.name,
+						artist,
+						known.id,
+						q,
+						known.source,
+						{ songmid: known.id, id: known.id, source: known.source },
+					),
+					createTimeoutPromise(7000),
+				]) as string
+				if (typeof url === 'string' && /^https?:/.test(url) && !isEncryptedAudioUrl(url)) {
+					logInfo('[resolve] identity cache ok', known.source, q)
+					return {
+						url,
+						source: known.source,
+						id: known.id,
+						label: platformLabel(known.source),
+						title: known.name,
+						at: Date.now(),
+					} as AltFound
+				}
+			} catch { /* 换下一档音质 */ }
+		}
+		altCache.delete(cacheKey)
 	}
 
 	const currentPlatform = readFromSource(musicItem)
@@ -145,6 +257,9 @@ export const findPlayableAlt = async (
 
 	const { getPooledMusicUrl } = await import('@/jk/sourceRegistry')
 	const { searchBySource } = await import('@/jk/musicSdk')
+	// 开发开关：把候选地址替换成必然失败的地址，用来验证「一个接一个换源」链路
+	const { getSetting: getDevSetting } = await import('@/jk/settingsStore')
+	const forceBadUrl = getDevSetting<boolean>('_dev.forceBadUrl', false) === true
 
 	const targetTitleFull = normalizeMatchKey(title)
 	const targetTitleMain = stripTitleDecor(title)
@@ -181,89 +296,34 @@ export const findPlayableAlt = async (
 		stripTitleDecor(title) || title,
 	].filter(Boolean)))
 
-	const collectCandidates = async(): Promise<AltCandidate[]> => {
-		const list: AltCandidate[] = []
-		try {
-			const idx = await import('@/jk/crossSourceIndex')
-			for (const e of idx.lookup(title, artist)) {
-				if (!e?.id || e.source === currentPlatform) continue
-				if (!platforms.some(p => p.id === e.source)) continue
-				list.push({
-					platform: String(e.source),
-					id: String(e.id),
-					name: String(e.name || title),
-					singer: String(e.singer || artist),
-					meta: { songmid: String(e.id), id: String(e.id), source: e.source },
-					fromIndex: true,
-				})
-			}
-			if (list.length) logInfo('[resolve] matrix 索引候选', list.length)
-		} catch { /* ignore */ }
+	const budget = requestType === 'preload' ? ALT_PRELOAD_BUDGET_MS : ALT_BUDGET_MS
+	const deadline = Date.now() + budget
 
-		// 预取（preload）只查索引：不然每切一首歌都会额外打 5 个平台的搜索接口
-		if (requestType === 'preload') return list
+	// 并发引擎：候选随到随取流，第一个成功立刻返回；其余成功留在备用队列
+	const found: AltFound[] = []
+	let primary: AltFound | null = null
+	let resolvePrimary: (v: AltFound) => void = () => undefined
+	const primaryPromise = new Promise<AltFound>(resolve => { resolvePrimary = resolve })
+	const attempts: Promise<void>[] = []
+	const started = new Set<string>()
 
-		const searched = await Promise.allSettled(
-			platforms.map(async(p) => {
-				let best: any = null
-				let bestScore = 0
-				let lastErr = ''
-				for (const q of queries) {
-					try {
-						const res = await Promise.race([
-							searchBySource(p.id as any, q, 1, 10),
-							createTimeoutPromise(6500),
-						]) as any[]
-						for (const item of res ?? []) {
-							const score = scoreOf(item)
-							if (score > bestScore) { bestScore = score; best = item }
-						}
-						if (bestScore >= 100) break
-					} catch (err) {
-						lastErr = String((err as any)?.message ?? err)
-					}
-				}
-				if (!best) throw new Error(`no match${lastErr ? `(${lastErr})` : ''}`)
-				logInfo(`[resolve] matrix search hit platform=${p.id} score=${bestScore} name=${String(best.name ?? '').slice(0, 48)}`)
-				return {
-					platform: p.id,
-					id: String(best.id),
-					name: String(best.name ?? title),
-					singer: String(best.singer ?? artist),
-					meta: best,
-					fromIndex: false,
-				} as AltCandidate
-			}),
-		)
-		for (const r of searched) {
-			if (r.status === 'fulfilled') list.push(r.value)
+	const accept = (hit: AltFound) => {
+		if (exclude.has(altKeyOf(hit.source, hit.id)) || exclude.has(hit.url)) return
+		if (found.some(h => h.source === hit.source && h.id === hit.id)) return
+		found.push(hit)
+		if (!primary) {
+			primary = hit
+			resolvePrimary(hit)
 		}
-		// 同平台同 id 去重
-		const seen = new Set<string>()
-		return list.filter(c => {
-			const key = `${c.platform}:${c.id}`
-			if (seen.has(key)) return false
-			seen.add(key)
-			return true
-		})
 	}
 
-	const raceOnce = async(): Promise<any | null> => {
-		let uniq = await collectCandidates()
-		if (!uniq.length) {
-			// 偶发超时（真机上「重试又能播」）：稍等再完整跑一轮搜索
-			logInfo('[resolve] matrix 首轮无候选，800ms 后重试 title=', title)
-			await new Promise(r => setTimeout(r, 800))
-			uniq = await collectCandidates()
-		}
-		if (!uniq.length) return null
-		logInfo('[resolve] matrix 候选平台=', uniq.map(c => `${c.platform}${c.fromIndex ? '(idx)' : ''}`).join('/'))
-
-		// 并发竞速：每个候选曲目 × 音质降级（当前 → 320k → 128k），
-		// 取流走脚本池（同一平台会并发尝试所有支持它的脚本）。
-		const qualities = Array.from(new Set([String(quality || '128k'), '320k', '128k']))
-		const attempts = uniq.map(c => (async() => {
-			for (const q of qualities) {
+	const startAttempt = (c: AltCandidate) => {
+		const attemptKey = altKeyOf(c.platform, c.id)
+		if (started.has(attemptKey) || exclude.has(attemptKey)) return
+		started.add(attemptKey)
+		attempts.push((async() => {
+			for (const q of qualitiesFor(quality)) {
+				if (Date.now() > deadline) return
 				try {
 					const url = await Promise.race([
 						getPooledMusicUrl(
@@ -277,45 +337,119 @@ export const findPlayableAlt = async (
 						),
 						createTimeoutPromise(7000),
 					]) as string
-					if (typeof url === 'string' && /^https?:/.test(url)) {
-						logInfo(`[resolve] matrix ok platform=${c.platform} quality=${q} id=${c.id} from=${c.fromIndex ? 'index' : 'search'}`)
-						return {
-							url,
-							source: c.platform as any,
-							id: c.id,
-							label: platformLabel(c.platform),
-							title: c.name,
-							at: Date.now(),
-						}
+					if (typeof url !== 'string' || !/^https?:/.test(url)) continue
+					if (isEncryptedAudioUrl(url)) {
+						logInfo('[resolve] matrix 加密格式跳过', c.platform, q, url.slice(0, 60))
+						continue
 					}
+					logInfo(`[resolve] matrix ok platform=${c.platform} quality=${q} id=${c.id} from=${c.fromIndex ? 'index' : 'search'}`)
+					if (forceBadUrl) logInfo('[resolve] 坏 URL 实验生效（换源链路）:', c.platform, c.id)
+					accept({
+						url: forceBadUrl ? 'https://127.0.0.1:9/x.mp3' : url,
+						source: c.platform,
+						id: c.id,
+						label: platformLabel(c.platform),
+						title: c.name,
+						at: Date.now(),
+					})
+					return
 				} catch { /* 换下一档音质 */ }
 			}
 			logInfo(`[resolve] matrix fail platform=${c.platform} id=${c.id}`)
-			throw new Error('miss')
 		})())
+	}
 
-		try {
-			return await Promise.any(attempts)
-		} catch {
+	// 索引候选立刻开跑，不等实时搜索（这是最常见的「上次搜到过」场景）
+	try {
+		const idx = await import('@/jk/crossSourceIndex')
+		for (const e of idx.lookup(title, artist)) {
+			if (!e?.id || e.source === currentPlatform) continue
+			if (!platforms.some(p => p.id === e.source)) continue
+			startAttempt({
+				platform: String(e.source),
+				id: String(e.id),
+				name: String(e.name || title),
+				singer: String(e.singer || artist),
+				meta: { songmid: String(e.id), id: String(e.id), source: e.source },
+				fromIndex: true,
+			})
+		}
+		if (started.size) logInfo('[resolve] matrix 索引候选', started.size)
+	} catch { /* ignore */ }
+
+	const searchBest = async(p: { id: string }): Promise<AltCandidate | null> => {
+		let best: any = null
+		let bestScore = 0
+		for (const q of queries) {
+			if (Date.now() > deadline) break
+			try {
+				const res = await Promise.race([
+					searchBySource(p.id as any, q, 1, 15),
+					createTimeoutPromise(6500),
+				]) as any[]
+				for (const item of res ?? []) {
+					const score = scoreOf(item)
+					if (score > bestScore) { bestScore = score; best = item }
+				}
+				if (bestScore >= 100) break
+			} catch { /* 换下一个查询词 */ }
+		}
+		if (!best) {
+			logInfo(`[resolve] matrix 搜索无结果 platform=${p.id}`)
 			return null
+		}
+		logInfo(`[resolve] matrix search hit platform=${p.id} score=${bestScore} name=${String(best.name ?? '').slice(0, 48)}`)
+		return {
+			platform: p.id,
+			id: String(best.id),
+			name: String(best.name ?? title),
+			singer: String(best.singer ?? artist),
+			meta: best,
+			fromIndex: false,
 		}
 	}
 
-	let found = await raceOnce()
-	if (!found && requestType !== 'preload') {
-		// 真机网络抖动经常是「第一次超时、第二次就通」：整体再来一次
-		logInfo('[resolve] matrix 全失败，900ms 后整体重试一次 title=', title)
-		await new Promise(r => setTimeout(r, 900))
-		found = await raceOnce()
-	}
-	if (!found) {
+	// 预取只查索引：不然每切一首歌都会额外打 5 个平台的搜索接口
+	const searches = requestType === 'preload'
+		? Promise.resolve()
+		: Promise.allSettled(platforms.map(async(p) => {
+			const c = await searchBest(p)
+			if (c) startAttempt(c)
+		}))
+
+	// 所有候选跑完（或预算耗尽）才算「没有可用的」
+	const drained = (async() => {
+		await searches
+		let index = 0
+		while (index < attempts.length) {
+			const batch = attempts.slice(index)
+			index = attempts.length
+			await Promise.allSettled(batch)
+		}
+		return null
+	})()
+
+	let budgetTimer: any = null
+	const budgetPromise = new Promise<null>(resolve => {
+		budgetTimer = setTimeout(() => resolve(null), Math.max(0, deadline - Date.now()))
+	})
+
+	const winner = await Promise.race([primaryPromise, drained, budgetPromise]) as AltFound | null
+	if (budgetTimer) clearTimeout(budgetTimer)
+
+	// 先登记备用队列再去重：后续并发成功的候选会继续 push 进同一个数组
+	if (found.length) rememberBackups(cacheKey, found)
+
+	const chosen = winner ?? found[0] ?? null
+	if (!chosen) {
 		logInfo('[resolve] matrix 所有平台均失败 title=', title, String(artist ?? ''), 'platforms=', platforms.map(p => p.id).join('/'))
 		return null
 	}
-	altCache.set(cacheKey, found)
-	logInfo('[resolve] switched', currentPlatform, '->', found.source, title)
-	return found
+	altCache.set(cacheKey, { source: chosen.source, id: chosen.id, name: chosen.title, at: Date.now() })
+	logInfo('[resolve] switched', currentPlatform, '->', chosen.source, title)
+	return chosen
 }
+
 
 const isCurrentSourceRequest = (requestType: ResolveSourceRequestType) =>
 	requestType === 'current'
@@ -643,7 +777,7 @@ export const resolveSource = async (
 			const urlStr = typeof resp_url === 'string'
 				? resp_url
 				: String((resp_url as any)?.url ?? '')
-			if (/\.(mgg|mflac0?|qmc[0-9a-z]*|tm[0-6])(?:$|[?#])/i.test(urlStr)) {
+			if (isEncryptedAudioUrl(urlStr)) {
 				logInfo('[jk/play] 加密音频格式，跳过流式直接换源:', urlStr.slice(0, 90))
 				throw new Error('ENCRYPTED_AUDIO')
 			}

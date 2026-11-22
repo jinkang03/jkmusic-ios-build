@@ -206,7 +206,7 @@ function reset() {
 	trackSourceLoadingStore.setValue(null)
 	nativeQueue = null
 	clearPlayWatchdog()
-	altTriedRef.clear()
+	altTriedMap.clear()
 	ReactNativeTrackPlayer.clear()
 }
 
@@ -434,23 +434,59 @@ const clearPlayWatchdog = () => {
 	playWatchdogTimer = null
 }
 
-/** 已尝试过换源的曲目（同一首只换一次，避免来回横跳） */
-const altTriedRef = new Set<string>()
+/**
+ * 每首歌已尝试过的换源目标（source:id）。
+ * 旧实现是一首只换一次；现在允许连续换到所有可用平台，全部失败才停。
+ */
+const altTriedMap = new Map<string, Set<string>>()
+/** 单曲换源上限（≈可用平台数，防止死循环） */
+const ALT_MAX_TRIES = 5
+
+const songKeyOf = (item?: any) => `${item?.platform ?? ''}:${item?.id ?? ''}`
+
+/** 手动播放/切歌时重置该曲记录：失败后点播放重试能重新走一遍全部平台 */
+const resetAltTried = (item?: any) => {
+	const key = songKeyOf(item)
+	if (key !== ':') altTriedMap.delete(key)
+}
 
 const tryAltSource = async(musicItem: any): Promise<boolean> => {
-	const key = `${musicItem?.platform ?? ''}:${musicItem?.id ?? ''}`
-	if (!key || altTriedRef.has(key)) return false
-	altTriedRef.add(key)
+	const songKey = songKeyOf(musicItem)
+	if (!songKey || songKey === ':') return false
+	let tried = altTriedMap.get(songKey)
+	if (!tried) {
+		tried = new Set<string>()
+		altTriedMap.set(songKey, tried)
+		// 简单限长：只保留最近 100 首的尝试记录
+		if (altTriedMap.size > 100) {
+			const firstKey = altTriedMap.keys().next().value
+			if (firstKey && firstKey !== songKey) altTriedMap.delete(firstKey)
+		}
+	}
+	// 当前正在播的换源目标也算「已试过」：
+	// 否则第一次会原样重试同一个地址（resolveSource 里已经换过一次源的情况）
+	try {
+		const { resolvedFromStore } = await import('@/player/PlayerStore')
+		const cur: any = resolvedFromStore.getValue()
+		if (cur?.to && cur?.toId && String(cur.title ?? '') === String(musicItem?.title ?? '')) {
+			tried.add(`${cur.to}:${cur.toId}`)
+		}
+	} catch { /* ignore */ }
+	if (tried.size >= ALT_MAX_TRIES) {
+		logInfo('[jk/play] 换源已达上限，停止', songKey, String(tried.size))
+		return false
+	}
 	try {
 		const { findPlayableAlt } = await import('@/player/MusicSourceResolver')
 		const { getSetting } = await import('@/jk/settingsStore')
 		const quality = String(getSetting('music.quality', '128k'))
-		logInfo('[jk/play] 播放失败，尝试换源', key)
-		const alt: any = await findPlayableAlt(musicItem, quality, 'current')
+		logInfo('[jk/play] 播放失败，尝试换源', songKey, 'tried=', tried.size)
+		const alt: any = await findPlayableAlt(musicItem, quality, 'current', { exclude: tried })
 		if (!alt?.url) {
-			logInfo('[jk/play] 换源无可用结果', key)
+			logInfo('[jk/play] 换源无可用结果', songKey)
 			return false
 		}
+		tried.add(`${alt.source}:${alt.id}`)
 		logInfo('[jk/play] 换源成功', `${musicItem?.platform} -> ${alt.source}`, String(alt.title ?? ''))
 		// 换源后直接流式播放（不再下载）：起播失败会由看门狗再触发一次换源
 		const playUrl = String(alt.url ?? '')
@@ -1179,6 +1215,9 @@ const play = async (musicItem?: IMusic.IMusicItem | null, forcePlay?: boolean, s
 		if (!musicItem) {
 			throw new Error(PlayFailReason.PLAY_LIST_IS_EMPTY)
 		}
+		// 用户/自动切歌进入新的一次播放：重置该曲的换源记录，
+		// 让「播放失败，点击播放重试」能重新走一遍所有平台
+		resetAltTried(musicItem)
 		setPlaybackIntent('play')
 
 		// 1. If already playing this track
