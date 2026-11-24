@@ -1,6 +1,4 @@
 <p align="center">
-  <img src="ios/JKMUSIC/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png" width="112" alt="JKMUSIC" />
-</p>
 
 <h1 align="center">JKMUSIC for iOS</h1>
 
