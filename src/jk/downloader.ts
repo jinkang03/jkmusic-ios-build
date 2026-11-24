@@ -39,9 +39,15 @@ export const downloadTrack = async(track: any, opts?: { quality?: string, listNa
 		logInfo('[download] start', String(track?.title ?? ''), 'q=' + requested, 'list=' + String(opts?.listName ?? '试听'))
 		upsertTask({ id: String(track.id), title: String(track.title ?? ''), percent: 0, status: 'downloading' })
 		const forceBad = track?.__forceBad === true || track?.bad === true
+		// 播放详情页传进来的是「当前播放的 track」，它带着已解析的流地址（通常是 128k）；
+		// resolveSource 会优先复用这个地址，导致选 flac 也下载 128k。
+		// 下载必须按选择重新取流，所以先把 http 地址剥掉。
+		const downloadTarget = /^https?:/i.test(String(track?.url ?? ''))
+			? { ...track, url: '' }
+			: track
 		const resolved: any = forceBad
 			? { url: 'https://invalid.invalid/x.mp3' }
-			: await resolveSource(track, {
+			: await resolveSource(downloadTarget, {
 				requestType: 'download',
 				requestKey: `dl_${Date.now()}`,
 				quality: requested as any,
@@ -144,6 +150,15 @@ export const downloadTrack = async(track: any, opts?: { quality?: string, listNa
 			listName: String(opts?.listName ?? '试听'),
 		}, { lyric, translation, coverUri: coverTemp })
 
+		// 登记到下载索引：下次从歌单播放直接走本地文件
+		const dlSource = String((track as any)?.platform ?? '')
+		const dlId = String((track as any)?.id ?? '')
+		void import('@/jk/downloadIndex').then(m => m.upsertDownloaded({
+			uri: dest,
+			source: dlSource,
+			sourceId: dlId,
+			quality: actual,
+		})).then(() => import('@/jk/cacheIndexStore')).then(m => m.markCached(dlSource, dlId)).catch(() => undefined)
 		logInfo('[download] done', String(track?.title ?? ''), 'q=' + actual, 'path=' + dest.split('/').pop())
 		upsertTask({ id: String(track.id), percent: 100, status: 'done' })
 		setTimeout(() => removeTask(String(track.id)), 1500)

@@ -34,10 +34,11 @@ const fmt = (sec?: number) => {
 const srcShort = (id: string) => sourceLabel(id, true)
 
 export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
-	const { blurTint, isDark, glassAlpha } = useAppTheme()
+	const { isDark, glassAlpha } = useAppTheme()
 	// 文字跟随「文字颜色」设置（usePageTheme 已把自定义色合进 colors）
 	const pageTheme = usePageTheme()
-	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
+	// 功能页固定浅色玻璃：0=全透明，100=纯白，中间只加白，不加黑
+	const g = glass(false, Number(glassAlpha ?? 0.55))
 	const mac = macPalette(!!isDark)
 	const colors = pageTheme.colors
 	const defaultStyles = useDefaultStyles()
@@ -94,8 +95,8 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 		>
 			<BlurView
 				intensity={Math.round(Math.min(1, Math.max(0, Number(glassAlpha ?? 0.55))) * 100)}
-				// 功能页统一白字 + 深色玻璃：tint 用 dark，否则 light blur 会把底色洗白
-				tint={Number(glassAlpha ?? 0.55) > 0.5 ? 'light' : 'dark'}
+				// 固定 light：tint 跟随透明度切换会在低档变成一层黑色遮罩（用户反馈）
+				tint="light"
 				style={styles.blurContainer}
 			>
 				{/* 液态玻璃高光：顶部一道白色渐隐，配合细描边形成「玻璃厚度」 */}
@@ -129,7 +130,7 @@ export const FloatingPlayer = React.memo(({ style }: ViewProps) => {
 						)}
 					</View>
 					<View style={{ flex: 1, justifyContent: 'center' }}>
-						<MovingText style={styles.trackTitle} text={displayedTrack.title ?? ''} animationThreshold={18} />
+						<MovingText style={styles.trackTitle} color={colors.text} text={displayedTrack.title ?? ''} animationThreshold={18} />
 						<Text numberOfLines={1} style={styles.trackArtist}>{displayedTrack.artist ?? ''}</Text>
 						{resolvedFrom && resolvedFrom.from !== resolvedFrom.to
 							&& (!resolvedFrom.title || resolvedFrom.title === displayedTrack.title) ? (
@@ -211,6 +212,9 @@ const createStyles = (
 	},
 	trackTitle: {
 		...(defaultStyles?.text ?? {}),
+		// 必须显式用页面文字色：defaultStyles.text 是固定深色，
+		// 不覆盖会导致「文字颜色」滑块改了但播放条歌名始终黑色
+		color: colors.text,
 		fontSize: 17,
 		fontWeight: '500',
 	},

@@ -61,7 +61,11 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 
 	return (
 		<TouchableWithoutFeedback onPress={handlePress}>
-			<View>
+			<View
+				onLayout={({ nativeEvent }) => {
+					if (index !== undefined) onLayout?.(index, nativeEvent.layout.height)
+				}}
+			>
 				<Animated.View
 					style={[
 						lyricStyles.background,
@@ -72,12 +76,7 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 				/>
 				{highlight ? (
 					// 当前行：平滑填充（字内插值 + 120ms 宽度补间），比「逐字跳变」顺滑
-					<View
-						onLayout={({ nativeEvent }) => {
-							if (index !== undefined) onLayout?.(index, nativeEvent.layout.height)
-						}}
-						style={[lyricStyles.item, { paddingVertical: rpx(10) }]}
-					>
+					<View style={[lyricStyles.item, { paddingVertical: rpx(10) }]}>
 						<KaraokeSegLine
 							text={String(text ?? '')}
 							segs={karaokeSegs}
@@ -90,11 +89,6 @@ function _LyricItemComponent(props: ILyricItemComponentProps) {
 					</View>
 				) : (
 					<Text
-						onLayout={({ nativeEvent }) => {
-							if (index !== undefined) {
-								onLayout?.(index, nativeEvent.layout.height)
-							}
-						}}
 						style={[
 							lyricStyles.item,
 							{

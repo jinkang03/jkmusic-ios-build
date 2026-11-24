@@ -180,17 +180,65 @@ function retireTrackSkip() {
 	trackSkipLoadingStore.setValue(null)
 }
 
+/**
+ * 播放结束后的统一推进入口。
+ * 三条触发路径（placeholder transition / PlaybackState.Ended / 位置到末尾兜底）
+ * 共用 handoffConsumed，保证只切一次。
+ */
+function advanceAfterEnd(reason: string) {
+	if (!nativeQueue || nativeQueue.handoffConsumed) return
+	if (!isCurrentMusic(nativeQueue.track as IMusic.IMusicItem)) return
+	if (trackSourceLoadingStore.getValue() !== null) return
+	if (playbackIntentStore.getValue() !== 'play') return
+	// 占位音频（很短的静音文件）结束时不要触发
+	const progress: any = ReactNativeTrackPlayer.getProgress?.() ?? {}
+	const duration = Number(progress?.duration ?? 0)
+	if (duration > 0 && duration < 20) return
+	nativeQueue.handoffConsumed = true
+	logInfo('队列末尾，播放下一首', `(${reason})`)
+	// 必须跳出原生事件回调再切歌：MediaItemTransition 是在原生队列变更过程中派发的，
+	// 在回调里同步调 setMediaItems 等于在原生改队列的同时再改一次（实测会闪退）
+	setTimeout(() => {
+		const advance = repeatModeStore.getValue() === MusicRepeatMode.SINGLE
+			? play(null, true)
+			: skipToNext()
+		void advance.catch((error) => logError('自动切歌失败', error))
+	}, 0)
+}
+
 function handleNativeTransition(item: MediaItem | null | undefined, index: number | null) {
 	// clear() can omit item entirely. A duplicate/stale placeholder must not advance.
-	if (item == null || index !== 1 || !isCurrentNativeItem(item, true) ||
-		nativeQueue.handoffConsumed || trackSourceLoadingStore.getValue() !== null ||
-		playbackIntentStore.getValue() !== 'play') return
-	nativeQueue.handoffConsumed = true
-	logInfo('队列末尾，播放下一首')
-	const advance = repeatModeStore.getValue() === MusicRepeatMode.SINGLE
-		? play(null, true)
-		: skipToNext()
-	void advance.catch((error) => logError('自动切歌失败', error))
+	if (item == null || index !== 1) return
+	// 真机上事件到达时 getActiveMediaItem()/index 可能还停留在上一首，
+	// 不能用 isCurrentNativeItem 做交叉校验，否则会永远不切歌。
+	const identity = getNativeTrackIdentity(item)
+	if (!identity || identity.placeholder !== true) return
+	if (!nativeQueue || identity.token !== nativeQueue.token) return
+	advanceAfterEnd('transition')
+}
+
+/** 位置到末尾但没收到任何结束事件时的兜底（真机实测会偶发） */
+let endAdvanceTimer: any = null
+const clearEndAdvanceTimer = () => {
+	if (endAdvanceTimer) clearTimeout(endAdvanceTimer)
+	endAdvanceTimer = null
+}
+const maybeScheduleEndAdvance = (position: number, duration: number) => {
+	if (endAdvanceTimer) return
+	if (!nativeQueue || nativeQueue.handoffConsumed) return
+	if (playbackIntentStore.getValue() !== 'play') return
+	if (trackSourceLoadingStore.getValue() !== null) return
+	if (!duration || duration < 20) return
+	if (position < duration - 0.8) return
+	endAdvanceTimer = setTimeout(() => {
+		endAdvanceTimer = null
+		const p: any = ReactNativeTrackPlayer.getProgress?.() ?? {}
+		const pos = Number(p?.position ?? 0)
+		const dur = Number(p?.duration ?? 0)
+		if (!dur || dur < 20 || pos < dur - 1.0) return
+		logInfo('[jk/play] 播放结束未收到切歌事件，兜底切下一首')
+		advanceAfterEnd('ended-fallback')
+	}, 2500)
 }
 
 function observeNativeTransport(intent: 'play' | 'pause' | 'stop') {
@@ -210,6 +258,7 @@ function reset() {
 	trackSourceLoadingStore.setValue(null)
 	nativeQueue = null
 	clearPlayWatchdog()
+	clearEndAdvanceTimer()
 	resetStreamGuards()
 	altTriedMap.clear()
 	ReactNativeTrackPlayer.clear()
@@ -379,6 +428,7 @@ async function setupTrackPlayer() {
 					preloadNextInAdvance(posNow, durNow)
 					warmNextStream(posNow, durNow)
 					maybeCacheCurrent(posNow)
+					maybeScheduleEndAdvance(posNow, durNow)
 					if (latPlayAt && key !== latAudibleKey) {
 						latAudibleKey = key
 						const pos = Number((data as any)?.position ?? 0)
@@ -404,16 +454,38 @@ async function setupTrackPlayer() {
 			ReactNativeTrackPlayer.addEventListener(Event.MediaItemTransition, (event) => {
 				handleNativeTransition(event.item, event.index)
 			}),
+			ReactNativeTrackPlayer.addEventListener(Event.PlaybackStateChanged, (event: any) => {
+				if (event?.state !== PlaybackState.Ended) return
+				// 给 placeholder transition 一点优先时间；重复触发由 handoffConsumed 拦下
+				setTimeout(() => advanceAfterEnd('ended-state'), 350)
+			}),
 			ReactNativeTrackPlayer.addEventListener(Event.PlaybackError, (error) => {
+				setFailureReason('播放出错')
 				if (!error.message || trackSourceLoadingStore.getValue() !== null ||
 					ReactNativeTrackPlayer.getPlaybackState() !== PlaybackState.Error ||
 					!isCurrentNativeItem(ReactNativeTrackPlayer.getActiveMediaItem())) return
 				logInfo('播放出错', { message: error.message, code: error.code })
-				void failToPlay().catch((failure) => logError('播放错误恢复失败', failure))
+				// 同样跳出原生事件回调（PlaybackError 在 AVPlayer 失败路径里派发）
+				setTimeout(() => {
+					void failToPlay().catch((failure) => logError('播放错误恢复失败', failure))
+				}, 0)
 			}),
 		)
 		startStreamGuard()
-		void import('@/jk/cacheIndexStore').then(m => m.refreshCachedKeys()).catch(() => undefined)
+		// 回到前台：另一个 App（抖音等）抢走过音频后，系统的「正在播放」需要重新发布，
+		// 否则控制中心/锁屏控件会一直显示「未在播放」
+		AppState.addEventListener('change', (state) => {
+			if (state !== 'active') return
+			void import('@/helpers/nowPlaying')
+				.then(m => m.refreshNowPlaying())
+				.catch(() => undefined)
+		})
+		// 先建下载索引（后台），再把「已缓存」标记和下载合并，列表里下载过的也会打勾
+		void import('@/jk/downloadIndex')
+			.then(m => m.ensureDownloadIndex())
+			.then(() => import('@/jk/cacheIndexStore'))
+			.then(m => m.refreshCachedKeys())
+			.catch(() => undefined)
 		logInfo('播放器初始化完成')
 	}
 }
@@ -441,6 +513,16 @@ const getFakeNextTrack = (): Track => {
  * 与 mac 一致——失败不自动切歌，避免一次失败连锁跳掉半张歌单。
  */
 async function haltWithNotice(message = '所有平台均不可用，点击播放重试') {
+	const cur: any = currentMusicStore.getValue()
+	if (cur) {
+		void import('@/jk/playbackDiagnostics').then(m => m.recordDiagnostic({
+			kind: 'halt',
+			title: String(cur.title ?? ''),
+			from: String(cur.platform ?? ''),
+			reason: lastFailureReason || '所有平台均不可用',
+			detail: message,
+		})).catch(() => undefined)
+	}
 	retireTrackSkip()
 	try { await ReactNativeTrackPlayer.pause() } catch { /* ignore */ }
 	// 暂停必须同步「播放意图」，否则 UI 仍显示暂停图标：
@@ -452,8 +534,12 @@ async function haltWithNotice(message = '所有平台均不可用，点击播放
 	streamGuardLastPos = -1
 	// 丢掉这条已经证明不可用的地址：下次 play() 会重新取流，
 	// 而不是复用旧 media 重播同一个坏 URL（那会再等 8 秒再停一次）
+	//
+	// 注意：这里不能 clear()。clear() 会清空 MPNowPlayingInfo 并关闭音频会话，
+	// 控制中心/锁屏会直接变成「未在播放」（QQ 音乐停住时仍显示暂停卡片）。
+	// 只把 JS 侧的队列引用置空，原生 item 保留，系统仍能读到这首歌。
 	nativeQueue = null
-	try { ReactNativeTrackPlayer.clear() } catch { /* ignore */ }
+	try { await import('@/helpers/nowPlaying').then(m => m.refreshNowPlaying()) } catch { /* ignore */ }
 	showToast('播放失败', message, 'error')
 }
 
@@ -543,7 +629,20 @@ const warmNextStream = (position: number, duration: number) => {
 		if (!url || !/^https?:/i.test(url)) return
 		warmedFor = key
 		logInfo('[preload] 预热下一首连接:', String(next.title ?? ''), 'remain=', remain.toFixed(1) + 's')
-		void fetch(url, { headers: { Range: 'bytes=0-1' } }).catch(() => undefined)
+		void fetch(url, { headers: { Range: 'bytes=0-1' } })
+			.then((res) => {
+				if (!res.ok) {
+					logInfo('[preload] 预热失败，丢弃预取地址', res.status)
+					void import('@/player/MusicSourceResolver')
+						.then(m => m.invalidatePreloaded(next as any))
+						.catch(() => undefined)
+				}
+			})
+			.catch(() => {
+				void import('@/player/MusicSourceResolver')
+					.then(m => m.invalidatePreloaded(next as any))
+					.catch(() => undefined)
+			})
 	} catch { /* ignore */ }
 }
 
@@ -598,6 +697,7 @@ const checkStreamTruncation = async(duration: number) => {
 		if (!looksLikePreview && !wayTooShort) return
 		logError('[jk/play] 流式时长明显偏短，判定为试听片段',
 			`${duration.toFixed(0)}s/${expected}s`, String(music.title ?? ''))
+		setFailureReason('试听片段')
 		await failToPlay()
 	} catch { /* 检测失败不影响播放 */ }
 }
@@ -641,6 +741,10 @@ const startStreamGuard = () => {
 			if (!ended && Math.abs(pos - streamGuardLastPos) > 0.4) {
 				streamGuardLastPos = pos
 				streamGuardLastAdvanceAt = now
+				// 真的播起来了：连续失败计数清零（否则一次抖动会永久卡住自动切歌）
+				if (pos > FAILURE_RESET_POSITION && consecutiveFailures > 0) {
+					notePlaybackSuccess()
+				}
 				return
 			}
 			if (ended) return
@@ -651,6 +755,7 @@ const startStreamGuard = () => {
 				streamGuardRecovering = true
 				logError('[jk/play] 播放停滞 15s（position=', pos.toFixed(1),
 					'duration=', dur.toFixed(1), '），尝试换源')
+				setFailureReason('播放停滞')
 				void failToPlay()
 					.catch(err => logError('[jk/play] 停滞恢复失败', String((err as any)?.message ?? err)))
 					.finally(() => { streamGuardRecovering = false })
@@ -681,10 +786,14 @@ const songKeyOf = (item?: any) => `${item?.platform ?? ''}:${item?.id ?? ''}`
 /** 手动播放/切歌时重置该曲记录：失败后点播放重试能重新走一遍全部平台 */
 const resetAltTried = (item?: any) => {
 	const key = songKeyOf(item)
-	if (key !== ':') altTriedMap.delete(key)
+	if (key !== ':') {
+		altTriedMap.delete(key)
+		freshRetriedMap.delete(key)
+	}
 }
 
 const tryAltSource = async(musicItem: any): Promise<boolean> => {
+	const revisionAtStart = controlRevision
 	const songKey = songKeyOf(musicItem)
 	if (!songKey || songKey === ':') return false
 	let tried = altTriedMap.get(songKey)
@@ -720,6 +829,12 @@ const tryAltSource = async(musicItem: any): Promise<boolean> => {
 			logInfo('[jk/play] 换源无可用结果', songKey)
 			return false
 		}
+		// 换源可能耗时十几秒；期间用户可能已点下一首/别的歌，这时结果必须作废，
+		// 否则会在新歌上再套一次 setMediaItems（实测会导致切歌瞬间闪退/状态错乱）
+		if (revisionAtStart !== controlRevision || !isCurrentMusic(musicItem)) {
+			logInfo('[jk/play] 换源结果已过期（用户已切歌），丢弃', songKey)
+			return false
+		}
 		tried.add(`${alt.source}:${alt.id}`)
 		logInfo('[jk/play] 换源成功', `${musicItem?.platform} -> ${alt.source}`, String(alt.title ?? ''))
 		// 换源后直接流式播放（不再下载）：起播失败会由看门狗再触发一次换源
@@ -728,7 +843,19 @@ const tryAltSource = async(musicItem: any): Promise<boolean> => {
 			logError('[jk/play] 换源返回的地址不可用', playUrl.slice(0, 80))
 			return false
 		}
-		showToast('提示', `该源无法播放，已用${alt.label ?? alt.source}播放`, 'info')
+		const reasonText = lastFailureReason || '取流失败'
+		const fromLabel = String(musicItem?.platform ?? '')
+		const toLabel = String(alt.label ?? alt.source ?? '')
+		showToast('提示', `${fromLabel} 不可用（${reasonText}），已用${toLabel}播放`, 'info')
+		void import('@/jk/playbackDiagnostics').then(m => m.recordDiagnostic({
+			kind: 'switch',
+			title: String(musicItem?.title ?? ''),
+			from: fromLabel,
+			to: String(alt.source ?? ''),
+			reason: reasonText,
+			detail: String(playUrl).slice(0, 80),
+		})).catch(() => undefined)
+		lastFailureReason = ''
 		void import('@/player/PlayerStore').then(m => m.resolvedFromStore.setValue({
 			from: String(musicItem?.platform ?? ''),
 			to: String(alt.source ?? ''),
@@ -744,11 +871,69 @@ const tryAltSource = async(musicItem: any): Promise<boolean> => {
 	}
 }
 
+/** 已经「同源重新取流」试过的曲目（每首只试一次，避免死循环） */
+const freshRetriedMap = new Set<string>()
+
+/**
+ * 同一平台重新取流（跳过末段预取缓存）。
+ * 末段预取拿到的地址可能是短时/一次性链接，或者预取时网络抖动拿到坏地址；
+ * 手动点播放会重新取流，所以「点播放又能放」——这里让失败恢复也走一次同样的路径。
+ */
+async function tryFreshResolve(musicItem: any): Promise<boolean> {
+	const revisionAtStart = controlRevision
+	const key = songKeyOf(musicItem)
+	if (!key || key === ':' || freshRetriedMap.has(key)) return false
+	freshRetriedMap.add(key)
+	if (freshRetriedMap.size > 100) {
+		const first = freshRetriedMap.values().next().value
+		if (first && first !== key) freshRetriedMap.delete(first)
+	}
+	try {
+		const { resolveSource } = await import('@/player/MusicSourceResolver')
+		// 限时 8s：源脚本卡死时不要把失败恢复也一起拖住
+		const result = await Promise.race([
+			resolveSource({ ...(musicItem as any), url: '' }, { requestType: 'current', bypassPreload: true }),
+			delay(8000).then(() => ({ url: '' } as any)),
+		])
+		const url = String((result as any)?.url ?? '')
+		if (!url || String(url).includes('fake')) return false
+		const failedUrl = String(musicItem?.url ?? '')
+		if (/^https?:/i.test(failedUrl) && failedUrl === url) {
+			logInfo('[jk/play] 同源重取得到同一个地址，不再重试')
+			return false
+		}
+		if (revisionAtStart !== controlRevision || !isCurrentMusic(musicItem)) {
+			logInfo('[jk/play] 同源重取结果已过期（用户已切歌），丢弃')
+			return false
+		}
+		logInfo('[jk/play] 同源重新取流成功，直接重试播放')
+		setTrackSource({ ...(musicItem as any), url } as any)
+		ReactNativeTrackPlayer.play()
+		return true
+	} catch (err) {
+		logInfo('[jk/play] 同源重新取流失败', String((err as any)?.message ?? err))
+		return false
+	}
+}
+
 async function failToPlay() {
-	// 每次进入失败恢复都计一次；连续 3 次由 skipToNext 的硬保护拦下
-	notePlaybackFailure('failToPlay')
 	const revision = controlRevision
 	const failedMusic = currentMusicStore.getValue()
+	// 任何一次播放异常都记进诊断（即使后面救回来了，也便于回看原因）
+	if (failedMusic) {
+		void import('@/jk/playbackDiagnostics').then(m => m.recordDiagnostic({
+			kind: 'fail',
+			title: String((failedMusic as any).title ?? ''),
+			from: String((failedMusic as any).platform ?? ''),
+			reason: lastFailureReason || '播放失败',
+		})).catch(() => undefined)
+	}
+	// 先尝试「同源重新取流」：能救回来就不计入连续失败
+	if (failedMusic && await tryFreshResolve(failedMusic)) {
+		return
+	}
+	// 每次进入失败恢复都计一次；连续 3 次由 skipToNext 的硬保护拦下
+	notePlaybackFailure('failToPlay')
 	const sourceToken = trackSourceLoadingStore.getValue()
 	retireTrackSkip()
 	if (isCurrentNativeItem(ReactNativeTrackPlayer.getActiveMediaItem())) {
@@ -1026,6 +1211,7 @@ const setTrackSource = (track: Track) => {
 	}
 	// 新地址/新曲目：重置片段与停滞计时
 	resetStreamGuards()
+	clearEndAdvanceTimer()
 	preloadTriggeredFor = ''
 	warmedFor = ''
 	setCurrentMusic(track as IMusic.IMusicItem)
@@ -1035,6 +1221,9 @@ const setTrackSource = (track: Track) => {
 	const intent = playbackIntentStore.getValue()
 	if (intent === 'play') {
 		ReactNativeTrackPlayer.play()
+		setTimeout(() => {
+			void import('@/helpers/nowPlaying').then(m => m.refreshNowPlaying()).catch(() => undefined)
+		}, 300)
 	} else if (intent === 'stop') {
 		// A source may finish resolving after Stop. Retain it for a later Play,
 		// without letting setMediaItems change the requested stopped state.
@@ -1064,6 +1253,7 @@ const setTrackSource = (track: Track) => {
 					const ready = position > 0.5
 					if (ready) return
 					logError('[jk/play] 看门狗超时：6s 未就绪 position=', String(position), 'duration=', String(duration), 'state=', String(state))
+					setFailureReason('起播超时')
 					await failToPlay()
 				} catch { /* ignore */ }
 			})()
@@ -1712,12 +1902,26 @@ const runWithTrackSkipLoading = async (
 	}
 }
 
+/** 最近一次播放失败的原因（用于换源提示与诊断页） */
+let lastFailureReason = ''
+const setFailureReason = (reason: string) => { lastFailureReason = reason }
+
 // 硬保护：连续播放失败 3 次就停止自动跳转（不受 autoSkipOnError 设置影响），
 // 否则一次失败会连锁跳几十首并把每首都下载完（实测两分钟 160MB）
+//
+// 注意：计数必须能「清零」，否则一次网络抖动 + 两次偶发失败会永久卡住自动切歌
+// （表现为：播完不切下一首、提示「播放连续失败，已暂停」，点播放又能放）。
 let consecutiveFailures = 0
+let lastFailureAt = 0
+const FAILURE_WINDOW_MS = 10 * 60 * 1000
+/** 播到 10 秒以上算「这首真的播起来了」，清空连续失败计数 */
+const FAILURE_RESET_POSITION = 10
 
 export const notePlaybackFailure = (reason?: any) => {
+	const now = Date.now()
+	if (now - lastFailureAt > FAILURE_WINDOW_MS) consecutiveFailures = 0
 	consecutiveFailures++
+	lastFailureAt = now
 	logError(`[jk/play] consecutive failures=${consecutiveFailures}`, reason)
 	return consecutiveFailures
 }
@@ -1731,6 +1935,8 @@ const skipToNext = async () => {
 		logError('[jk/play] consecutive failures=3, stop auto skip')
 		showToast('播放连续失败，已暂停', '请检查音源或网络', 'error')
 		try { await ReactNativeTrackPlayer.pause() } catch { /* ignore */ }
+		// 同步 JS 意图，否则 UI/看护仍以为在播，用户点一下变成「暂停」
+		setPlaybackIntent('pause')
 		return
 	}
 	await runWithTrackSkipLoading('next', async (operation) => {

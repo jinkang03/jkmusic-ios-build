@@ -39,17 +39,18 @@ export const useLogger = createStore<LoggerState>((set) => ({
 			// 在控制台打印日志
 			console.log(`[${newLog.timestamp}] [${level}] ${message}`)
 
-			return {
-				logs: [
-					...state.logs,
-					{
-						timestamp: new Date().toISOString(),
-						level,
-						message,
-						details: args.length > 1 ? args : undefined,
-					},
-				],
-			}
+			// 只保留最近 300 条：长时间播放/下载（进度每块写一条）时，
+			// 无上限会让数组不断复制，内存持续上涨，后台容易被系统杀掉
+			const nextLogs = [
+				...state.logs,
+				{
+					timestamp: new Date().toISOString(),
+					level,
+					message,
+					details: args.length > 1 ? args : undefined,
+				},
+			]
+			return { logs: nextLogs.length > 300 ? nextLogs.slice(-300) : nextLogs }
 		}),
 	clearLogs: () => set({ logs: [] }),
 }))

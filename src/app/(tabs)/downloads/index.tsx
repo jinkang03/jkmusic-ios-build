@@ -17,6 +17,7 @@ import { readCacheIndex, removeCacheIndexEntry } from '@/player/CacheManager'
 import { normalizeQuality } from '@/jk/downloader'
 import { downloadTasksStore } from '@/jk/downloadTasksStore'
 import { tr } from '@/utils/i18n'
+import { showToast } from '@/utils/utils'
 import { fileUriFromPath } from '@/helpers/localFile'
 
 // 筛选项用 id 判断，文案渲染期翻译（模块级常量会在语言切换后过期）
@@ -148,11 +149,20 @@ const DownloadsScreen = () => {
 
 	const removeOne = async(uri: string) => {
 		try {
-			const { removeDownload } = await import('@/jk/downloadStore')
+			const { removeDownload, scanDownloads } = await import('@/jk/downloadStore')
 			await removeDownload(uri)
 			await load()
+			// 复核：文件还在就明确报错，不再「点了没反应」
+			const after = await scanDownloads()
+			if (after.some(it => it.uri === uri)) {
+				logError('[downloads] 删除后文件仍存在', uri)
+				showToast(tr('删除失败', 'Delete failed'), tr('文件仍占用，请重试', 'File is still in use, try again'), 'error')
+			} else {
+				logInfo('[downloads] 已删除', uri)
+			}
 		} catch (err) {
 			logError('[downloads] 删除失败', String((err as any)?.message ?? err))
+			showToast(tr('删除失败', 'Delete failed'), String((err as any)?.message ?? err).slice(0, 60), 'error')
 		}
 	}
 
@@ -245,7 +255,7 @@ const DownloadsScreen = () => {
 			) : (
 				<FlatList
 					data={shown}
-					keyExtractor={item => item.name}
+					keyExtractor={item => item.uri}
 					style={{ flex: 1, marginTop: 8 }}
 					contentContainerStyle={{ paddingBottom: 176 }}
 					renderItem={({ item }) => (

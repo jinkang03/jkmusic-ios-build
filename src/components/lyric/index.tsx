@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Dimensions, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Dimensions, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import type { FlatList as NativeFlatList, FlatListProps } from 'react-native'
 
 import { ThemeColors } from '@/constants/tokens'
@@ -127,12 +127,27 @@ export default function Lyric(props: IProps) {
 	// 歌词身份：切歌或换词后必须清掉旧行高，否则 getItemLayout 会按上一首的高度算 offset，
 	// 表现就是「滚动位置整体偏移」（全屏歌词停在错误位置、当前行在屏幕外）
 	const lyricSignature = `${lyrics.length}:${String((lyrics[0] as any)?.lrc ?? '').slice(0, 16)}`
-	React.useEffect(() => {
-		const blank = itemHeightsRef.current.blankHeight
-		itemHeightsRef.current = blank ? { blankHeight: blank } : {}
-	}, [lyricSignature])
+	// 行高缓存按「歌词身份」失效：以前用 effect 清空，会和 onLayout 抢时序——
+	// effect 在首帧布局之后才跑，经常把刚量到的整批行高擦掉，
+	// 于是 getItemLayout 永远走估算值，当前行累计误差越来越大（用户反馈「不居中、掉到屏幕下面」）。
+	// 改成写入时比对身份，谁先到都不会丢测量结果。
+	const heightsSigRef = useRef(lyricSignature)
 	const lastAutoScrollAtRef = useRef(0)
 	const lastAutoScrollIndexRef = useRef(-1)
+	const lastScrolledOffsetRef = useRef(-1)
+	// 行高变化计数：测量/高亮切换导致行高变了就补一次定位
+	const [layoutTick, setLayoutTick] = React.useState(0)
+	const layoutBumpTimerRef = useRef<any>(null)
+	const bumpLayout = useCallback(() => {
+		if (layoutBumpTimerRef.current) clearTimeout(layoutBumpTimerRef.current)
+		layoutBumpTimerRef.current = setTimeout(() => {
+			layoutBumpTimerRef.current = null
+			setLayoutTick(t => t + 1)
+		}, 90)
+	}, [])
+	React.useEffect(() => () => {
+		if (layoutBumpTimerRef.current) clearTimeout(layoutBumpTimerRef.current)
+	}, [])
 
 	// 设置空白组件，获取组件高度
 	const blankComponent = useMemo(() => {
@@ -147,8 +162,21 @@ export default function Lyric(props: IProps) {
 	}, [])
 
 	const handleLyricItemLayout = useCallback((index: number, height: number) => {
+		if (heightsSigRef.current !== lyricSignature) {
+			heightsSigRef.current = lyricSignature
+			const blank = itemHeightsRef.current.blankHeight
+			itemHeightsRef.current = blank ? { blankHeight: blank } : {}
+		}
+		const prev = itemHeightsRef.current[index]
 		itemHeightsRef.current[index] = height
-	}, [])
+		if (prev === undefined || Math.abs(prev - height) > 0.5) {
+			bumpLayout()
+		}
+	}, [lyricSignature, bumpLayout])
+
+	// getItemLayout 定义在下面，这里用 ref 拿「最新那一份」，
+	// 否则 scrollToLyricIndex 会一直闭包首帧的旧估算（歌词/翻译都还没到时）
+	const getItemLayoutRef = useRef<((data: unknown, index: number) => { length: number, offset: number, index: number }) | null>(null)
 
 	const clampLyricIndex = useCallback((index: number, listLength: number) => {
 		if (listLength <= 0) {
@@ -175,12 +203,13 @@ export default function Lyric(props: IProps) {
 
 			// 手算偏移而不是 viewPosition: 0.5：
 			// scrollToIndex 依赖 getItemLayout 的 offset 精确，header 未测量/行高不一致时会偏几行。
-			const layout = getItemLayout(null, targetIndex)
+			const layout = (getItemLayoutRef.current ?? getItemLayout)(null, targetIndex)
 			const viewport = listHeightRef.current
 			const offset = viewport > 0
 				? Math.max(0, layout.offset + layout.length / 2 - viewport / 2)
 				: Math.max(0, layout.offset)
 			listRef.current.scrollToOffset({ offset, animated: true })
+			lastScrolledOffsetRef.current = offset
 			lastAutoScrollAtRef.current = now
 			lastAutoScrollIndexRef.current = targetIndex
 		},
@@ -253,21 +282,82 @@ export default function Lyric(props: IProps) {
 		return () => clearTimeout(t)
 	}, [lyricSignature, scrollEnabled, scrollToCurrentLrcItem])
 
+	// 行高估算：未渲染过的行以前用固定 92rpx 兜底，
+	// 但长英文行会折成 2 行、带翻译又多一行，实际高度差异很大，
+	// 累计误差会让当前行落在屏幕下方（用户反馈「有的歌不居中」）。
+	const { width: winWidth } = useWindowDimensions()
+	const listTextWidth = Math.max(80, winWidth - rpx(128))
+	const estimateTextLines = useCallback((text: any, width: number, fs: number) => {
+		const str = String(text ?? '')
+		if (!str) return 1
+		let lines = 1
+		let acc = 0
+		for (const ch of str) {
+			// 中日韩字符按 1 个字号宽，拉丁字符约 0.56 个字号
+			const wide = (ch.codePointAt(0) ?? 0) >= 0x2E80
+			const w = wide ? fs : fs * 0.56
+			if (acc + w > width) { lines += 1; acc = w } else acc += w
+		}
+		return lines
+	}, [])
+	const estimateItemHeight = useCallback((index: number) => {
+		const item: any = lyrics[index]
+		if (!item) return ITEM_HEIGHT
+		const fs = Number(fontSizeStyle.fontSize) || rpx(30)
+		const lines = estimateTextLines(item?.lrc, listTextWidth, fs)
+		// paddingVertical rpx(24) * 2 + 行数 * 字号 * 1.32
+		let h = rpx(48) + lines * fs * 1.32
+		if (showTrans) {
+			const tr = findTranslation(translationLyrics, item?.time)
+			if (tr) h += 2 + Math.max(12, fs - 6) * 1.3
+		}
+		return h
+	}, [lyrics, fontSizeStyle, showTrans, translationLyrics, listTextWidth, estimateTextLines])
+
+	// 自校准：用已测量行的高度 / 估算高度得到一个比例，
+	// 再套到未测量行上。不同字号/翻译/中英混排下比固定值稳。
 	const getItemLayout = useCallback((_: unknown, index: number) => {
 		const itemHeights = itemHeightsRef.current
 		// header 在首帧还没测量时按屏宽 70% 兜底（styles.empty 用的是 paddingTop: '70%'）
 		const headerHeight = itemHeights.blankHeight ?? Math.round(Dimensions.get('window').width * 0.7)
+		let measuredSum = 0
+		let estimateSum = 0
+		for (const key of Object.keys(itemHeights)) {
+			if (key === 'blankHeight') continue
+			const i = Number(key)
+			const mh = Number(itemHeights[i] ?? 0)
+			if (!Number.isFinite(i) || mh <= 0) continue
+			const est = estimateItemHeight(i)
+			if (est > 0) { measuredSum += mh; estimateSum += est }
+		}
+		const factor = estimateSum > 0 && measuredSum > 0
+			? Math.min(1.8, Math.max(0.45, measuredSum / estimateSum))
+			: 1
 		let offset = headerHeight
 		for (let i = 0; i < index; i++) {
-			offset += itemHeights[i] ?? ITEM_HEIGHT
+			offset += itemHeights[i] ?? estimateItemHeight(i) * factor
 		}
-		const length = itemHeights[index] ?? ITEM_HEIGHT
+		const length = itemHeights[index] ?? estimateItemHeight(index) * factor
 		return {
 			length,
 			offset,
 			index,
 		}
-	}, [])
+	}, [estimateItemHeight])
+	getItemLayoutRef.current = getItemLayout
+
+	// 测量稳定后按真实行高校正：只有和上次滚动目标差得明显才动，避免来回抖
+	useEffect(() => {
+		if (!scrollEnabled || layoutTick === 0 || !lyrics.length) return
+		const idx = activeIndex < 0 ? 0 : activeIndex
+		const layout = getItemLayout(null, idx)
+		const viewport = listHeightRef.current
+		const desired = viewport > 0
+			? Math.max(0, layout.offset + layout.length / 2 - viewport / 2)
+			: Math.max(0, layout.offset)
+		if (Math.abs(desired - lastScrolledOffsetRef.current) <= 12) return
+		scrollToLyricIndex(idx, lyrics.length, true)
+	}, [layoutTick, scrollEnabled, lyrics.length, activeIndex, getItemLayout, scrollToLyricIndex])
 
 	const scrollOffsetRef = useRef(0)
 	const onScrollBeginDrag = useCallback(() => {
@@ -365,6 +455,12 @@ export default function Lyric(props: IProps) {
 						ref={(_) => {
 							listRef.current = _
 						}}
+						// 歌词行数不多（一般 <150）：一次性全部渲染，
+						// 让每行 onLayout 都能量到真实高度，居中定位才精确
+						initialNumToRender={Math.max(30, lyrics.length)}
+						maxToRenderPerBatch={Math.max(30, lyrics.length)}
+						windowSize={Math.max(21, Math.ceil(lyrics.length / 3))}
+						removeClippedSubviews={false}
 						onLayout={({ nativeEvent }) => {
 							listHeightRef.current = Math.round(nativeEvent.layout.height)
 						}}
@@ -399,7 +495,6 @@ export default function Lyric(props: IProps) {
 					scrollEventThrottle={32}
 					style={styles.wrapper}
 					data={lyrics}
-					initialNumToRender={30}
 					overScrollMode="never"
 					extraData={activeIndex}
 					getItemLayout={getItemLayout}

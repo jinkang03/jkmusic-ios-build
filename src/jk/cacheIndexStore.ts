@@ -8,6 +8,7 @@
 import { GlobalState } from '@/utils/stateMapper'
 import { readCacheIndex } from '@/player/CacheManager'
 import { logInfo } from '@/helpers/logger'
+import { getDownloadedKeys } from './downloadIndex'
 
 export const cachedKeysStore = new GlobalState<Set<string>>(new Set())
 
@@ -49,6 +50,8 @@ export const refreshCachedKeys = async() => {
 			const id = String(anyMeta?.actualId ?? anyMeta?.songmid ?? '')
 			if (src && id) next.add(keyOf(src, id))
 		}
+		// 手动下载的也算「本地已有」：和已缓存用同一个标记，不区分来源
+		for (const key of getDownloadedKeys()) next.add(key)
 		cachedKeysStore.setValue(next)
 		logInfo('[cache] 已缓存索引', next.size, '首')
 	} catch { /* 索引不可读时保持空集合 */ }

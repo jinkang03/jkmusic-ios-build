@@ -16,6 +16,10 @@ export type Playlist = {
 	/** 作者 */
 	artist: string
 	songs: IMusic.IMusicItem[]
+	/** 「我的列表」：有来源链接，支持「更新歌单」 */
+	canUpdate?: boolean
+	/** 「我的列表」：已设置自定义封面，菜单里显示「更换封面 / 恢复默认」 */
+	hasCustomCover?: boolean
 }
 
 export type Artist = {

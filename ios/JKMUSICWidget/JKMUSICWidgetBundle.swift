@@ -41,28 +41,6 @@ private struct ArtworkView: View {
     }
 }
 
-/// 细线进度条（锁屏卡片用）
-private struct ProgressLine: View {
-    let progress: Double
-    let color: Color
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(color.opacity(0.22))
-                Capsule()
-                    .fill(color)
-                    .frame(width: max(0, min(1, progress)) * geo.size.width)
-            }
-        }
-    }
-}
-
-private func remainingText(duration: Double, progress: Double) -> String {
-    let left = max(0, duration * (1 - max(0, min(1, progress))))
-    let total = Int(left.rounded())
-    return String(format: "%d:%02d", total / 60, total % 60)
-}
 
 @available(iOS 16.1, *)
 struct JKMUSICLiveActivityWidget: Widget {
@@ -82,29 +60,17 @@ struct JKMUSICLiveActivityWidget: Widget {
                             .lineLimit(1)
                     }
                     Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
-                            .font(.caption)
-                            .foregroundStyle(Color(jkHex: context.attributes.primaryHex))
-                        Text(remainingText(duration: context.attributes.duration, progress: context.state.progress))
-                            .font(.caption2)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
+                    // 只保留播放状态图标：进度与倒计时由 App 推送，后台会被系统限流后停住
+                    Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
+                        .font(.caption)
+                        .foregroundStyle(Color(jkHex: context.attributes.primaryHex))
                 }
-                ProgressLine(
-                    progress: context.state.progress,
-                    color: Color(jkHex: context.attributes.primaryHex)
-                )
-                .frame(height: 2)
             }
             .padding(14)
             .activityBackgroundTint(Color.black.opacity(0.6))
             .activitySystemActionForegroundColor(Color(jkHex: context.attributes.primaryHex))
         } dynamicIsland: { context in
             let accent = Color(jkHex: context.attributes.primaryHex)
-            let progress = max(0, min(1, context.state.progress))
-            let remaining = max(0, context.attributes.duration * (1 - progress))
             return DynamicIsland {
                 // 展开态：顶部封面 + 歌名
                 DynamicIslandExpandedRegion(.leading) {
@@ -112,16 +78,10 @@ struct JKMUSICLiveActivityWidget: Widget {
                         .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(remainingText(duration: context.attributes.duration, progress: progress))
-                            .font(.caption2)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
-                            .font(.caption2)
-                            .foregroundStyle(accent)
-                    }
-                    .padding(.trailing, 4)
+                    Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
+                        .font(.caption2)
+                        .foregroundStyle(accent)
+                        .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -136,46 +96,25 @@ struct JKMUSICLiveActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    // 边缘进度：沿圆角卡片边缘走一圈（trim 描边）
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .trim(from: 0, to: max(0.005, progress))
-                            .stroke(
-                                accent,
-                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
-                            )
-                        HStack(spacing: 8) {
-                            Text(context.attributes.title)
-                                .font(.caption2)
-                                .lineLimit(1)
-                            Spacer(minLength: 6)
-                            Text("\(Int(progress * 100))%")
-                                .font(.caption2)
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 12)
+                    // 进度条已移除：App 后台被限流后进度会停住，只保留播放状态
+                    HStack(spacing: 6) {
+                        Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
+                            .font(.caption2)
+                            .foregroundStyle(accent)
+                        Text(context.state.isPlaying ? "正在播放" : "已暂停")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
                     }
-                    .frame(height: 40)
-                    .padding(.top, 2)
+                    .padding(.horizontal, 4)
                 }
             } compactLeading: {
                 ArtworkView(base64: context.attributes.artworkBase64, size: 20, corner: 5)
             } compactTrailing: {
-                // 紧凑态放不下「沿边缘」的进度（系统只给左右两个圆区），改为倒计时
-                if context.state.isPlaying {
-                    Text(timerInterval: Date.now...Date.now.addingTimeInterval(remaining), countsDown: true)
-                        .font(.caption2)
-                        .monospacedDigit()
-                        .frame(width: 44)
-                        .foregroundStyle(accent)
-                } else {
-                    Image(systemName: "pause.fill")
-                        .font(.caption2)
-                        .foregroundStyle(accent)
-                }
+                // 不再显示倒计时（App 推送的进度在后台会被系统限流）
+                Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
+                    .font(.caption2)
+                    .foregroundStyle(accent)
             } minimal: {
                 ArtworkView(base64: context.attributes.artworkBase64, size: 20, corner: 5)
             }

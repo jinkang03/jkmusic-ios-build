@@ -5,7 +5,7 @@ import { Playlist } from '@/helpers/types'
 import { useNavigationSearch } from '@/hooks/useNavigationSearch'
 import { useUtilsStyles } from '@/styles'
 import i18n, { tr } from '@/utils/i18n'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Alert, FlatList, FlatListProps, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 type PlaylistsListProps = {
@@ -15,6 +15,16 @@ type PlaylistsListProps = {
 	onPlaylistDelete?: (id: string, name: string) => void
 	/** 从来源平台重新拉取歌单（对应 mac 端的「更新歌单」） */
 	onPlaylistUpdate?: (id: string, name: string) => void
+	/** 选择自定义封面（相册） */
+	onPlaylistSetCover?: (id: string, name: string) => void
+	/** 恢复默认封面（删掉自定义封面） */
+	onPlaylistResetCover?: (id: string, name: string) => void
+	/** 打开「排序歌单」页（控制歌单排列顺序，含内置歌单） */
+	onPlaylistSort?: () => void
+	/** 一键置顶某个歌单 */
+	onPlaylistPinTop?: (id: string, name: string) => void
+	/** dev 深链：进入页面后自动展开某个歌单的菜单（免长按验收） */
+	autoMenuName?: string
 } & Partial<FlatListProps<Playlist>>
 
 export const PlaylistsList = ({
@@ -22,6 +32,11 @@ export const PlaylistsList = ({
 	onPlaylistPress: handlePlaylistPress,
 	onPlaylistDelete,
 	onPlaylistUpdate,
+	onPlaylistSetCover,
+	onPlaylistResetCover,
+	onPlaylistSort,
+	onPlaylistPinTop,
+	autoMenuName,
 	...flatListProps
 }: PlaylistsListProps) => {
 	const utilsStyles = useUtilsStyles()
@@ -63,24 +78,62 @@ export const PlaylistsList = ({
 	)
 
 	const showActions = (playlist: Playlist) => {
-		// 内置列表（试听列表 / 我的收藏）不允许删除/更新
-		if (playlist.id === 'default' || playlist.id === 'love') {
-			Alert.alert(tr('提示', 'Notice'), tr('内置列表不能删除', 'Built-in lists cannot be deleted'))
-			return
+		// 内置列表（试听列表 / 我的收藏）不能删除、不能改封面，但可以排序/置顶
+		const isBuiltin = playlist.id === 'default' || playlist.id === 'love'
+		const buttons: Parameters<typeof Alert.alert>[2] = []
+		if (!isBuiltin) {
+			buttons.push({
+				// 已设过自定义封面时文案变「更换封面」
+				text: playlist.hasCustomCover
+					? tr('更换封面', 'Change Cover')
+					: tr('设置封面', 'Set Cover'),
+				onPress: () => onPlaylistSetCover?.(playlist.id, playlist.name),
+			})
+			if (playlist.hasCustomCover) {
+				buttons.push({
+					text: tr('恢复默认封面', 'Reset Cover'),
+					onPress: () => onPlaylistResetCover?.(playlist.id, playlist.name),
+				})
+			}
+			// 手动创建的歌单没有来源链接，不显示「更新歌单」（不做灰色假按钮）
+			if (playlist.canUpdate) {
+				buttons.push({
+					text: tr('更新歌单', 'Update Playlist'),
+					onPress: () => onPlaylistUpdate?.(playlist.id, playlist.name),
+				})
+			}
 		}
-		Alert.alert(playlist.name, undefined, [
-			{
-				text: tr('更新歌单', 'Update Playlist'),
-				onPress: () => onPlaylistUpdate?.(playlist.id, playlist.name),
-			},
-			{
+		buttons.push({
+			text: tr('排序歌单', 'Sort Playlists'),
+			onPress: () => onPlaylistSort?.(),
+		})
+		buttons.push({
+			text: tr('一键置顶', 'Pin to Top'),
+			onPress: () => onPlaylistPinTop?.(playlist.id, playlist.name),
+		})
+		if (!isBuiltin) {
+			buttons.push({
 				text: tr('删除歌单', 'Delete Playlist'),
 				style: 'destructive',
 				onPress: () => showDeleteAlert(playlist),
-			},
-			{ text: tr('取消', 'Cancel'), style: 'cancel' },
-		])
+			})
+		}
+		buttons.push({ text: tr('取消', 'Cancel'), style: 'cancel' })
+		Alert.alert(playlist.name, undefined, buttons)
 	}
+
+	// dev 深链 ?menu=<歌单名>：页面就绪后自动弹菜单（模拟长按），只触发一次
+	const autoMenuDoneRef = useRef(false)
+	useEffect(() => {
+		if (!autoMenuName || autoMenuDoneRef.current) return
+		const hit = playlists.find(p => p.name === autoMenuName)
+			?? playlists.find(p => p.name.includes(autoMenuName))
+		if (!hit) return
+		autoMenuDoneRef.current = true
+		const t = setTimeout(() => showActions(hit), 600)
+		return () => clearTimeout(t)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [autoMenuName, playlists.length])
 
 	const showDeleteAlert = (playlist: Playlist) => {
 		// 内置列表（试听列表 / 我的收藏）不允许删除

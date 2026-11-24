@@ -42,15 +42,24 @@ const ImportPlayList = () => {
 	const { top } = useSafeAreaInsets()
 
 	const pickImage = async () => {
-		const result = await ImagePicker.launchImageLibraryAsync({
-			mediaTypes: ImagePicker.MediaTypeOptions.Images,
-			allowsEditing: true,
-			aspect: [1, 1],
-			quality: 1,
-		})
-
-		if (!result.canceled) {
-			setCoverImage(result.assets[0].uri)
+		try {
+			const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+			if (!perm.granted) {
+				setError('需要相册权限才能选择封面')
+				return
+			}
+			const result = await ImagePicker.launchImageLibraryAsync({
+				mediaTypes: ['images'] as any,
+				allowsEditing: true,
+				aspect: [1, 1],
+				quality: 0.9,
+			})
+			if (!result.canceled && result.assets?.[0]?.uri) {
+				setCoverImage(result.assets[0].uri)
+			}
+		} catch (err) {
+			logError('选择封面失败:', err)
+			setError('选择封面失败')
 		}
 	}
 
@@ -66,6 +75,17 @@ const ImportPlayList = () => {
 			// 写入 libraryStore（「我的列表」读的就是它），旧 addPlayLists 写的是没人读的旧 store
 			const lib = await import('@/jk/libraryStore')
 			const list = lib.createUserList(customName.trim())
+			// 创建时选的封面存进沙盒（选图是临时 URI，不复制会失效）
+			if (coverImage) {
+				try {
+					const { saveCoverFrom } = await import('@/jk/covers')
+					const file = await saveCoverFrom(String(coverImage), list.id)
+					lib.setUserListCover(list.id, { coverFile: file })
+					logInfo('[importPlayList] cover saved', file)
+				} catch (coverErr) {
+					logError('封面保存失败:', coverErr)
+				}
+			}
 			logInfo('[importPlayList] created', list.id, list.name)
 			router.dismiss()
 		} catch (err) {
@@ -102,11 +122,13 @@ const ImportPlayList = () => {
 			const all: any[] = []
 			const seen = new Set<string>()
 			let listName = ''
+			let listCover = ''
 			let expectedTotal = 0
 			for (let page = 1; page <= 20; page++) {
 				const res: any = await sdk.getSongListDetail(source as any, sourceListId, page)
 				const chunk: any[] = res?.list ?? []
 				if (!listName && res?.info?.name) listName = String(res.info.name)
+				if (!listCover && res?.info?.img) listCover = String(res.info.img)
 				if (!expectedTotal && Number(res?.total) > 0) expectedTotal = Number(res.total)
 				for (const m of chunk) {
 					const k = `${m?.source}:${m?.id}`
@@ -118,9 +140,18 @@ const ImportPlayList = () => {
 			}
 			if (!all.length) throw new Error('歌单为空或链接失效')
 			const created = lib.createUserList(listName || `导入歌单 ${new Date().toLocaleDateString()}`)
+			const { normalizeCoverUrl } = await import('@/jk/covers')
+			const coverUrl = normalizeCoverUrl(listCover)
 			lib.setUserLists(lib.getUserLists().map(item => (
 				item.id === created.id
-					? { ...item, source, sourceListId, list: all, locationUpdateTime: Date.now() }
+					? {
+						...item,
+						source,
+						sourceListId,
+						list: all,
+						locationUpdateTime: Date.now(),
+						...(coverUrl ? { coverUrl, coverUpdatedAt: Date.now() } : {}),
+					}
 					: item
 			)))
 			logInfo('[importPlayList] imported', source, sourceListId, 'count=', all.length, 'total=', expectedTotal)

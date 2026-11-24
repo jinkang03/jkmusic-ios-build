@@ -771,13 +771,22 @@ const PlayerScreenContent = () => {
 							/>
 
 							<View style={styles.container}>
-								<View style={styles.leftItem}>
+								<View style={[styles.leftItem, { flexDirection: 'row', alignItems: 'center', gap: 24 }]}>
 									<MaterialCommunityIcons
 										name="tooltip-minus-outline"
 										size={27}
 										color={colors.text}
 										onPress={handleLyricsToggle}
 										style={{ marginBottom: 2 }}
+									/>
+									{/* 音效：与 Mac 播放条的音效按钮对应 */}
+									<MaterialCommunityIcons
+										name="tune-variant"
+										size={26}
+										color={colors.text}
+										onPress={() => router.push('/settingSection/soundEffect' as any)}
+										style={{ marginBottom: 2 }}
+										accessibilityLabel={tr('音效设置', 'Sound Effects')}
 									/>
 								</View>
 								<View style={styles.centeredItem}>

@@ -14,9 +14,11 @@ export type MovingTextProps = {
 	text: string
 	animationThreshold: number
 	style?: TextProps['style']
+	/** 显式文字色：Animated.Text 对 style 数组里的 color 偶发不生效，单独传更可靠 */
+	color?: string
 }
 
-export const MovingText = React.memo(({ text, animationThreshold, style }: MovingTextProps) => {
+export const MovingText = React.memo(({ text, animationThreshold, style, color }: MovingTextProps) => {
 	const translateX = useSharedValue(0)
 	const shouldAnimate = text.length >= animationThreshold
 	const textWidth = useMemo(() => text.length * 3, [text])
@@ -53,6 +55,7 @@ export const MovingText = React.memo(({ text, animationThreshold, style }: Movin
 			numberOfLines={1}
 			style={[
 				style,
+				color ? { color } : null,
 				animatedStyle,
 				shouldAnimate && {
 					width: 9999,

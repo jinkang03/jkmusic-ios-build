@@ -1,7 +1,7 @@
 // 必须最先加载：为 JKMUSIC 的 musicSdk 提供全局 Buffer / TextEncoder
 import '@/shims/globalPolyfills'
 import { ensureDefaults } from '@/jk/settingsStore'
-import { textColorStore } from '@/jk/themeStore'
+import { textColorStore, ensureDefaultWallpaper } from '@/jk/themeStore'
 import { playbackService } from '@/constants/playbackService'
 import { AppThemeProvider, ThemeOverrideProvider, useAppTheme, usePageTheme } from '@/hooks/useAppTheme'
 import WallpaperBackground from '@/components/WallpaperBackground'
@@ -60,6 +60,13 @@ const App = () => {
 		void LyricManager.setup()
 		// 已有壁纸但没记录主色（老版本/迁移）：补提取一次，作为默认强调色
 		void import('@/jk/themeStore').then(m => m.ensureWallpaperAccent()).catch(() => undefined)
+	}, [])
+	// 崩溃取证：先装 JS 错误处理，再把上次异常退出的记录写进诊断页
+	useEffect(() => {
+		void import('@/jk/crashForensics').then(m => {
+			m.installJsErrorHandler()
+			return m.reportPreviousRun()
+		}).catch(() => undefined)
 	}, [])
 	return (
 		<ShareIntentProvider
@@ -248,6 +255,15 @@ const RootNavigation = () => {
 				}}
 			/>
 			<Stack.Screen
+				name="(modals)/sortPlaylists"
+				options={{
+					presentation: 'modal',
+					headerShown: false,
+					gestureEnabled: true,
+					gestureDirection: 'vertical',
+				}}
+			/>
+			<Stack.Screen
 				name="(modals)/[name]"
 				options={{
 					presentation: 'modal',
@@ -262,6 +278,10 @@ const RootNavigation = () => {
 			/>
 			<Stack.Screen
 				name="sourceManage"
+				options={{ headerShown: false }}
+			/>
+			<Stack.Screen
+				name="diagnostics"
 				options={{ headerShown: false }}
 			/>
 			<Stack.Screen
@@ -299,5 +319,7 @@ try {
 } catch (err) {
 	console.log('[jk/settings] ensureDefaults failed', err)
 }
+// 首次安装写入默认壁纸（只执行一次，之后以设置为准）
+void ensureDefaultWallpaper()
 
 export default App

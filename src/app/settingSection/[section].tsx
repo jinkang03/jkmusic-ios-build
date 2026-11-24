@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import SettingRow from '@/components/settings/SettingRow'
 import SettingSelect from '@/components/settings/SettingSelect'
 import SettingSlider from '@/components/settings/SettingSlider'
+import SoundEffectPanel from '@/components/settings/SoundEffectPanel'
 import SettingSwitch from '@/components/settings/SettingSwitch'
 import { macFont, macPalette, macSpace } from '@/constants/macTokens'
 import { useAppTheme, useThemeMode } from '@/hooks/useAppTheme'
@@ -220,7 +221,6 @@ const PlayerSection = () => {
 		} catch { /* ignore */ }
 	}, [setQualityRaw])
 	const [volume, setVolumeRaw] = useSetting('player.volume', 1)
-	const [rate, setRateRaw] = useSetting('player.playbackRate', 1)
 	const [saveTime, setSaveTime] = useSetting('player.isSavePlayTime', true)
 	const [autoSkip, setAutoSkip] = useSetting('player.autoSkipOnError', true)
 	const [showTrans, setShowTrans] = useSetting('player.isShowLyricTranslation', false)
@@ -232,20 +232,12 @@ const PlayerSection = () => {
 			;(tp as any).setVolume?.(v)
 		} catch { /* ignore */ }
 	}, [setVolumeRaw])
-	const setRate = React.useCallback(async(v: number) => {
-		setRateRaw(v)
-		try {
-			const { default: tp } = await import('@/helpers/trackPlayerIndex')
-			;(tp as any).setRate?.(v)
-		} catch { /* ignore */ }
-	}, [setRateRaw])
 	return (
 		<>
 			<SettingRow label={tr('音质', 'Audio Quality')}><SettingSelect value={quality} onChange={setQuality} options={[
 				{ value: '128k', label: '128k' }, { value: '320k', label: '320k' }, { value: 'flac', label: 'flac' },
 			]} /></SettingRow>
 			<SettingRow label={tr('音量', 'Volume')}><SettingSlider value={Number(volume)} min={0} max={1} step={0.01} onChange={setVolume} format={v => `${Math.round(v * 100)}%`} /></SettingRow>
-			<SettingRow label={tr('播放倍速', 'Playback Speed')} hint={tr('立即作用于当前播放', 'Applies to the current track immediately')}><SettingSlider value={Number(rate)} min={0.5} max={2} step={0.1} onChange={setRate} format={v => `${v.toFixed(1)}x`} /></SettingRow>
 			<SettingRow
 				label={tr('保存播放进度', 'Save Playback Position')}
 				hint={tr('启动后恢复上次播放的曲目与位置', 'Restore last track and position on launch')}
@@ -304,6 +296,11 @@ const OtherSection = () => {
 		<>
 			<SettingRow label={tr('App Version', 'App Version')}><Text style={{ color: c.textMuted, fontSize: macFont.body }}>{version} ({build})</Text></SettingRow>
 			<SettingRow label={tr('播放引擎', 'Playback Engine')}><Text style={{ color: c.textMuted, fontSize: macFont.body }}>RNTP + JSC</Text></SettingRow>
+			<SettingRow label={tr('播放诊断', 'Playback Diagnostics')} hint={tr('最近 50 次失败/换源记录', 'Last 50 failures & source switches')}>
+				<Pressable onPress={() => router.push('/diagnostics' as any)}>
+					<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('打开', 'Open')} ›</Text>
+				</Pressable>
+			</SettingRow>
 			<SettingRow label={tr('查看日志', 'View Logs')}>
 				<Pressable onPress={() => router.push('/logScreen' as any)}>
 					<Text style={{ color: c.primary, fontSize: macFont.body }}>{tr('打开', 'Open')} ›</Text>
@@ -345,21 +342,6 @@ const SearchSection = () => {
 	)
 }
 
-const OdcSection = () => {
-	const [clearInput, setClearInput] = useSetting('odc.isAutoClearSearchInput', false)
-	const [clearList, setClearList] = useSetting('odc.isAutoClearSearchList', false)
-	return (
-		<>
-			<SettingRow label={tr('离开搜索页清空输入', 'Clear Input on Leave')} hint={tr('回到搜索页时输入框为空', 'Input is empty when you come back')}>
-				<SettingSwitch value={clearInput} onChange={setClearInput} />
-			</SettingRow>
-			<SettingRow label={tr('离开搜索页清空结果', 'Clear Results on Leave')} hint={tr('回到搜索页时结果列表为空', 'Results are empty when you come back')}>
-				<SettingSwitch value={clearList} onChange={setClearList} />
-			</SettingRow>
-		</>
-	)
-}
-
 const PlayDetailSection = () => {
 	const [blur, setBlur] = useSetting('playDetail.bgBlur', 0.6)
 	const [zoom, setZoom] = useSetting('playDetail.isZoomActiveLrc', true)
@@ -395,8 +377,6 @@ const DownloadSection = () => {
 	const [dlSize, setDlSize] = React.useState(0)
 	const [dlCount, setDlCount] = React.useState(0)
 	const [limitMb, setLimitMb] = useSetting('download.cacheLimitMb', 500)
-	// 下载音质与播放音质完全分离（播放读 music.quality，下载读这个）
-	const [dlQuality, setDlQuality] = useSetting('download.quality', '128k')
 	const [status, setStatus] = React.useState('')
 	const [showGoFavorites, setShowGoFavorites] = React.useState(false)
 	const router = useRouter()
@@ -475,18 +455,6 @@ const DownloadSection = () => {
 						<Text style={{ color: c.primary, fontSize: macFont.caption }}>{tr('刷新', 'Refresh')}</Text>
 					</Pressable>
 				</View>
-			</SettingRow>
-			<SettingRow
-				label={tr('下载音质', 'Download Quality')}
-				hint={tr('只影响下载，与播放音质独立', 'Download only; independent of playback quality')}
-			>
-				<SettingSelect
-					value={String(dlQuality)}
-					onChange={(v) => setDlQuality(v)}
-					options={[
-						{ value: '128k', label: '128k' }, { value: '320k', label: '320k' }, { value: 'flac', label: 'flac' },
-					]}
-				/>
 			</SettingRow>
 			<SettingRow label={tr('缓存上限', 'Cache Limit')} hint={tr('超出后按最久未使用淘汰', 'Evicts least recently used first')}>
 				<SettingSelect
@@ -873,6 +841,9 @@ const SettingsSectionScreen = () => {
 					if (!track.id) throw new Error('缺少 id')
 					const q = String((params as any).quality ?? '')
 					const listName = String((params as any).list ?? '')
+					// 模拟「播放详情页」传进来的 track：带已解析的流地址
+					const fakeUrl = String((params as any).url ?? '')
+					if (fakeUrl) (track as any).url = fakeUrl
 					await downloadTrack(track, {
 						quality: q || undefined,
 						listName: listName || undefined,
@@ -936,6 +907,12 @@ const SettingsSectionScreen = () => {
 					const on = String((params as any).on ?? '1') === '1'
 					;(globalThis as any).__JK_FULL_LYRIC__ = on
 					logInfo('[dev] fullLyric on=', on)
+				} else if (action === 'createList') {
+					// 验证「我的列表」排序/置顶/删除等入口的数据层（UI 长按入口另测）
+					const name = String((params as any).name ?? `测试歌单 ${Date.now() % 10000}`)
+					const lib = await import('@/jk/libraryStore')
+					const created = lib.createUserList(name)
+					logInfo('[dev] createList id=', created.id, 'name=', name, 'total=', lib.getUserLists().length)
 				} else if (action === 'removeList') {
 					// 验证歌单删除的数据层（UI 长按入口另测）
 					const listId = String((params as any).id ?? '')
@@ -945,6 +922,37 @@ const SettingsSectionScreen = () => {
 					lib.removeUserList(listId)
 					const after = lib.getUserLists().length
 					logInfo('[dev] removeList id=', listId, 'before=', before, 'after=', after)
+				} else if (action === 'delDownload') {
+					// 验证下载页删除的数据层：删第一个（或 index 指定）已下载文件
+					const idx = Number((params as any).index ?? 0)
+					const store = await import('@/jk/downloadStore')
+					const before = await store.scanDownloads()
+					const target = before[idx]
+					if (!target) throw new Error('没有可删除的下载')
+					await store.removeDownload(target.uri)
+					const after = await store.scanDownloads()
+					logInfo('[dev] delDownload', target.name, 'before=', before.length, 'after=', after.length,
+						'stillThere=', after.some(it => it.uri === target.uri))
+				} else if (action === 'listOrder') {
+					const lib = await import('@/jk/libraryStore')
+					const ids = lib.getAllListIds()
+					const ordered = lib.applyListOrder(ids.map(id => ({ id }))).map(x => x.id)
+					logInfo('[dev] listOrder saved=', JSON.stringify(lib.getListOrder()), 'effective=', JSON.stringify(ordered))
+				} else if (action === 'pinTop') {
+					const lib = await import('@/jk/libraryStore')
+					const id = String((params as any).id ?? '')
+					if (!id) throw new Error('缺少 id')
+					lib.moveListToTop(id)
+					const ordered = lib.applyListOrder(lib.getAllListIds().map(x => ({ id: x }))).map(x => x.id)
+					logInfo('[dev] pinTop id=', id, 'effective=', JSON.stringify(ordered))
+				} else if (action === 'sortMove') {
+					const lib = await import('@/jk/libraryStore')
+					const id = String((params as any).id ?? '')
+					const delta = Number((params as any).delta ?? -1)
+					if (!id) throw new Error('缺少 id')
+					lib.moveListBy(id, delta)
+					const ordered = lib.applyListOrder(lib.getAllListIds().map(x => ({ id: x }))).map(x => x.id)
+					logInfo('[dev] sortMove id=', id, 'delta=', delta, 'effective=', JSON.stringify(ordered))
 				} else if (action === 'probePlayback') {
 					const tp: any = (await import('@/helpers/trackPlayerIndex')).default
 					const prog: any = tp.getProgress?.() ?? {}
@@ -1291,10 +1299,12 @@ const SettingsSectionScreen = () => {
 					const all: any[] = []
 					const seen = new Set<string>()
 					let name = ''
+					let coverImg = ''
 					for (let page = 1; page <= 20; page++) {
 						const res: any = await sdk.getSongListDetail(source as any, sid, page)
 						const chunk: any[] = res?.list ?? []
 						if (!name && res?.info?.name) name = String(res.info.name)
+						if (!coverImg && res?.info?.img) coverImg = String(res.info.img)
 						for (const m of chunk) {
 							const k = `${m?.source}:${m?.id}`
 							if (!m?.id || seen.has(k)) continue
@@ -1307,12 +1317,126 @@ const SettingsSectionScreen = () => {
 					logInfo('[dev] importList fetched count=', all.length, 'unique=', uniq.size, 'name=', name)
 					logInfo('[dev] importList sample=', JSON.stringify(all.slice(0, 3).map((m: any) => ({ id: m.id, name: m.name, source: m.source }))))
 					const created = lib.createUserList(name || `导入歌单 ${new Date().toLocaleDateString()}`)
+					const { normalizeCoverUrl } = await import('@/jk/covers')
+					const coverUrl = normalizeCoverUrl(coverImg)
 					lib.setUserLists(lib.getUserLists().map(item => (
 						item.id === created.id
-							? { ...item, source, sourceListId: sid, list: all, locationUpdateTime: Date.now() }
+							? {
+								...item,
+								source,
+								sourceListId: sid,
+								list: all,
+								locationUpdateTime: Date.now(),
+								...(coverUrl ? { coverUrl, coverUpdatedAt: Date.now() } : {}),
+							}
 							: item
 					)))
-					logInfo('[dev] importList ok listId=', created.id, 'count=', all.length)
+					logInfo('[dev] importList ok listId=', created.id, 'count=', all.length, 'cover=', coverUrl)
+				} else if (action === 'dumpCover') {
+					const lib = await import('@/jk/libraryStore')
+					const { resolveListCover, firstSongCover } = await import('@/jk/covers')
+					for (const l of lib.getUserLists()) {
+						logInfo('[dev] dumpCover', JSON.stringify({
+							name: l.name,
+							source: l.source ?? '',
+							sid: String(l.sourceListId ?? '').slice(0, 40),
+							coverUrl: l.coverUrl ?? '',
+							coverFile: l.coverFile ?? '',
+							resolved: resolveListCover(l),
+							firstSong: firstSongCover(l.list),
+							count: l.list.length,
+							firstMetaKeys: l.list.length ? Object.keys((l.list[0] as any)?.meta ?? {}).slice(0, 12).join(',') : '',
+							firstMetaImg: String((l.list[0] as any)?.meta?.img ?? '').slice(0, 60),
+						}))
+					}
+				} else if (action === 'setCoverUrl') {
+					const name = String((params as any).name ?? '')
+					const url = String((params as any).url ?? '')
+					const lib = await import('@/jk/libraryStore')
+					const { normalizeCoverUrl } = await import('@/jk/covers')
+					const target = lib.getUserLists().find(l => l.name === name) ?? lib.getUserLists().find(l => l.name.includes(name))
+					if (!target) throw new Error(`找不到歌单: ${name}`)
+					lib.setUserListCover(target.id, { coverUrl: normalizeCoverUrl(url) })
+					logInfo('[dev] setCoverUrl', target.name, '=>', normalizeCoverUrl(url))
+				} else if (action === 'soundEffect') {
+					// 免点击验收：jkmusic://settingSection/dev?action=soundEffect&enabled=1&preset=rock&dry=18&pan=0&r=5&speed=25
+					const { setSetting: setS, getSetting: getS } = await import('@/jk/settingsStore')
+					const se = await import('@/jk/soundEffect')
+					if ((params as any).enabled !== undefined) {
+						setS(se.SOUND_EFFECT_KEYS.enabled, String((params as any).enabled) === '1')
+					}
+					if ((params as any).preset) {
+						const name = String((params as any).preset)
+						const hit = se.EQ_PRESETS.find(p => p.id === name || p.zh === name)
+						if (!hit) throw new Error(`未知预设: ${name}`)
+						se.setEqGains(hit.gains)
+					}
+					if ((params as any).dry !== undefined) {
+						setS(se.SOUND_EFFECT_KEYS.mainGain, Math.round(Number((params as any).dry)))
+					}
+					if ((params as any).pan !== undefined) {
+						setS(se.SOUND_EFFECT_KEYS.pannerEnabled, String((params as any).pan) === '1')
+					}
+					if ((params as any).r !== undefined) {
+						setS(se.SOUND_EFFECT_KEYS.pannerSoundR, Math.round(Number((params as any).r)))
+					}
+					if ((params as any).speed !== undefined) {
+						setS(se.SOUND_EFFECT_KEYS.pannerSpeed, Math.round(Number((params as any).speed)))
+					}
+					se.applySoundEffect(true)
+					logInfo('[dev] soundEffect', JSON.stringify(se.getSoundEffectConfig()), 'enabledSetting=', String(getS(se.SOUND_EFFECT_KEYS.enabled, false)))
+				} else if (action === 'soundEffectDump') {
+					const se = await import('@/jk/soundEffect')
+					logInfo('[dev] soundEffectDump', JSON.stringify(se.getSoundEffectConfig()))
+				} else if (action === 'diag') {
+					// 免点击验收：jkmusic://settingSection/dev?action=diag&kind=switch&title=xx&from=tx&to=kw&reason=起播超时
+					const m = await import('@/jk/playbackDiagnostics')
+					m.recordDiagnostic({
+						kind: (String((params as any).kind ?? 'switch') as any),
+						title: String((params as any).title ?? '测试曲'),
+						from: String((params as any).from ?? 'tx'),
+						to: String((params as any).to ?? 'kw'),
+						reason: String((params as any).reason ?? '起播超时'),
+						detail: String((params as any).detail ?? ''),
+					})
+					logInfo('[dev] diag recorded')
+				} else if (action === 'coverSet') {
+					// 免相册验收：把沙盒里的图片设为自定义封面
+					const name = String((params as any).name ?? '')
+					const path = String((params as any).path ?? '')
+					if (!path) throw new Error('缺少 path')
+					const lib = await import('@/jk/libraryStore')
+					const { saveCoverFrom } = await import('@/jk/covers')
+					const target = lib.getUserLists().find(l => l.name === name) ?? lib.getUserLists().find(l => l.name.includes(name))
+					if (!target) throw new Error(`找不到歌单: ${name}`)
+					const file = await saveCoverFrom(path, target.id)
+					lib.setUserListCover(target.id, { coverFile: file })
+					logInfo('[dev] coverSet', target.name, '=>', file)
+				} else if (action === 'coverReset') {
+					const name = String((params as any).name ?? '')
+					const lib = await import('@/jk/libraryStore')
+					const { deleteCover } = await import('@/jk/covers')
+					const target = lib.getUserLists().find(l => l.name === name) ?? lib.getUserLists().find(l => l.name.includes(name))
+					if (!target) throw new Error(`找不到歌单: ${name}`)
+					const prev = target.coverFile
+					lib.clearUserListCover(target.id)
+					if (prev) await deleteCover(prev)
+					logInfo('[dev] coverReset', target.name)
+				} else if (action === 'coverFiles') {
+					// 列出沙盒里的封面文件，验证删除是否生效
+					const FS = await import('expo-file-system/legacy')
+					const dir = `${String((FS as any).documentDirectory ?? '')}covers/`
+					const info: any = await (FS as any).getInfoAsync(dir)
+					if (!info?.exists) { logInfo('[dev] coverFiles dir missing'); return }
+					const names = await (FS as any).readDirectoryAsync(dir)
+					logInfo('[dev] coverFiles', dir, JSON.stringify(names))
+				} else if (action === 'clearCover') {
+					const name = String((params as any).name ?? '')
+					const lib = await import('@/jk/libraryStore')
+					const target = lib.getUserLists().find(l => l.name === name) ?? lib.getUserLists().find(l => l.name.includes(name))
+					if (!target) throw new Error(`找不到歌单: ${name}`)
+					lib.clearUserListCover(target.id)
+					logInfo('[dev] clearCover', target.name)
 				} else if (action === 'dumpList') {
 					const name = String((params as any).name ?? '')
 					const lib = await import('@/jk/libraryStore')
@@ -1351,6 +1475,17 @@ const SettingsSectionScreen = () => {
 					const counts: any = { '128k': 0, '320k': 0, flac: 0, unknown: 0 }
 					for (const r of rows) counts[r.q] = (counts[r.q] ?? 0) + 1
 					logInfo('[dev] dlprobe', JSON.stringify({ counts, rows }))
+				} else if (action === 'settextcolor') {
+					let v = decodeURIComponent(String((params as any).v ?? 'FFFFFF'))
+					if (!v.startsWith('#')) v = '#' + v
+					const { setTextColor } = await import('@/jk/themeStore')
+					setTextColor(v)
+					logInfo('[dev] settextcolor', v)
+				} else if (action === 'setglass') {
+					const v = Number((params as any).v ?? 44)
+					const { setGlassAlpha } = await import('@/constants/glass')
+					setGlassAlpha(Math.min(1, Math.max(0, v / 100)))
+					logInfo('[dev] setglass', String(v) + '%')
 				} else if (action === 'clipsim') {
 					const g4: any = globalThis
 					g4.__JK_CLIP_SIM__ = String((params as any).on ?? '1') === '1'
@@ -1401,12 +1536,12 @@ const SettingsSectionScreen = () => {
 	const content = (() => {
 		if (section === 'basic') return <BasicSection />
 		if (section === 'player') return <PlayerSection />
+		if (section === 'soundEffect') return <SoundEffectPanel />
 		if (section === 'list') return <ListSection />
 		if (section === 'backup') return <BackupSection />
 		if (section === 'download') return <DownloadSection />
 		if (section === 'detail') return <PlayDetailSection />
 		if (section === 'search') return <SearchSection />
-		if (section === 'ocd') return <OdcSection />
 		if (section === 'other') return <OtherSection />
 		return null
 	})()

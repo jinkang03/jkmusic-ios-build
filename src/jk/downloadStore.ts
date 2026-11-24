@@ -204,9 +204,32 @@ export const scanDownloads = async(): Promise<DownloadItem[]> => {
 /** 删除某个下载（音频 + sidecar） */
 export const removeDownload = async(uri: string) => {
 	const base = sidecarBase(uri)
-	for (const ext of ['', '.json', '.lrc', '.tlrc', '.jpg']) {
-		try { await (FileSystem as any).deleteAsync(`${base}${ext}`, { idempotent: true }) } catch { /* ignore */ }
+	// 注意：base 已经去掉了扩展名，必须把音频扩展名一起列出来。
+	// 之前只删 `${base}` + sidecar，等于只删了 .json/.lrc/.jpg，音频本体还在，
+	// 列表重新扫描又出现 → 用户看到的就是「点删除没反应」。
+	const targets = [
+		'.flac', '.mp3', '.m4a', '.wav', '.aac', '.ogg',
+		'.json', '.lrc', '.tlrc', '.jpg', '.png',
+	]
+	let removedAudio = false
+	for (const ext of targets) {
+		try {
+			await (FileSystem as any).deleteAsync(`${base}${ext}`, { idempotent: true })
+			if (ext === '.flac' || ext === '.mp3' || ext === '.m4a' || ext === '.wav' || ext === '.aac' || ext === '.ogg') {
+				removedAudio = true
+			}
+		} catch (err) {
+			logError('[download] delete failed', `${base}${ext}`, String((err as any)?.message ?? err))
+		}
 	}
+	if (!removedAudio) logError('[download] 未找到要删除的音频文件', uri)
+	// 同步剔除下载索引，否则下次播放会命中一个不存在的文件
+	try {
+		const { removeDownloaded } = await import('./downloadIndex')
+		removeDownloaded(uri)
+		const { refreshCachedKeys } = await import('./cacheIndexStore')
+		await refreshCachedKeys()
+	} catch { /* ignore */ }
 }
 
 /** 已用空间（downloads/） */

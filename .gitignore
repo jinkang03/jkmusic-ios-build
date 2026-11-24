@@ -75,3 +75,6 @@ references/
 
 # 验收截图（体积大：231 张 / 111MB），只提交索引
 docs/screenshots/
+
+# 安装包走 GitHub Releases，不进 git 历史
+artifacts/ipa/*.ipa

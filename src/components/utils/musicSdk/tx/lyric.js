@@ -1,4 +1,5 @@
 import { httpFetch } from '../../request'
+import { logInfo } from '@/helpers/logger'
 import getMusicInfo from './musicInfo'
 import { decodeQrc } from './qrcDecode'
 
@@ -202,15 +203,22 @@ const parseTools = {
 export default {
   successCode: 0,
   async getSongId({ songId, songmid }) {
-    if (songId) return songId
+    // 关键：songId 必须是数字（QQ 的数字歌曲 id）。
+    // 部分来源（lxmc 导入 / 搜索结果）会把 songId 写成 mid 字符串，
+    // 直接使用会让 GetPlayLyricInfo 返回 10006 + 空歌词（实测）。
+    if (songId != null && /^\d+$/.test(String(songId))) return Number(songId)
     if (songIdMap.has(songmid)) return songIdMap.get(songmid)
     if (promises.has(songmid)) return (await promises.get(songmid)).songId
     const promise = getMusicInfo(songmid)
-    promises.set(promise)
-    const info = await promise
-    songIdMap.set(songmid, info.songId)
-    promises.delete(songmid)
-    return info.songId
+    promises.set(songmid, promise)
+    try {
+      const info = await promise
+      if (!info?.songId) throw new Error('tx songId not found')
+      songIdMap.set(songmid, info.songId)
+      return info.songId
+    } finally {
+      promises.delete(songmid)
+    }
   },
   async parseLyric(lrc, tlrc, rlrc) {
     const { lyric, tlyric, rlyric } = await decodeLyric(lrc, tlrc, rlrc)
@@ -230,6 +238,7 @@ export default {
 
       },
       promise: this.getSongId(mInfo).then(songId => {
+        logInfo('[tx/lyric] songId=', String(songId), 'mid=', String(mInfo?.songmid ?? ''))
         const requestObj = httpFetch('https://u.y.qq.com/cgi-bin/musicu.fcg', {
           method: 'post',
           headers: {
@@ -265,7 +274,8 @@ export default {
           },
         })
         return requestObj.promise.then(({ body }) => {
-          // console.log(body)
+          logInfo('[tx/lyric] resp code=', String(body?.code), 'reqCode=', String(body?.req?.code),
+            'lyricLen=', String(body?.req?.data?.lyric ?? '').length)
           if (body.code != this.successCode || body.req.code != this.successCode) return this.getLyric(songId, ++retryNum)
           const data = body.req.data
           return this.parseLyric(data.lyric, data.trans, data.roma)

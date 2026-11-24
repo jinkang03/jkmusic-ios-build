@@ -279,7 +279,7 @@ const SourceManageScreen = () => {
 				const detail = all.map(src => {
 					const hit = done.find(d => d.src === src)
 					if (!hit) return `${shortOf(src)}…`
-					return `${shortOf(src)}${hit.ok ? '✓' : '✗'}`
+					return `${shortOf(src)}${hit.ok ? '✓' : '✗'}${hit.passed}/${hit.total}`
 				}).join(' ')
 				setTestNote(prev => ({ ...prev, [api.id]: `${passed}/${all.length}  ${detail}` }))
 			})
@@ -288,8 +288,10 @@ const SourceManageScreen = () => {
 			const summary = `${passed}/${platforms.length}`
 			const failText = failed.map(f => `${shortOf(f.src)}:${f.note || tr('失败', 'failed')}`).join('; ')
 			appendEvidence(`TEST ${summary} sources=${platforms.join('/')} ${failText ? `fail=[${failText}]` : ''}`)
+			const sampleRate = results.reduce((sum, r) => sum + r.passed, 0)
+			const sampleTotal = results.reduce((sum, r) => sum + r.total, 0)
 			if (passed === platforms.length) {
-				showToast(tr('测试通过', 'All passed'), `${summary} ${platforms.map(shortOf).join(' / ')}`, 'success')
+				showToast(tr('测试通过', 'All passed'), `${summary} · 样本 ${sampleRate}/${sampleTotal}`, 'success')
 			} else if (passed === 0) {
 				showToast(tr('测试失败', 'All failed'), failText.slice(0, 100) || tr('全部平台不可用', 'No platform available'), 'error')
 			} else {
@@ -297,7 +299,10 @@ const SourceManageScreen = () => {
 			}
 			setTestNote(prev => ({
 				...prev,
-				[api.id]: `${summary}  ${platforms.map(src => `${shortOf(src)}${results.find(r => r.src === src)?.ok ? '✓' : '✗'}`).join(' ')}`,
+				[api.id]: `${summary}  ${platforms.map(src => {
+					const r = results.find(x => x.src === src)
+					return `${shortOf(src)}${r?.ok ? '✓' : '✗'}${r ? `${r.passed}/${r.total}` : ''}`
+				}).join(' ')}`,
 			}))
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err)

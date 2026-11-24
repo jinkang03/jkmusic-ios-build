@@ -2,13 +2,10 @@ import { b64DecodeUnicode, decodeName } from '@/components/utils'
 import { headers } from '@/components/utils/musicSdk/options.js'
 import { formatSingerName } from '@/components/utils/musicSdk/utils'
 import { httpFetch } from '@/components/utils/request'
-import { fakeAudioMp3Uri } from '@/constants/images'
 import { getSingerInfo } from '@/helpers/userApi/qq-music-api'
 import axios from 'axios'
-import { Alert } from 'react-native'
 import { logError, logInfo } from '../logger'
-const { DEV_URL_PREFIX, KW_URL } = {
-	DEV_URL_PREFIX: 'https://dev.music.ximalaya.com/api/v1/track/url',
+const { KW_URL } = {
 	KW_URL: 'https://www.kuwo.cn/api/v1/www/music/playUrl',
 }
 
@@ -17,91 +14,6 @@ const withTimeout = (promise, ms) => {
 		setTimeout(() => reject(new Error('Request timed out')), ms),
 	)
 	return Promise.race([promise, timeout])
-}
-
-const fetchWithTimeout = (url, options, timeout = 5000) => {
-	logInfo('----start----' + url)
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => {
-			reject(new Error('Request timed out'))
-		}, timeout)
-
-		fetch(url, options)
-			.then((response) => {
-				clearTimeout(timer)
-				resolve(response)
-			})
-			.catch((error) => {
-				clearTimeout(timer)
-				reject(error)
-			})
-	})
-}
-
-const handleBackupFetch = async (songInfo, options, type, fakeAudioMp3Uri) => {
-	// return fetchWithTimeout(backupUrl, options, 5000)
-	//   .then((backupResponse) => parseResponse(backupResponse))
-	//   .then((backupBody) => {
-	//     if (!backupBody || !backupBody.data || !backupBody.data.src) {
-	//       logInfo('Backup fetch failed or no song_url in response');
-	//       return { type, url: fakeAudioMp3Uri };
-	//     }
-	//     logInfo('Backup fetch success:', backupBody.data.src);
-	//     return { type, url: backupBody.data.src };
-	//   })
-	//   .catch((backupError) => {
-	//     logInfo('Backup fetch error:', backupError);
-	//
-	//     return { type, url: fakeAudioMp3Uri };
-	//   });
-	try {
-		const url = await getMusicFromKw(songInfo, type)
-		return { type, url: url }
-	} catch (error) {
-		logInfo('Backup fetch error:', error)
-		Alert.alert('错误', '获取音乐失败，请稍后重试。', [
-			{ text: '确定', onPress: () => logInfo('Alert closed') },
-		])
-		return { type, url: fakeAudioMp3Uri }
-	}
-}
-
-export const myGetMusicUrl = (songInfo, type) => {
-	const url = `${DEV_URL_PREFIX}${songInfo.id}/${type}`
-	// const backupUrl = `${BACKUP_URL_PREFIX}${encodeURIComponent(songInfo.title)}&&n=1`;
-
-	const options = {
-		method: 'GET',
-		headers: headers, // Define your headers object
-		family: 4,
-		credentials: 'include', // withCredentials: true equivalent in fetch
-	}
-
-	return handleBackupFetch(songInfo, options, type, fakeAudioMp3Uri)
-		.then((result) => {
-			if (result) {
-				logInfo('获取成功（kw）：' + result.url)
-				return result
-			}
-			logInfo('kw获取失败，尝试原始 URL')
-			return fetchWithTimeout(url, options, 5000)
-				.then((response) => parseResponse(response))
-				.then((body) => {
-					if (!body.data || (typeof body.data === 'string' && body.data.includes('error'))) {
-						logInfo('Fetch 失败，返回错误')
-						return null
-					}
-					logInfo('获取成功（原始）：' + body.data)
-					return body.code === 0 ? { type, url: body.data } : null
-				})
-		})
-		.catch((error) => {
-			logInfo('获取失败:', error)
-			Alert.alert('错误', '获取音乐失败，请稍后重试。', [
-				{ text: '确定', onPress: () => logInfo('Alert closed') },
-			])
-			return null
-		})
 }
 
 const parseResponse = async (response) => {

@@ -20,6 +20,12 @@ export interface JkUserList {
 	sourceListId?: string
 	locationUpdateTime?: number
 	list: JKMusic[]
+	/** 平台封面地址（导入/更新歌单时写入，http 统一转 https） */
+	coverUrl?: string
+	/** 自定义封面文件名（Documents/covers/ 下，不是绝对路径） */
+	coverFile?: string
+	/** 封面最近更新时间 */
+	coverUpdatedAt?: number
 }
 
 const createSafeStore = () => {
@@ -39,6 +45,8 @@ const createSafeStore = () => {
 const store = createSafeStore()
 const KEY_LISTS = 'lists'
 const KEY_DISLIKE = 'dislike'
+/** 「我的列表」页面的歌单排列顺序（含内置的试听列表/我的收藏） */
+const KEY_ORDER = 'listOrder'
 
 const readJSON = <T,>(key: string, fallback: T): T => {
 	const raw = store.getString(key)
@@ -63,6 +71,8 @@ const state = {
 	loveList: readJSON<JKMusic[]>(`${KEY_LISTS}:love`, []),
 	userLists: readJSON<JkUserList[]>(`${KEY_LISTS}:user`, []),
 	dislike: readJSON<string[]>(KEY_DISLIKE, []),
+	/** 歌单顺序（id 数组）；空 = 用默认顺序（试听列表、我的收藏、用户歌单） */
+	listOrder: readJSON<string[]>(KEY_ORDER, []),
 }
 
 export const getDefaultList = () => state.defaultList
@@ -88,19 +98,54 @@ export const setUserLists = (lists: JkUserList[]) => {
 	writeJSON(`${KEY_LISTS}:user`, lists)
 }
 
-export const createUserList = (name: string): JkUserList => {
+export const createUserList = (name: string, opts?: { coverFile?: string }): JkUserList => {
 	const list: JkUserList = {
 		id: `user_${Date.now().toString(36)}`,
 		name: name.trim() || '新建列表',
 		list: [],
 	}
+	if (opts?.coverFile) {
+		list.coverFile = opts.coverFile
+		list.coverUpdatedAt = Date.now()
+	}
 	setUserLists([...state.userLists, list])
 	return list
 }
 
+/** 设置歌单封面：只写传入的字段（自定义 / 平台），并刷新时间戳 */
+export const setUserListCover = (
+	id: string,
+	patch: { coverFile?: string, coverUrl?: string },
+) => {
+	setUserLists(state.userLists.map(item => (
+		item.id === id
+			? {
+				...item,
+				...(patch.coverFile !== undefined ? { coverFile: patch.coverFile || undefined } : {}),
+				...(patch.coverUrl !== undefined ? { coverUrl: patch.coverUrl || undefined } : {}),
+				coverUpdatedAt: Date.now(),
+			}
+			: item
+	)))
+}
+
+/** 恢复默认封面：只删自定义封面，平台封面保留 */
+export const clearUserListCover = (id: string) => {
+	setUserLists(state.userLists.map(item => (
+		item.id === id ? { ...item, coverFile: undefined, coverUpdatedAt: Date.now() } : item
+	)))
+}
+
 export const removeUserList = (id: string) => {
+	const target = state.userLists.find(item => item.id === id)
 	const next = state.userLists.filter(item => item.id !== id)
 	setUserLists(next)
+	// 顺序表里也去掉，否则删除后再新建同名歌单会沿用旧位置
+	if (state.listOrder.includes(id)) setListOrder(state.listOrder.filter(x => x !== id))
+	// 自定义封面文件跟着删掉，避免沙盒里堆孤儿文件
+	if (target?.coverFile) {
+		void import('./covers').then(m => m.deleteCover(target.coverFile)).catch(() => undefined)
+	}
 	logInfo('[library] removeList id=', id, 'remain=', next.length)
 }
 
@@ -120,6 +165,63 @@ export const getListById = (id: string): JKMusic[] => {
 	if (id === LIST_IDS.DEFAULT) return state.defaultList
 	if (id === LIST_IDS.LOVE) return state.loveList
 	return state.userLists.find(item => item.id === id)?.list ?? []
+}
+
+/** 当前所有歌单 id（内置两个在前，用户歌单按创建顺序） */
+export const getAllListIds = (): string[] => [
+	LIST_IDS.DEFAULT,
+	LIST_IDS.LOVE,
+	...state.userLists.map(item => item.id),
+]
+
+export const getListOrder = (): string[] => state.listOrder
+
+/** 保存顺序（自动剔除已不存在的歌单 id） */
+export const setListOrder = (ids: string[]) => {
+	const valid = getAllListIds()
+	const next = ids.filter(id => valid.includes(id))
+	state.listOrder = next
+	writeJSON(KEY_ORDER, next)
+	bumpLibraryVersion()
+}
+
+/** 按保存的顺序排列；没记录过的歌单排在后面，保持原有相对顺序 */
+export const applyListOrder = <T extends { id: string }>(items: T[]): T[] => {
+	const ids = getAllListIds()
+	const ordered = [
+		...state.listOrder.filter(id => ids.includes(id)),
+		...ids.filter(id => !state.listOrder.includes(id)),
+	]
+	const rank = new Map(ordered.map((id, index) => [id, index]))
+	return items
+		.map((item, index) => ({ item, index }))
+		.sort((a, b) => {
+			const ra = rank.get(a.item.id) ?? Number.MAX_SAFE_INTEGER
+			const rb = rank.get(b.item.id) ?? Number.MAX_SAFE_INTEGER
+			return ra === rb ? a.index - b.index : ra - rb
+		})
+		.map(entry => entry.item)
+}
+
+/** 一键置顶 */
+export const moveListToTop = (id: string) => {
+	const ids = getAllListIds()
+	if (!ids.includes(id)) return
+	const rest = applyListOrder(ids.map(x => ({ id: x }))).map(x => x.id).filter(x => x !== id)
+	setListOrder([id, ...rest])
+}
+
+/** 上移/下移一位（delta = -1 / +1） */
+export const moveListBy = (id: string, delta: number) => {
+	const ids = applyListOrder(getAllListIds().map(x => ({ id: x }))).map(x => x.id)
+	const from = ids.indexOf(id)
+	if (from < 0) return
+	const to = Math.min(ids.length - 1, Math.max(0, from + delta))
+	if (to === from) return
+	const next = [...ids]
+	next.splice(from, 1)
+	next.splice(to, 0, id)
+	setListOrder(next)
 }
 
 export const addToList = (listId: string, musics: JKMusic[], position: 'top' | 'bottom' = 'bottom') => {
@@ -216,7 +318,7 @@ export type { JKMusic, JKSource }
  */
 export const updateUserListFromSource = async(
 	listId: string,
-): Promise<{ ok: boolean, count: number, reason?: string, sourceListId?: string }> => {
+): Promise<{ ok: boolean, count: number, reason?: string, sourceListId?: string, coverUrl?: string }> => {
 	const target = state.userLists.find(item => item.id === listId)
 	if (!target) return { ok: false, count: 0, reason: '歌单不存在' }
 	const source = String(target.source ?? '') as any
@@ -236,10 +338,13 @@ export const updateUserListFromSource = async(
 			}
 		}
 		// 第三方接口偶发限流（tx 的 getListDetail 会连抛 try max num），整体重试两次
+		// 顺带记录平台返回的歌单封面，更新完一起写回（自定义封面优先，不覆盖）
+		let infoImg = ''
 		const fetchAll = async(): Promise<JKMusic[]> => {
 			const acc: JKMusic[] = []
 			for (let page = 1; page <= 20; page++) {
 				const res: any = await sdk.getSongListDetail(source, sourceListId, page)
+				if (!infoImg && res?.info?.img) infoImg = String(res.info.img)
 				const chunk: JKMusic[] = res?.list ?? []
 				acc.push(...chunk)
 				if (chunk.length < 100) break
@@ -262,6 +367,7 @@ export const updateUserListFromSource = async(
 			try {
 				const { getPlayListFromQ } = await import('@/helpers/userApi/getMusicSource')
 				const resp: any = await getPlayListFromQ(sourceListId)
+				if (!infoImg && resp?.artwork) infoImg = String(resp.artwork)
 				const songs: any[] = resp?.songs ?? []
 				if (songs.length) {
 					all = songs.map((s: any) => ({
@@ -285,12 +391,26 @@ export const updateUserListFromSource = async(
 		if (!all.length) {
 			return { ok: false, count: 0, reason: logLastError ? `平台接口失败：${logLastError}` : '平台返回空歌单', sourceListId }
 		}
+		const { normalizeCoverUrl } = await import('./covers')
+		const nextCoverUrl = normalizeCoverUrl(infoImg)
 		setUserLists(state.userLists.map(item => (
 			item.id === listId
-				? { ...item, source, sourceListId, list: all, locationUpdateTime: Date.now() }
+				? {
+					...item,
+					source,
+					sourceListId,
+					list: all,
+					locationUpdateTime: Date.now(),
+					// 用户设过自定义封面时不动；否则同步平台最新封面（拿不到就保留旧的）
+					...(item.coverFile
+						? {}
+						: (nextCoverUrl
+							? { coverUrl: nextCoverUrl, coverUpdatedAt: Date.now() }
+							: {})),
+				}
 				: item
 		)))
-		return { ok: true, count: all.length, sourceListId }
+		return { ok: true, count: all.length, sourceListId, coverUrl: nextCoverUrl }
 	} catch (err) {
 		return { ok: false, count: 0, reason: String((err as any)?.message ?? err) }
 	}

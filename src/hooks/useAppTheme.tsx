@@ -23,6 +23,8 @@ type AppThemeContextValue = {
 	accent?: string
 	wallpaper?: { uri: string, blur: number, opacity: number }
 	glassAlpha?: number
+	/** 自定义文字颜色（订阅用；调色板仍以 macPalette 的取值为准） */
+	textColor?: string
 }
 
 // 主题色变化要触发所有用 macPalette 的页面重渲染
@@ -79,10 +81,12 @@ export const AppThemeProvider = ({ children }: { children: ReactNode }) => {
 	const wallpaper = wallpaperStore.useValue()
 	// 玻璃透明度（设置里可调）：放进 context 依赖，保证全局即时生效
 	const glassAlpha = glassAlphaStore.useValue()
+	// 自定义文字颜色：订阅它，改色后所有用 useAppTheme/macPalette 的页面立即重渲染
+	const textColor = textColorStore.useValue()
 	const resolvedTheme = resolveTheme(themeMode, systemColorScheme)
 	const themeValue = useMemo(
-		() => ({ ...createThemeValue(themeMode, resolvedTheme, setThemeMode), macTheme, accent, wallpaper, glassAlpha }),
-		[resolvedTheme, themeMode, macTheme, accent, wallpaper, glassAlpha],
+		() => ({ ...createThemeValue(themeMode, resolvedTheme, setThemeMode), macTheme, accent, wallpaper, glassAlpha, textColor }),
+		[resolvedTheme, themeMode, macTheme, accent, wallpaper, glassAlpha, textColor],
 	)
 
 	if (getRuntimeColors() !== themeValue.colors) {

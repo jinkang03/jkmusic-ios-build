@@ -1,8 +1,28 @@
 diff --git a/node_modules/@rntp/player/ios/TrackPlayer.swift b/node_modules/@rntp/player/ios/TrackPlayer.swift
-index e14f0a0..017c4b8 100644
+index e14f0a0..f9a1bb7 100644
 --- a/node_modules/@rntp/player/ios/TrackPlayer.swift
 +++ b/node_modules/@rntp/player/ios/TrackPlayer.swift
-@@ -682,8 +682,11 @@
+@@ -221,6 +221,19 @@ class TrackPlayer: RCTEventEmitter {
+     player.volume = Float(volume)
+   }
+ 
++  /// 重新发布 Now Playing（回到前台 / 中断结束时调用，保证控制中心仍能控制）
++  @objc(refreshNowPlaying)
++  func refreshNowPlaying() {
++    NSLog("[nowPlaying] republish requested")
++    player.refreshNowPlaying()
++  }
++
++  /// 音效配置（EQ / 增益 / 3D 环绕），由 JS 下发；实际处理在 MTAudioProcessingTap 里
++  @objc(setSoundEffect:)
++  func setSoundEffect(_ config: [String: Any]) {
++    SoundEffectTap.shared.apply(config)
++  }
++
+   // MARK: - Queue - Set
+ 
+   @objc(setMediaItem:)
+@@ -682,8 +695,11 @@ class TrackPlayer: RCTEventEmitter {
      RemoteCommandHandlers(
        togglePlayPause: { [weak self] in
          guard let self else { return .commandFailed }
@@ -16,7 +36,7 @@ index e14f0a0..017c4b8 100644
              self.player.pause()
            } else {
              self.player.play()
-@@ -692,23 +695,23 @@
+@@ -692,23 +708,23 @@ class TrackPlayer: RCTEventEmitter {
        },
        play: { [weak self] in
          guard let self else { return .commandFailed }
@@ -45,10 +65,10 @@ index e14f0a0..017c4b8 100644
        },
        changePosition: { [weak self] position in
          guard let self else { return .commandFailed }
-@@ -738,17 +741,16 @@
+@@ -738,17 +754,16 @@ class TrackPlayer: RCTEventEmitter {
      }
    }
-
+ 
 -  private func handleRemoteCommand(_ command: PlayerCommand, action: @escaping () -> Void) -> MPRemoteCommandHandlerStatus {
 -    if shouldHandleNatively(command) {
 +  private func handleRemoteCommand(_ command: PlayerCommand, event: EmitEvent, action: @escaping () -> Void) -> MPRemoteCommandHandlerStatus {
@@ -62,20 +82,19 @@ index e14f0a0..017c4b8 100644
 -    } else {
 -      emitRemoteEventIfNeeded(command: command)
 -      return .success
--    }
-+    }
+     }
 +    // Hybrid transport observers update JS intent without repeating the native action.
 +    if !handleNatively || (remoteControlHandling == .hybrid && (command == .PlayPause || command == .Stop)) {
 +      emitEvent(event: event)
 +    }
 +    return .success
    }
-
+ 
    private func handleRemoteSeek(position: TimeInterval) -> MPRemoteCommandHandlerStatus {
-@@ -805,35 +807,6 @@
+@@ -805,35 +820,6 @@ class TrackPlayer: RCTEventEmitter {
      }
    }
-
+ 
 -  private func emitRemoteEventIfNeeded(command: PlayerCommand) {
 -    let shouldEmit: Bool
 -    switch remoteControlHandling {
@@ -106,20 +125,33 @@ index e14f0a0..017c4b8 100644
 -    }
 -  }
  }
-
+ 
  extension TrackPlayer {
+diff --git a/node_modules/@rntp/player/ios/TrackPlayerBridge.mm b/node_modules/@rntp/player/ios/TrackPlayerBridge.mm
+index 14ebccb..7f675c4 100644
+--- a/node_modules/@rntp/player/ios/TrackPlayerBridge.mm
++++ b/node_modules/@rntp/player/ios/TrackPlayerBridge.mm
+@@ -34,6 +34,8 @@ @implementation TrackPlayer (RCTExternModule)
+ RCT_EXTERN_METHOD(cancelPreload:(NSDictionary *)item);
+ RCT_EXTERN_METHOD(setPlaybackSpeed:(double)speed);
+ RCT_EXTERN_METHOD(setVolume:(double)volume);
++RCT_EXTERN_METHOD(setSoundEffect:(NSDictionary *)config);
++RCT_EXTERN_METHOD(refreshNowPlaying);
+ 
+ // Queue - set
+ RCT_EXTERN_METHOD(setMediaItem:(NSDictionary *)data);
 diff --git a/node_modules/@rntp/player/ios/models/MediaItem.swift b/node_modules/@rntp/player/ios/models/MediaItem.swift
 index c38942a..1a752f6 100644
 --- a/node_modules/@rntp/player/ios/models/MediaItem.swift
 +++ b/node_modules/@rntp/player/ios/models/MediaItem.swift
 @@ -4,6 +4,7 @@
  //
-
+ 
  import UIKit
 +import CoreFoundation
-
+ 
  private let imageCache = NSCache<NSString, UIImage>()
-
+ 
 @@ -91,6 +92,12 @@ extension MediaItem: AudioItem {
    var sourceType: SourceType { url.isLocal ? .file : .stream }
    var headers: [String: String]? { url.headers }
@@ -130,17 +162,33 @@ index c38942a..1a752f6 100644
 +          CFGetTypeID(value) == CFBooleanGetTypeID() else { return false }
 +    return value.boolValue
 +  }
-
+ 
    func getArtwork(_ handler: @escaping (UIImage?) -> Void) {
      guard let artworkUrl = artworkUrl?.value else {
 diff --git a/node_modules/@rntp/player/ios/player/AVPlayerEngine.swift b/node_modules/@rntp/player/ios/player/AVPlayerEngine.swift
-index edc06f0..f9e5053 100644
+index edc06f0..d6b5708 100644
 --- a/node_modules/@rntp/player/ios/player/AVPlayerEngine.swift
 +++ b/node_modules/@rntp/player/ios/player/AVPlayerEngine.swift
-@@ -37,13 +37,13 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+@@ -20,11 +20,15 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+   private var cachedMetadataCurrentIndex: Int?
+   private var endOfTrackObserver: Any?
+   private var failedToPlayObserver: Any?
++  private var stalledObserver: Any?
++  private var stallRecoveryToken = 0
+   private var interruptionObserver: Any?
+   private var routeChangeObserver: Any?
+ 
+   // Whether to resume playback after an audio interruption ends.
+   private var wasPlayingBeforeInterruption = false
++  /// 音频中断结束（另一个 App 让出音频）时通知上层重新发布 Now Playing
++  var onInterruptionEnded: (() -> Void)?
+ 
+   // Caching
+   private let cache: AudioCache?
+@@ -37,13 +41,13 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
    /// Cache key for the currently loaded URL, used for cachedPosition.
    private(set) var currentCacheKey: String?
-
+ 
 -  /// Origin url + headers for a one-shot direct fallback. Non-nil exactly when
 +  /// Origin context for a one-shot direct fallback. Non-nil exactly when
    /// the current load went through the cache proxy and a fallback has not yet
@@ -150,18 +198,18 @@ index edc06f0..f9e5053 100644
    /// already-direct loads (file://, isLive, no-cache) and once consumed.
 -  private var pendingDirectFallback: (url: URL, headers: [String: String]?)?
 +  private var pendingDirectFallback: SourceContext?
-
+ 
    /// Monotonically increasing token incremented on every `load`/`reset`. Each
    /// item's observers capture the generation in effect when they were installed
-@@ -62,6 +62,7 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+@@ -62,6 +66,7 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
      let url: URL
      let headers: [String: String]?
      let isLive: Bool
 +    let prefersPreciseTiming: Bool
    }
-
+ 
    private struct LiveRefresh {
-@@ -215,7 +216,7 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+@@ -215,7 +220,7 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
          guard let self, cacheKey == self.currentCacheKey,
                let ctx = self.pendingDirectFallback else { return }
          self.pendingDirectFallback = nil
@@ -169,11 +217,11 @@ index edc06f0..f9e5053 100644
 +        self.loadDirect(ctx)
        }
      }
-
-@@ -256,38 +257,46 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+ 
+@@ -256,38 +261,46 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
      avPlayer.pause()
    }
-
+ 
 -  func load(url: URL, headers: [String: String]? = nil, isLive: Bool = false) {
 +  func load(url: URL, headers: [String: String]? = nil, isLive: Bool = false, prefersPreciseTiming: Bool = false) {
      cancelLiveRefresh()
@@ -188,7 +236,7 @@ index edc06f0..f9e5053 100644
 +    activeSource = source
 +    loadSource(source)
    }
-
+ 
 -  private func loadSource(url: URL, headers: [String: String]?, isLive: Bool) {
 +  private func loadSource(_ source: SourceContext) {
      if let testSourceLoader {
@@ -216,7 +264,7 @@ index edc06f0..f9e5053 100644
        currentCacheKey = cacheKey
 -      pendingDirectFallback = (url: url, headers: headers)
 +      pendingDirectFallback = source
-
+ 
 -      let asset = AVURLAsset(url: proxyURL)
 +      let options: [String: Any]? = source.prefersPreciseTiming
 +        ? [AVURLAssetPreferPreciseDurationAndTimingKey: true] : nil
@@ -230,8 +278,8 @@ index edc06f0..f9e5053 100644
 +      loadDirect(source)
      }
    }
-
-@@ -295,17 +304,21 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+ 
+@@ -295,31 +308,48 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
    /// item. Reused by the normal direct `load()` branch and by the one-shot
    /// direct fallback. Clears `currentCacheKey` and arms no fallback context, so
    /// a subsequent failure surfaces normally.
@@ -244,7 +292,10 @@ index edc06f0..f9e5053 100644
      let callerSetIcy = assetHeaders.keys.contains {
        $0.caseInsensitiveCompare("icy-metadata") == .orderedSame
      }
-     if !callerSetIcy {
+-    if !callerSetIcy {
++    // 对照实验（P40 任务1）：默认不注入 ICY 头。点播 mp3/flac 不需要 ICY 元数据，
++    // 该头会触发服务端分块协商，在 AVPlayer 上可能造成加载停滞。
++    if source.isLive && !callerSetIcy {
        assetHeaders["Icy-MetaData"] = "1"
      }
 -    let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": assetHeaders])
@@ -253,10 +304,36 @@ index edc06f0..f9e5053 100644
 +      options[AVURLAssetPreferPreciseDurationAndTimingKey] = true
 +    }
 +    let asset = AVURLAsset(url: source.url, options: options)
-
+ 
      currentCacheKey = nil
      pendingDirectFallback = nil
-@@ -392,7 +405,7 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+-    installItem(AVPlayerItem(asset: asset))
++    let item = AVPlayerItem(asset: asset)
++    // 网络音源：不要等 AVPlayer 的"网络评估"通过才开始拉流，
++    // 否则 item 会长时间停在 unknown（不 readyToPlay、也不 failed）。
++    if source.url.isFileURL == false {
++      item.preferredForwardBufferDuration = 5
++      avPlayer.automaticallyWaitsToMinimizeStalling = false
++      NSLog("[rntp] loadDirect network url=\(source.url.absoluteString.prefix(120)) autoWait=false buffer=5")
++    }
++    installItem(item)
+   }
+ 
+   /// Swaps in `item` as the current item: bumps the load generation (so stale
+   /// callbacks from the previous item are ignored), tears down the old item's
+   /// observers, and installs fresh ones. Must run on the main thread.
+   private func installItem(_ item: AVPlayerItem) {
++    NSLog("[rntp] installItem url=\(String(describing: (item.asset as? AVURLAsset)?.url.absoluteString.prefix(120)))")
+     loadGeneration &+= 1
+     removeItemObservers()
+     avPlayer.replaceCurrentItem(with: item)
+     observeItem(item, generation: loadGeneration)
++    // 音效：启用时给 item 挂 audioMix + MTAudioProcessingTap（未启用直接返回）
++    SoundEffectTap.shared.attach(to: item)
+   }
+ 
+   private func prepareCachedMetadataReplay(for key: String) {
+@@ -392,7 +422,7 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
        return
      }
      liveRefresh = LiveRefresh(generation: -1, completions: [completion])
@@ -264,9 +341,9 @@ index edc06f0..f9e5053 100644
 +    loadSource(source)
      liveRefresh?.generation = loadGeneration
    }
-
-@@ -445,7 +458,7 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
-
+ 
+@@ -445,7 +475,7 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+ 
      if let ctx = pendingDirectFallback {
        pendingDirectFallback = nil
 -      loadDirect(url: ctx.url, headers: ctx.headers)
@@ -274,6 +351,79 @@ index edc06f0..f9e5053 100644
        return
      }
      onItemFailed?(code, message)
+@@ -490,12 +520,14 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+       }
+ 
+     case .ended:
+-      guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
+-      let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+-      if options.contains(.shouldResume) && wasPlayingBeforeInterruption {
++      // 对齐 QQ 音乐/酷狗：中断结束后只要中断前在播就恢复，
++      // 不依赖 shouldResume（抖音/短视频类 App 经常不设置该标记）。
++      // 恢复播放同时会把音频会话重新激活，系统控制中心才认我们是「正在播放」。
++      if wasPlayingBeforeInterruption {
+         play()
+       }
+       wasPlayingBeforeInterruption = false
++      onInterruptionEnded?()
+ 
+     @unknown default:
+       break
+@@ -565,6 +597,13 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+           self.emitAssetMetadata(from: item, generation: generation)
+         case .failed:
+           let nsError = item.error as NSError?
++          if let e = nsError {
++            NSLog("[rntp] item failed domain=\(e.domain) code=\(e.code) desc=\(e.localizedDescription)")
++            NSLog("[rntp] underlying=\(String(describing: e.userInfo[NSUnderlyingErrorKey]))")
++            NSLog("[rntp] url=\(String(describing: (item.asset as? AVURLAsset)?.url.absoluteString))")
++          } else {
++            NSLog("[rntp] item failed without error")
++          }
+           let code = Self.classifyError(nsError)
+           let message = nsError?.localizedDescription ?? "Unknown playback error"
+           self.handleItemFailure(generation: generation, code: code, message: message)
+@@ -618,6 +657,28 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+       let message = nsError?.localizedDescription ?? "Playback failed"
+       self.handleItemFailure(generation: generation, code: code, message: message)
+     }
++
++    // 后台/熄屏时流卡住：JS 的 setInterval 看护在 App 被挂起后不会跑，
++    // 只能靠原生通知。给 4 秒缓冲（多数卡顿会自己恢复），仍不动就上报失败，
++    // 让 JS 走「同源重取 → 跨源兜底」，而不是静静停在那里等系统把 App 杀掉。
++    stalledObserver = NotificationCenter.default.addObserver(
++      forName: .AVPlayerItemPlaybackStalled,
++      object: item,
++      queue: .main
++    ) { [weak self] _ in
++      guard let self = self, generation == self.loadGeneration else { return }
++      self.stallRecoveryToken += 1
++      let token = self.stallRecoveryToken
++      let positionAtStall = self.currentTime
++      NSLog("[stall] item stalled at %@", String(format: "%.1f", positionAtStall))
++      DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
++        guard let self = self, generation == self.loadGeneration, token == self.stallRecoveryToken else { return }
++        if self.avPlayer.timeControlStatus == .playing { return }
++        if abs(self.currentTime - positionAtStall) > 0.5 { return }
++        NSLog("[stall] still stalled after 4s -> report failure")
++        self.handleItemFailure(generation: generation, code: "stalled", message: "Playback stalled")
++      }
++    }
+   }
+ 
+   private func removeItemObservers() {
+@@ -648,6 +709,11 @@ class AVPlayerEngine: NSObject, PlayerEngine, AVPlayerItemMetadataOutputPushDele
+       NotificationCenter.default.removeObserver(observer)
+       failedToPlayObserver = nil
+     }
++    if let observer = stalledObserver {
++      NotificationCenter.default.removeObserver(observer)
++      stalledObserver = nil
++    }
++    stallRecoveryToken += 1
+   }
+ 
+   // MARK: - AVPlayerItemMetadataOutputPushDelegate
 diff --git a/node_modules/@rntp/player/ios/player/AudioItem.swift b/node_modules/@rntp/player/ios/player/AudioItem.swift
 index c95d040..95a6de3 100644
 --- a/node_modules/@rntp/player/ios/player/AudioItem.swift
@@ -288,25 +438,50 @@ index c95d040..95a6de3 100644
    var artist: String? { get }
    var albumTitle: String? { get }
 @@ -29,4 +31,5 @@ protocol AudioItem {
-
+ 
  extension AudioItem {
    var duration: Double? { nil }
 +  var prefersPreciseTiming: Bool { false }
  }
 diff --git a/node_modules/@rntp/player/ios/player/AudioPlayer.swift b/node_modules/@rntp/player/ios/player/AudioPlayer.swift
-index 30e5ef9..debaf27 100644
+index 30e5ef9..2511c12 100644
 --- a/node_modules/@rntp/player/ios/player/AudioPlayer.swift
 +++ b/node_modules/@rntp/player/ios/player/AudioPlayer.swift
-@@ -216,7 +216,7 @@ class AudioPlayer {
-
+@@ -122,10 +122,24 @@ class AudioPlayer {
+   }
+   #endif
+ 
++  /// 重新发布 Now Playing（App 回到前台 / 音频中断结束时用）
++  func refreshNowPlaying() {
++    nowPlaying.republish()
++  }
++
+   private func setupEngineCallbacks() {
+     engine.onPlaybackStateChange = { [weak self] status in
+       self?.handlePlaybackStateChange(status)
+     }
++    #if os(iOS)
++    (engine as? AVPlayerEngine)?.onInterruptionEnded = { [weak self] in
++      // 中断结束（另一个 App 让出音频）：系统会把我们的音频会话置为非激活，
++      // 必须重新 setActive + 发布 Now Playing，否则控制中心会停在「未在播放」。
++      // 暂停状态下也要做：QQ 音乐停住时仍然显示暂停卡片，就是靠这一手。
++      self?.activateAudioSession()
++      self?.nowPlaying.republish()
++    }
++    #endif
+     engine.onItemReady = { [weak self] in
+       guard let self = self, self.state == .loading else { return }
+       self.state = .ready
+@@ -216,7 +230,7 @@ class AudioPlayer {
+ 
      guard let itemUrl = url else { return }
-
+ 
 -    engine.load(url: itemUrl, headers: item.headers, isLive: item.isLive)
 +    engine.load(url: itemUrl, headers: item.headers, isLive: item.isLive, prefersPreciseTiming: item.prefersPreciseTiming)
      state = .loading
    }
-
-@@ -456,7 +456,7 @@ class AudioPlayer {
+ 
+@@ -456,7 +470,7 @@ class AudioPlayer {
        artworkUri: nil,
        genre: nil
      )
@@ -315,12 +490,625 @@ index 30e5ef9..debaf27 100644
      state = .loading
      resetNowPlaying(for: item)
      onCurrentItemChanged?(item, queue.currentIndex)
+diff --git a/node_modules/@rntp/player/ios/player/ConvolutionReverb.swift b/node_modules/@rntp/player/ios/player/ConvolutionReverb.swift
+new file mode 100644
+index 0000000..a5f0500
+--- /dev/null
++++ b/node_modules/@rntp/player/ios/player/ConvolutionReverb.swift
+@@ -0,0 +1,360 @@
++//
++//  ConvolutionReverb.swift
++//  JKMUSIC 音效：与 Mac 端（Web Audio ConvolverNode）对齐的卷积混响
++//
++//  - IR 归一化完全复刻 WebKit Reverb.cpp 的 calculateNormalizationScale
++//  - 4 声道 IR 走 true-stereo 矩阵（与 WebKit 的 Case 6 一致）
++//  - 分段 FFT 卷积（block 1024 / FFT 2048 / overlap-add），vDSP 实现
++//
++
++import Accelerate
++import AVFoundation
++import Foundation
++
++private let kBlockSize = 1024
++private let kFFTSize = 2048
++private let kLog2FFT: vDSP_Length = 11
++private let kBinCount = kFFTSize / 2 // 1024 个复数 bin（DC/Nyquist 打包在 bin0）
++
++/// WebKit: constexpr float GainCalibration = -58; powf(10, -58 * 0.05f)
++private let kGainCalibration = powf(10, -58 * 0.05)
++private let kMinPower: Float = 0.000125
++
++// MARK: - FFT
++
++final class ReverbFFT {
++    private let setup: FFTSetup
++
++    init() {
++        setup = vDSP_create_fftsetup(kLog2FFT, FFTRadix(kFFTRadix2))!
++    }
++
++    deinit {
++        vDSP_destroy_fftsetup(setup)
++    }
++
++    /// 实数输入 → 打包频谱（bin0: real=DC, imag=Nyquist）
++    func forward(_ input: UnsafePointer<Float>, re: inout [Float], im: inout [Float]) {
++        var real = [Float](repeating: 0, count: kBinCount)
++        var imag = [Float](repeating: 0, count: kBinCount)
++        real.withUnsafeMutableBufferPointer { rp in
++            imag.withUnsafeMutableBufferPointer { ip in
++                var split = DSPSplitComplex(realp: rp.baseAddress!, imagp: ip.baseAddress!)
++                input.withMemoryRebound(to: DSPComplex.self, capacity: kBinCount) { cp in
++                    vDSP_ctoz(cp, 2, &split, 1, vDSP_Length(kBinCount))
++                }
++                vDSP_fft_zrip(setup, &split, 1, kLog2FFT, FFTDirection(FFT_FORWARD))
++                // zrip 的正向结果放大了 2 倍
++                var half: Float = 0.5
++                vDSP_vsmul(rp.baseAddress!, 1, &half, rp.baseAddress!, 1, vDSP_Length(kBinCount))
++                vDSP_vsmul(ip.baseAddress!, 1, &half, ip.baseAddress!, 1, vDSP_Length(kBinCount))
++            }
++        }
++        re = real
++        im = imag
++    }
++
++    /// 打包频谱 → 实数输出（长度 2048，含 1/n 归一化）
++    func inverse(re: [Float], im: [Float], out: inout [Float]) {
++        var real = re
++        var imag = im
++        var time = [Float](repeating: 0, count: kFFTSize)
++        real.withUnsafeMutableBufferPointer { rp in
++            imag.withUnsafeMutableBufferPointer { ip in
++                var split = DSPSplitComplex(realp: rp.baseAddress!, imagp: ip.baseAddress!)
++                vDSP_fft_zrip(setup, &split, 1, kLog2FFT, FFTDirection(FFT_INVERSE))
++                time.withUnsafeMutableBufferPointer { tp in
++                    tp.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: kBinCount) { cp in
++                        vDSP_ztoc(&split, 1, cp, 2, vDSP_Length(kBinCount))
++                    }
++                }
++            }
++        }
++        // zrip 正向放大 2、逆向放大 N：往返共 2N，这里补 1/(2N)
++        var scale = 1 / Float(kFFTSize)
++        vDSP_vsmul(time, 1, &scale, &time, 1, vDSP_Length(kFFTSize))
++        out = time
++    }
++}
++
++// MARK: - 卷积核（IR 频域分段）
++
++final class ReverbKernel {
++    let channels: Int
++    let partitions: Int
++    /// hRe[channel][partition][bin]
++    let hRe: [[[Float]]]
++    let hIm: [[[Float]]]
++    let sampleRate: Float
++
++    init(channels: [[Float]], sampleRate: Float) {
++        self.channels = channels.count
++        self.sampleRate = sampleRate
++        let length = channels.first?.count ?? 0
++        let partitions = max(1, (length + kBlockSize - 1) / kBlockSize)
++        self.partitions = partitions
++
++        let fft = ReverbFFT()
++        var reAll: [[[Float]]] = []
++        var imAll: [[[Float]]] = []
++        var scratch = [Float](repeating: 0, count: kFFTSize)
++
++        for ch in channels {
++            var reCh: [[Float]] = []
++            var imCh: [[Float]] = []
++            reCh.reserveCapacity(partitions)
++            imCh.reserveCapacity(partitions)
++            for p in 0..<partitions {
++                for i in 0..<kFFTSize { scratch[i] = 0 }
++                let start = p * kBlockSize
++                let count = min(kBlockSize, max(0, ch.count - start))
++                if count > 0 {
++                    for i in 0..<count { scratch[i] = ch[start + i] }
++                }
++                var re = [Float](repeating: 0, count: kBinCount)
++                var im = [Float](repeating: 0, count: kBinCount)
++                scratch.withUnsafeBufferPointer { sp in
++                    fft.forward(sp.baseAddress!, re: &re, im: &im)
++                }
++                reCh.append(re)
++                imCh.append(im)
++            }
++            reAll.append(reCh)
++            imAll.append(imCh)
++        }
++        self.hRe = reAll
++        self.hIm = imAll
++    }
++
++    /// WebKit Reverb.cpp: calculateNormalizationScale
++    static func normalizationScale(channels: [[Float]], sampleRate: Float) -> Float {
++        guard let first = channels.first, !first.isEmpty else { return 0 }
++        var sum: Double = 0
++        var count = 0
++        for ch in channels {
++            for v in ch { sum += Double(v) * Double(v) }
++            count += ch.count
++        }
++        let n = max(1, count)
++        var power = Float(sqrt(sum / Double(n)))
++        if !power.isFinite || power < kMinPower { power = kMinPower }
++        var scale = (1 / power) * kGainCalibration
++        if sampleRate > 0 { scale *= 44100 / sampleRate }
++        if channels.count == 4 { scale *= 0.5 }
++        return scale
++    }
++}
++
++// MARK: - 卷积器（每个输入声道一份历史）
++
++final class ReverbConvolver {
++    private let kernel: ReverbKernel
++    private let fft = ReverbFFT()
++
++    /// 输入历史频谱：xRe[inputChannel][slot][bin]
++    private var xRe: [[[Float]]]
++    private var xIm: [[[Float]]]
++    private var blockIndex = 0
++
++    private var overlapL = [Float](repeating: 0, count: kBlockSize)
++    private var overlapR = [Float](repeating: 0, count: kBlockSize)
++
++    /// (irChannel, inputChannel, outputChannel)
++    private let routes: [(Int, Int, Int)]
++
++    init(kernel: ReverbKernel) {
++        self.kernel = kernel
++        let p = kernel.partitions
++        xRe = (0..<2).map { _ in (0..<p).map { _ in [Float](repeating: 0, count: kBinCount) } }
++        xIm = (0..<2).map { _ in (0..<p).map { _ in [Float](repeating: 0, count: kBinCount) } }
++        switch kernel.channels {
++        case 4:
++            routes = [(0, 0, 0), (1, 0, 1), (2, 1, 0), (3, 1, 1)]
++        case 2:
++            routes = [(0, 0, 0), (1, 1, 1)]
++        default:
++            routes = [(0, 0, 0), (0, 1, 1)]
++        }
++    }
++
++    func reset() {
++        for c in 0..<2 {
++            for s in 0..<kernel.partitions {
++                for i in 0..<kBinCount {
++                    xRe[c][s][i] = 0
++                    xIm[c][s][i] = 0
++                }
++            }
++        }
++        for i in 0..<kBlockSize {
++            overlapL[i] = 0
++            overlapR[i] = 0
++        }
++        blockIndex = 0
++    }
++
++    /// 处理一个 1024 样本块，输出湿声（同样 1024 样本，含一个块的延迟）
++    func processBlock(
++        _ left: UnsafePointer<Float>,
++        _ right: UnsafePointer<Float>,
++        outL: UnsafeMutablePointer<Float>,
++        outR: UnsafeMutablePointer<Float>
++    ) {
++        let p = kernel.partitions
++        let slot = blockIndex % p
++
++        // 输入 → 频谱（不足 2048 的部分补零）
++        var inputL = [Float](repeating: 0, count: kFFTSize)
++        var inputR = [Float](repeating: 0, count: kFFTSize)
++        for i in 0..<kBlockSize {
++            inputL[i] = left[i]
++            inputR[i] = right[i]
++        }
++        inputL.withUnsafeBufferPointer { sp in fft.forward(sp.baseAddress!, re: &xRe[0][slot], im: &xIm[0][slot]) }
++        inputR.withUnsafeBufferPointer { sp in fft.forward(sp.baseAddress!, re: &xRe[1][slot], im: &xIm[1][slot]) }
++
++        var accLRe = [Float](repeating: 0, count: kBinCount)
++        var accLIm = [Float](repeating: 0, count: kBinCount)
++        var accRRe = [Float](repeating: 0, count: kBinCount)
++        var accRIm = [Float](repeating: 0, count: kBinCount)
++
++        let n = vDSP_Length(kBinCount)
++        // vDSP 的实数 FFT 把 DC/Nyquist 打包在 bin0（real=DC, imag=Nyquist），
++        // 复数乘法对 bin0 不成立，单独累加后覆盖
++        var dcL: Float = 0, nyqL: Float = 0
++        var dcR: Float = 0, nyqR: Float = 0
++        for lag in 0..<p {
++            let histSlot = (slot - lag + p) % p
++            for (irCh, inCh, outCh) in routes {
++                let h0re = kernel.hRe[irCh][lag][0]
++                let h0im = kernel.hIm[irCh][lag][0]
++                let x0re = xRe[inCh][histSlot][0]
++                let x0im = xIm[inCh][histSlot][0]
++                if outCh == 0 {
++                    dcL += x0re * h0re
++                    nyqL += x0im * h0im
++                } else {
++                    dcR += x0re * h0re
++                    nyqR += x0im * h0im
++                }
++                var hRe = kernel.hRe[irCh][lag]
++                var hIm = kernel.hIm[irCh][lag]
++                var xr = xRe[inCh][histSlot]
++                var xi = xIm[inCh][histSlot]
++                if outCh == 0 {
++                    hRe.withUnsafeMutableBufferPointer { hp in
++                        hIm.withUnsafeMutableBufferPointer { hi in
++                            xr.withUnsafeMutableBufferPointer { xp in
++                                xi.withUnsafeMutableBufferPointer { xip in
++                                    var h = DSPSplitComplex(realp: hp.baseAddress!, imagp: hi.baseAddress!)
++                                    var x = DSPSplitComplex(realp: xp.baseAddress!, imagp: xip.baseAddress!)
++                                    accLRe.withUnsafeMutableBufferPointer { ar in
++                                        accLIm.withUnsafeMutableBufferPointer { ai in
++                                            var acc = DSPSplitComplex(realp: ar.baseAddress!, imagp: ai.baseAddress!)
++                                            vDSP_zvma(&h, 1, &x, 1, &acc, 1, &acc, 1, n)
++                                        }
++                                    }
++                                }
++                            }
++                        }
++                    }
++                } else {
++                    hRe.withUnsafeMutableBufferPointer { hp in
++                        hIm.withUnsafeMutableBufferPointer { hi in
++                            xr.withUnsafeMutableBufferPointer { xp in
++                                xi.withUnsafeMutableBufferPointer { xip in
++                                    var h = DSPSplitComplex(realp: hp.baseAddress!, imagp: hi.baseAddress!)
++                                    var x = DSPSplitComplex(realp: xp.baseAddress!, imagp: xip.baseAddress!)
++                                    accRRe.withUnsafeMutableBufferPointer { ar in
++                                        accRIm.withUnsafeMutableBufferPointer { ai in
++                                            var acc = DSPSplitComplex(realp: ar.baseAddress!, imagp: ai.baseAddress!)
++                                            vDSP_zvma(&h, 1, &x, 1, &acc, 1, &acc, 1, n)
++                                        }
++                                    }
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
++
++        accLRe[0] = dcL
++        accLIm[0] = nyqL
++        accRRe[0] = dcR
++        accRIm[0] = nyqR
++
++        var timeL = [Float](repeating: 0, count: kFFTSize)
++        var timeR = [Float](repeating: 0, count: kFFTSize)
++        fft.inverse(re: accLRe, im: accLIm, out: &timeL)
++        fft.inverse(re: accRRe, im: accRIm, out: &timeR)
++
++        // overlap-add
++        for i in 0..<kBlockSize {
++            outL[i] = timeL[i] + overlapL[i]
++            outR[i] = timeR[i] + overlapR[i]
++            overlapL[i] = timeL[kBlockSize + i]
++            overlapR[i] = timeR[kBlockSize + i]
++        }
++
++        blockIndex += 1
++    }
++}
++
++// MARK: - IR 加载
++
++enum ReverbIRLoader {
++    /// 读 WAV → 目标采样率 → WebKit 归一化 → 声道数组
++    static func load(url: URL, targetSampleRate: Double) throws -> [[Float]] {
++        let file = try AVAudioFile(forReading: url)
++        let inFormat = file.processingFormat
++        let frameCount = AVAudioFrameCount(file.length)
++        guard frameCount > 0 else { throw NSError(domain: "reverb", code: 1, userInfo: [NSLocalizedDescriptionKey: "empty IR"]) }
++        guard let inBuffer = AVAudioPCMBuffer(pcmFormat: inFormat, frameCapacity: frameCount) else {
++            throw NSError(domain: "reverb", code: 2, userInfo: [NSLocalizedDescriptionKey: "buffer alloc failed"])
++        }
++        try file.read(into: inBuffer, frameCount: frameCount)
++
++        var outBuffer = inBuffer
++        if abs(inFormat.sampleRate - targetSampleRate) > 1 {
++            guard let outFormat = AVAudioFormat(standardFormatWithSampleRate: targetSampleRate, channels: inFormat.channelCount),
++                  let converter = AVAudioConverter(from: inFormat, to: outFormat) else {
++                throw NSError(domain: "reverb", code: 3, userInfo: [NSLocalizedDescriptionKey: "converter init failed"])
++            }
++            let capacity = AVAudioFrameCount(Double(frameCount) * targetSampleRate / inFormat.sampleRate) + 4096
++            guard let converted = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: capacity) else {
++                throw NSError(domain: "reverb", code: 4, userInfo: [NSLocalizedDescriptionKey: "out buffer alloc failed"])
++            }
++            var supplied = false
++            var convError: NSError?
++            converter.convert(to: converted, error: &convError) { _, status in
++                if supplied {
++                    status.pointee = .endOfStream
++                    return nil
++                }
++                supplied = true
++                status.pointee = .haveData
++                return inBuffer
++            }
++            if let convError { throw convError }
++            outBuffer = converted
++        }
++
++        guard let data = outBuffer.floatChannelData else {
++            throw NSError(domain: "reverb", code: 5, userInfo: [NSLocalizedDescriptionKey: "not float32"])
++        }
++        let channels = Int(outBuffer.format.channelCount)
++        let frames = Int(outBuffer.frameLength)
++        var result: [[Float]] = []
++        for c in 0..<channels {
++            var arr = [Float](repeating: 0, count: frames)
++            for i in 0..<frames { arr[i] = data[c][i] }
++            result.append(arr)
++        }
++        let scale = ReverbKernel.normalizationScale(channels: result, sampleRate: Float(targetSampleRate))
++        for c in result.indices {
++            for i in result[c].indices { result[c][i] *= scale }
++        }
++        return result
++    }
++}
+diff --git a/node_modules/@rntp/player/ios/player/NowPlayingCenter.swift b/node_modules/@rntp/player/ios/player/NowPlayingCenter.swift
+index 58c96dc..1df1833 100644
+--- a/node_modules/@rntp/player/ios/player/NowPlayingCenter.swift
++++ b/node_modules/@rntp/player/ios/player/NowPlayingCenter.swift
+@@ -153,6 +153,19 @@ final class NowPlayingCenter {
+ 
+   private func publish() {
+     MPNowPlayingInfoCenter.default().nowPlayingInfo = info
++    #if os(iOS)
++    // 显式同步播放状态：另一个 App 抢走「正在播放」后，只有重新设置 info + state 才能拿回来
++    let rate = (info[MPNowPlayingInfoPropertyPlaybackRate] as? Double) ?? 0
++    MPNowPlayingInfoCenter.default().playbackState = rate > 0 ? .playing : .paused
++    #endif
++  }
++
++  /// 重新发布当前信息（回到前台 / 音频中断结束时调用）
++  func republish() {
++    dispatchPrecondition(condition: .onQueue(.main))
++    guard !info.isEmpty else { return }
++    refreshPlaybackKeys()
++    publish()
+   }
+ 
+   private func onMain(_ work: @escaping () -> Void) {
+diff --git a/node_modules/@rntp/player/ios/player/PhaseVocoder.swift b/node_modules/@rntp/player/ios/player/PhaseVocoder.swift
+new file mode 100644
+index 0000000..bbb73e2
+--- /dev/null
++++ b/node_modules/@rntp/player/ios/player/PhaseVocoder.swift
+@@ -0,0 +1,217 @@
++//
++//  PhaseVocoder.swift
++//  JKMUSIC 音效：与 Mac 端（olvb/phaze）一致的相位声码器变调
++//
++//  Mac 参数：blockSize 4096 / hop 128 / 32 重叠 / Hann 窗 0.8*(1-cos)
++//  算法：Hann 分析窗 → FFT → 峰值检测 → 按 pitchFactor 搬移峰值区域（带相位修正）
++//        → 强制共轭对称 → IFFT → Hann 合成窗 → 重叠相加（÷32）
++//
++
++import Accelerate
++import Foundation
++
++final class PhaseVocoder {
++    static let fftSize = 4096
++    static let hop = 128
++    static let overlaps = 32
++    private static let log2n: vDSP_Length = 12
++    private static let binCount = fftSize / 2 + 1 // 2049
++
++    private let setup: FFTSetup
++    private let window: [Float]
++
++    // 每个声道一套状态
++    private var inputL: [Float]
++    private var inputR: [Float]
++    private var outputL: [Float]
++    private var outputR: [Float]
++
++    // 频谱/时域临时缓冲（左右各一份，避免在音频线程分配）
++    private var re = [Float](repeating: 0, count: PhaseVocoder.fftSize)
++    private var im = [Float](repeating: 0, count: PhaseVocoder.fftSize)
++    private var sRe = [Float](repeating: 0, count: PhaseVocoder.fftSize)
++    private var sIm = [Float](repeating: 0, count: PhaseVocoder.fftSize)
++    private var mags = [Float](repeating: 0, count: PhaseVocoder.binCount)
++    private var peaks = [Int](repeating: 0, count: PhaseVocoder.binCount)
++
++    private var timeCursor: Float = 0
++    private var pitchFactor: Float = 1
++
++    init() {
++        setup = vDSP_create_fftsetup(PhaseVocoder.log2n, FFTRadix(kFFTRadix2))!
++        var w = [Float](repeating: 0, count: PhaseVocoder.fftSize)
++        for i in 0..<PhaseVocoder.fftSize {
++            w[i] = 0.8 * (1 - cosf(2 * Float.pi * Float(i) / Float(PhaseVocoder.fftSize)))
++        }
++        window = w
++        inputL = [Float](repeating: 0, count: PhaseVocoder.fftSize + PhaseVocoder.hop)
++        inputR = [Float](repeating: 0, count: PhaseVocoder.fftSize + PhaseVocoder.hop)
++        outputL = [Float](repeating: 0, count: PhaseVocoder.fftSize)
++        outputR = [Float](repeating: 0, count: PhaseVocoder.fftSize)
++    }
++
++    deinit {
++        vDSP_destroy_fftsetup(setup)
++    }
++
++    func setPitch(_ factor: Float) {
++        let clamped = min(1.5, max(0.5, factor))
++        if clamped != pitchFactor {
++            pitchFactor = clamped
++        }
++    }
++
++    func reset() {
++        for i in inputL.indices { inputL[i] = 0 }
++        for i in inputR.indices { inputR[i] = 0 }
++        for i in outputL.indices { outputL[i] = 0 }
++        for i in outputR.indices { outputR[i] = 0 }
++        timeCursor = 0
++    }
++
++    /// 处理一个 hop（128 样本），输出同样 128 样本
++    func processHop(
++        inL: UnsafePointer<Float>,
++        inR: UnsafePointer<Float>,
++        outL: UnsafeMutablePointer<Float>,
++        outR: UnsafeMutablePointer<Float>
++    ) {
++        // 与 phaze 的 OLA 一致：新样本放到末尾，然后整体左移一个 hop
++        let n = PhaseVocoder.fftSize
++        let hop = PhaseVocoder.hop
++        for i in 0..<hop {
++            inputL[n + i] = inL[i]
++            inputR[n + i] = inR[i]
++        }
++        for i in 0..<n {
++            inputL[i] = inputL[i + hop]
++            inputR[i] = inputR[i + hop]
++        }
++
++        processChannel(&inputL, output: &outputL)
++        processChannel(&inputR, output: &outputR)
++
++        for i in 0..<hop {
++            outL[i] = outputL[i]
++            outR[i] = outputR[i]
++        }
++        // 输出左移一个 hop，尾部清零
++        for i in 0..<(n - hop) {
++            outputL[i] = outputL[i + hop]
++            outputR[i] = outputR[i + hop]
++        }
++        for i in (n - hop)..<n {
++            outputL[i] = 0
++            outputR[i] = 0
++        }
++
++        timeCursor += Float(hop)
++    }
++
++    private func processChannel(_ input: inout [Float], output: inout [Float]) {
++        let n = PhaseVocoder.fftSize
++        let bins = PhaseVocoder.binCount
++
++        // 分析窗
++        for i in 0..<n {
++            re[i] = input[i] * window[i]
++            im[i] = 0
++        }
++
++        // 正变换
++        re.withUnsafeMutableBufferPointer { rp in
++            im.withUnsafeMutableBufferPointer { ip in
++                var split = DSPSplitComplex(realp: rp.baseAddress!, imagp: ip.baseAddress!)
++                vDSP_fft_zip(setup, &split, 1, PhaseVocoder.log2n, FFTDirection(FFT_FORWARD))
++            }
++        }
++
++        // 幅度
++        for i in 0..<bins {
++            mags[i] = re[i] * re[i] + im[i] * im[i]
++        }
++
++        // 峰值
++        var nbPeaks = 0
++        var i = 2
++        let end = bins - 2
++        while i < end {
++            let m = mags[i]
++            if mags[i - 1] >= m || mags[i - 2] >= m {
++                i += 1
++                continue
++            }
++            if mags[i + 1] >= m || mags[i + 2] >= m {
++                i += 1
++                continue
++            }
++            peaks[nbPeaks] = i
++            nbPeaks += 1
++            i += 2
++        }
++
++        // 搬移峰值区域
++        for k in 0..<n { sRe[k] = 0; sIm[k] = 0 }
++        if pitchFactor != 1 {
++            let factor = pitchFactor
++            for p in 0..<nbPeaks {
++                let peakIndex = peaks[p]
++                let peakShifted = Int((Float(peakIndex) * factor).rounded())
++                if peakShifted > bins { break }
++
++                var startIndex = 0
++                var endIndex = n
++                if p > 0 {
++                    startIndex = peakIndex - (peakIndex - peaks[p - 1]) / 2
++                }
++                if p < nbPeaks - 1 {
++                    endIndex = peakIndex + (peaks[p + 1] - peakIndex + 1) / 2
++                }
++
++                let startOffset = startIndex - peakIndex
++                let endOffset = endIndex - peakIndex
++                var j = startOffset
++                while j < endOffset {
++                    let binIndex = peakIndex + j
++                    let binShifted = peakShifted + j
++                    if binShifted >= bins { break }
++                    if binIndex >= 0 && binIndex < n && binShifted >= 0 {
++                        let omegaDelta = 2 * Float.pi * Float(binShifted - binIndex) / Float(n)
++                        let phase = omegaDelta * timeCursor
++                        let pr = cosf(phase)
++                        let pi = sinf(phase)
++                        let vr = re[binIndex]
++                        let vi = im[binIndex]
++                        sRe[binShifted] += vr * pr - vi * pi
++                        sIm[binShifted] += vr * pi + vi * pr
++                    }
++                    j += 1
++                }
++            }
++        } else {
++            for k in 0..<n { sRe[k] = re[k]; sIm[k] = im[k] }
++        }
++
++        // 强制共轭对称（与 fft.js completeSpectrum 等价：正半轴镜像到负半轴）
++        var k = 1
++        while k < n / 2 {
++            sRe[n - k] = sRe[k]
++            sIm[n - k] = -sIm[k]
++            k += 1
++        }
++
++        // 逆变换
++        sRe.withUnsafeMutableBufferPointer { rp in
++            sIm.withUnsafeMutableBufferPointer { ip in
++                var split = DSPSplitComplex(realp: rp.baseAddress!, imagp: ip.baseAddress!)
++                vDSP_fft_zip(setup, &split, 1, PhaseVocoder.log2n, FFTDirection(FFT_INVERSE))
++            }
++        }
++
++        // 合成窗 + 重叠相加（÷32）
++        let scale = 1 / (Float(n) * Float(PhaseVocoder.overlaps))
++        for idx in 0..<n {
++            output[idx] += sRe[idx] * window[idx] * scale
++        }
++    }
++}
 diff --git a/node_modules/@rntp/player/ios/player/PlayerEngine.swift b/node_modules/@rntp/player/ios/player/PlayerEngine.swift
 index 3c9d172..c62df12 100644
 --- a/node_modules/@rntp/player/ios/player/PlayerEngine.swift
 +++ b/node_modules/@rntp/player/ios/player/PlayerEngine.swift
 @@ -52,7 +52,7 @@ protocol PlayerEngine: AnyObject {
-
+ 
    func play()
    func pause()
 -  func load(url: URL, headers: [String: String]?, isLive: Bool)
@@ -328,15 +1116,1002 @@ index 3c9d172..c62df12 100644
    func seek(to seconds: TimeInterval, completion: @escaping (Bool) -> Void)
    func seekToLiveEdge(completion: @escaping (Bool) -> Void)
    func reset()
+diff --git a/node_modules/@rntp/player/ios/player/SoundEffectDSP.swift b/node_modules/@rntp/player/ios/player/SoundEffectDSP.swift
+new file mode 100644
+index 0000000..4a7ac55
+--- /dev/null
++++ b/node_modules/@rntp/player/ios/player/SoundEffectDSP.swift
+@@ -0,0 +1,323 @@
++//
++//  SoundEffectDSP.swift
++//  JKMUSIC 音效：与 Mac 端（Web Audio）对齐的 DSP 组件
++//
++//  - Biquad: RBJ peaking（与 Chrome 同一套系数公式，Q=1.4）
++//  - Compressor: WebKit DynamicsCompressorKernel 的移植（默认参数）
++//  - Panner: Web Audio equalpower + inverse 距离衰减
++//
++
++import Foundation
++
++// MARK: - Biquad
++
++struct BiquadCoeffs {
++    var b0: Float = 1
++    var b1: Float = 0
++    var b2: Float = 0
++    var a1: Float = 0
++    var a2: Float = 0
++
++    static let pass = BiquadCoeffs()
++
++    /// RBJ peaking EQ，与 Web Audio `BiquadFilterNode` 的 peaking 一致
++    static func peaking(freq: Float, q: Float, gainDb: Float, sampleRate: Float) -> BiquadCoeffs {
++        guard sampleRate > 0, freq > 0, freq < sampleRate / 2, gainDb != 0 else { return .pass }
++        let a = powf(10, gainDb / 40)
++        let w0 = 2 * Float.pi * freq / sampleRate
++        let alpha = sinf(w0) / (2 * q)
++        let cosw = cosf(w0)
++
++        let b0 = 1 + alpha * a
++        let b1 = -2 * cosw
++        let b2 = 1 - alpha * a
++        let a0 = 1 + alpha / a
++        let a1 = -2 * cosw
++        let a2 = 1 - alpha / a
++
++        return BiquadCoeffs(
++            b0: b0 / a0,
++            b1: b1 / a0,
++            b2: b2 / a0,
++            a1: a1 / a0,
++            a2: a2 / a0
++        )
++    }
++}
++
++// MARK: - Compressor（WebKit 移植）
++
++final class WebAudioCompressor {
++    private static let maxPreDelayFrames = 1024
++    private static let maxPreDelayFramesMask = 1023
++    private static let defaultPreDelayFrames = 256
++    private static let divisionFrames = 32
++
++    // 固定参数（Web Audio 默认值）
++    private let dbThreshold: Float = -24
++    private let dbKnee: Float = 30
++    private let ratio: Float = 12
++    private let attackTime: Float = 0.003
++    private let releaseTime: Float = 0.25
++    private let preDelayTime: Float = 0.006
++    private let dbPostGain: Float = 0
++    private let releaseZone1: Float = 0.09
++    private let releaseZone2: Float = 0.16
++    private let releaseZone3: Float = 0.42
++    private let releaseZone4: Float = 0.98
++
++    private var sampleRate: Float = 44100
++    private var preDelayBuffers: [[Float]] = [
++        [Float](repeating: 0, count: maxPreDelayFrames),
++        [Float](repeating: 0, count: maxPreDelayFrames),
++    ]
++    private var preDelayReadIndex = 0
++    private var preDelayWriteIndex = defaultPreDelayFrames
++    private var lastPreDelayFrames = defaultPreDelayFrames
++
++    private var detectorAverage: Float = 0
++    private var compressorGain: Float = 1
++    private var maxAttackCompressionDiffDb: Float = -1
++
++    // 静态曲线
++    private var linearThreshold: Float = 0
++    private var kneeThreshold: Float = 0
++    private var kneeThresholdDb: Float = 0
++    private var ykneeThresholdDb: Float = 0
++    private var slope: Float = 0
++    private var kValue: Float = 1
++    private var staticReady = false
++
++    private var kA: Float = 0
++    private var kB: Float = 0
++    private var kC: Float = 0
++    private var kD: Float = 0
++    private var kE: Float = 0
++
++    func prepare(sampleRate: Float) {
++        guard sampleRate > 0 else { return }
++        self.sampleRate = sampleRate
++        updateStaticCurve()
++        buildReleaseCurve()
++        reset()
++    }
++
++    func reset() {
++        detectorAverage = 0
++        compressorGain = 1
++        maxAttackCompressionDiffDb = -1
++        for i in preDelayBuffers.indices {
++            for j in preDelayBuffers[i].indices { preDelayBuffers[i][j] = 0 }
++        }
++        preDelayReadIndex = 0
++        preDelayWriteIndex = WebAudioCompressor.defaultPreDelayFrames
++    }
++
++    private func linearToDb(_ x: Float) -> Float { 20 * log10f(max(x, 1e-9)) }
++    private func dbToLinear(_ x: Float) -> Float { powf(10, x / 20) }
++
++    private func kneeCurve(_ x: Float, _ k: Float) -> Float {
++        if x < linearThreshold { return x }
++        return linearThreshold + (1 - expf(-k * (x - linearThreshold))) / k
++    }
++
++    private func saturate(_ x: Float, _ k: Float) -> Float {
++        if x < kneeThreshold { return kneeCurve(x, k) }
++        let xDb = linearToDb(x)
++        let yDb = ykneeThresholdDb + slope * (xDb - kneeThresholdDb)
++        return dbToLinear(yDb)
++    }
++
++    private func slopeAt(_ x: Float, _ k: Float) -> Float {
++        if x < linearThreshold { return 1 }
++        let x2 = x * 1.001
++        let xDb = linearToDb(x)
++        let x2Db = linearToDb(x2)
++        let yDb = linearToDb(kneeCurve(x, k))
++        let y2Db = linearToDb(kneeCurve(x2, k))
++        return (y2Db - yDb) / (x2Db - xDb)
++    }
++
++    private func kAtSlope(_ desiredSlope: Float) -> Float {
++        let x = dbToLinear(dbThreshold + dbKnee)
++        var minK: Float = 0.1
++        var maxK: Float = 10000
++        var k: Float = 5
++        for _ in 0..<15 {
++            let s = slopeAt(x, k)
++            if s < desiredSlope { maxK = k } else { minK = k }
++            k = sqrtf(minK * maxK)
++        }
++        return k
++    }
++
++    private func updateStaticCurve() {
++        guard !staticReady else { return }
++        staticReady = true
++        linearThreshold = dbToLinear(dbThreshold)
++        slope = 1 / ratio
++        let k = kAtSlope(slope)
++        kneeThresholdDb = dbThreshold + dbKnee
++        kneeThreshold = dbToLinear(kneeThresholdDb)
++        ykneeThresholdDb = linearToDb(kneeCurve(kneeThreshold, k))
++        kValue = k
++    }
++
++    private func buildReleaseCurve() {
++        let releaseFrames = sampleRate * releaseTime
++        let y1 = releaseFrames * releaseZone1
++        let y2 = releaseFrames * releaseZone2
++        let y3 = releaseFrames * releaseZone3
++        let y4 = releaseFrames * releaseZone4
++
++        kA = 0.9999999999999998 * y1 + 1.8432219684323923e-16 * y2 - 1.9373394351676423e-16 * y3 + 8.824516011816245e-18 * y4
++        kB = -1.5788320352845888 * y1 + 2.3305837032074286 * y2 - 0.9141194204840429 * y3 + 0.1623677525612032 * y4
++        kC = 0.5334142869106424 * y1 - 1.272736789213631 * y2 + 0.9258856042207512 * y3 - 0.18656310191776226 * y4
++        kD = 0.08783463138207234 * y1 - 0.1694162967925622 * y2 + 0.08588057951595272 * y3 - 0.00429891410546283 * y4
++        kE = -0.042416883008123074 * y1 + 0.1115693827987602 * y2 - 0.09764676325265872 * y3 + 0.028494263462021576 * y4
++    }
++
++    private func setPreDelayTime(_ time: Float) {
++        var frames = UInt32(time * sampleRate)
++        if frames > UInt32(WebAudioCompressor.maxPreDelayFrames - 1) {
++            frames = UInt32(WebAudioCompressor.maxPreDelayFrames - 1)
++        }
++        if lastPreDelayFrames != Int(frames) {
++            lastPreDelayFrames = Int(frames)
++            for i in preDelayBuffers.indices {
++                for j in preDelayBuffers[i].indices { preDelayBuffers[i][j] = 0 }
++            }
++            preDelayReadIndex = 0
++            preDelayWriteIndex = Int(frames)
++        }
++    }
++
++    /// 原地处理两个声道
++    func process(_ left: UnsafeMutablePointer<Float>, _ right: UnsafeMutablePointer<Float>, frames: Int) {
++        guard frames > 0 else { return }
++        updateStaticCurve()
++        setPreDelayTime(preDelayTime)
++
++        let fullRangeGain = saturate(1, kValue)
++        var fullRangeMakeupGain = 1 / max(fullRangeGain, 1e-6)
++        fullRangeMakeupGain = powf(fullRangeMakeupGain, 0.6)
++        let masterLinearGain = dbToLinear(dbPostGain) * fullRangeMakeupGain
++
++        let attackFrames = max(0.001, attackTime) * sampleRate
++        let satReleaseFrames = 0.0025 * sampleRate
++
++        var frameIndex = 0
++        let mask = WebAudioCompressor.maxPreDelayFramesMask
++
++        while frameIndex < frames {
++            // 每个 division 重新算一次包络速率
++            if detectorAverage.isNaN { detectorAverage = 1 }
++            if detectorAverage.isInfinite { detectorAverage = 1 }
++
++            let desiredGain = detectorAverage
++            let scaledDesiredGain = asinf(min(1, max(-1, desiredGain))) / (0.5 * Float.pi)
++
++            var envelopeRate: Float
++            let isReleasing = scaledDesiredGain > compressorGain
++            var compressionDiffDb = linearToDb(compressorGain / max(scaledDesiredGain, 1e-6))
++
++            if isReleasing {
++                if compressionDiffDb.isNaN || compressionDiffDb.isInfinite { compressionDiffDb = -1 }
++                var x = max(-12, min(0, compressionDiffDb))
++                x = 0.25 * (x + 12)
++                let x2 = x * x
++                let x3 = x2 * x
++                let x4 = x2 * x2
++                let releaseFrames = kA + kB * x + kC * x2 + kD * x3 + kE * x4
++                let dbPerFrame = 5 / max(releaseFrames, 1)
++                envelopeRate = dbToLinear(dbPerFrame)
++            } else {
++                if compressionDiffDb.isNaN || compressionDiffDb.isInfinite { compressionDiffDb = 1 }
++                if maxAttackCompressionDiffDb == -1 || maxAttackCompressionDiffDb < compressionDiffDb {
++                    maxAttackCompressionDiffDb = compressionDiffDb
++                }
++                let effAttenDiffDb = max(0.5, maxAttackCompressionDiffDb)
++                let x = 0.25 / effAttenDiffDb
++                envelopeRate = 1 - powf(x, 1 / attackFrames)
++            }
++
++            var detector = detectorAverage
++            var gain = compressorGain
++            var readIndex = preDelayReadIndex
++            var writeIndex = preDelayWriteIndex
++
++            let loopFrames = min(WebAudioCompressor.divisionFrames, frames - frameIndex)
++            for _ in 0..<loopFrames {
++                let l = left[frameIndex]
++                let r = right[frameIndex]
++                preDelayBuffers[0][writeIndex] = l
++                preDelayBuffers[1][writeIndex] = r
++
++                let absL = abs(l)
++                let absR = abs(r)
++                let compressorInput = max(absL, absR)
++                let absInput = abs(compressorInput)
++
++                let shapedInput = saturate(absInput, kValue)
++                let attenuation: Float = absInput <= 0.0001 ? 1 : shapedInput / absInput
++
++                var attenuationDb = -linearToDb(attenuation)
++                attenuationDb = max(2, attenuationDb)
++                let satReleaseRate = dbToLinear(attenuationDb / satReleaseFrames) - 1
++
++                let isRelease = attenuation > detector
++                let rate: Float = isRelease ? satReleaseRate : 1
++                detector += (attenuation - detector) * rate
++                detector = min(1, detector)
++                if detector.isNaN || detector.isInfinite { detector = 1 }
++
++                if envelopeRate < 1 {
++                    gain += (scaledDesiredGain - gain) * envelopeRate
++                } else {
++                    gain *= envelopeRate
++                    gain = min(1, gain)
++                }
++
++                let postWarp = sinf(0.5 * Float.pi * gain)
++                let totalGain = masterLinearGain * postWarp
++
++                left[frameIndex] = preDelayBuffers[0][readIndex] * totalGain
++                right[frameIndex] = preDelayBuffers[1][readIndex] * totalGain
++
++                frameIndex += 1
++                readIndex = (readIndex + 1) & mask
++                writeIndex = (writeIndex + 1) & mask
++            }
++
++            preDelayReadIndex = readIndex
++            preDelayWriteIndex = writeIndex
++            detectorAverage = detector
++            compressorGain = gain
++        }
++    }
++}
++
++// MARK: - Panner（equalpower + inverse 距离衰减）
++
++struct EqualPowerPanner {
++    /// 按 Mac 端的公式算出左右增益
++    static func gains(angleDegrees: Float, radius: Float) -> (Float, Float) {
++        let rad = angleDegrees * Float.pi / 180
++        let x = sinf(rad) * radius
++        let y = cosf(rad) * radius
++        let z = cosf(rad) * radius
++
++        let distance = sqrtf(x * x + y * y + z * z)
++        let azimuth = atan2f(x, -z) * 180 / Float.pi
++
++        var pan = (azimuth + 90) / 180
++        pan = min(1, max(0, pan))
++        let a = pan * Float.pi / 2
++        let gainL = cosf(a)
++        let gainR = sinf(a)
++
++        // inverse 距离模型：refDistance=1, rolloff=1
++        let distGain: Float = distance <= 1 ? 1 : 1 / (1 + (distance - 1))
++        return (gainL * distGain, gainR * distGain)
++    }
++}
+diff --git a/node_modules/@rntp/player/ios/player/SoundEffectTap.swift b/node_modules/@rntp/player/ios/player/SoundEffectTap.swift
+new file mode 100644
+index 0000000..f3beb82
+--- /dev/null
++++ b/node_modules/@rntp/player/ios/player/SoundEffectTap.swift
+@@ -0,0 +1,639 @@
++//
++//  SoundEffectTap.swift
++//  JKMUSIC 音效：把 Mac 端（Web Audio）的节点链挂到 AVPlayer 输出上
++//
++//  链路：EQ×10 → [dry / 卷积 wet] → 压缩器 → 3D 环绕 → 输出
++//  参数从 JS 下发（setSoundEffect），音频线程用 trylock 取快照，不阻塞、不分配内存。
++//
++
++import AVFoundation
++import MediaToolbox
++import os
++
++// MARK: - 配置
++
++struct SoundEffectConfig: Equatable {
++    var enabled: Bool = false
++    var eqGains: [Float] = Array(repeating: 0, count: 10)
++    var dryGain: Float = 1
++    var wetGain: Float = 0
++    var pannerEnabled: Bool = false
++    var pannerRadius: Float = 0.5
++    var pannerDegPerSec: Float = 20
++    /// 卷积混响的 IR 文件路径（空 = 不启用混响）
++    var irPath: String = ""
++    /// 变调倍率（1 = 不变）
++    var pitch: Float = 1
++
++    static let bypass = SoundEffectConfig()
++}
++
++/// 音频线程读取的不可变快照（含预先算好的滤波系数与卷积器）
++final class SoundEffectRuntime {
++    let enabled: Bool
++    let eqCoeffs: [BiquadCoeffs]
++    let eqActive: Bool
++    let dryGain: Float
++    let wetGain: Float
++    let pannerEnabled: Bool
++    let pannerRadius: Float
++    let pannerDegPerSec: Float
++    let reverb: ReverbConvolver?
++    let pitch: Float
++    let pitchActive: Bool
++    let sampleRate: Float
++
++    static let bypass = SoundEffectRuntime(config: .bypass, sampleRate: 44100, reverb: nil)
++
++    init(config: SoundEffectConfig, sampleRate: Float, reverb: ReverbConvolver?) {
++        enabled = config.enabled
++        dryGain = config.dryGain
++        wetGain = config.wetGain
++        pannerEnabled = config.pannerEnabled
++        pannerRadius = config.pannerRadius
++        pannerDegPerSec = config.pannerDegPerSec
++        self.reverb = reverb
++        self.sampleRate = sampleRate
++        pitch = config.pitch
++        pitchActive = abs(config.pitch - 1) > 0.001
++
++        let freqs: [Float] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
++        var coeffs: [BiquadCoeffs] = []
++        coeffs.reserveCapacity(freqs.count)
++        var any = false
++        for (i, f) in freqs.enumerated() {
++            let g = i < config.eqGains.count ? config.eqGains[i] : 0
++            if g != 0 { any = true }
++            coeffs.append(BiquadCoeffs.peaking(freq: f, q: 1.4, gainDb: g, sampleRate: sampleRate))
++        }
++        eqCoeffs = coeffs
++        eqActive = any
++    }
++}
++
++// MARK: - 全局状态（主线程写，音频线程读）
++
++final class SoundEffectState {
++    static let shared = SoundEffectState()
++
++    private var lock = os_unfair_lock_s()
++    private var config: SoundEffectConfig = .bypass
++    private var runtime: SoundEffectRuntime = .bypass
++    private var sampleRate: Float = 44100
++
++    private init() {}
++
++    func update(_ newConfig: SoundEffectConfig, sampleRate: Float, reverb: ReverbConvolver?) {
++        os_unfair_lock_lock(&lock)
++        config = newConfig
++        if sampleRate > 0 { self.sampleRate = sampleRate }
++        runtime = SoundEffectRuntime(config: newConfig, sampleRate: self.sampleRate, reverb: reverb)
++        os_unfair_lock_unlock(&lock)
++    }
++
++    /// 音频线程：只有快照真的换了才返回 true
++    func tryRead(into out: inout SoundEffectRuntime, lastID: inout ObjectIdentifier?) -> Bool {
++        if !os_unfair_lock_trylock(&lock) { return false }
++        let r = runtime
++        os_unfair_lock_unlock(&lock)
++        let id = ObjectIdentifier(r)
++        if lastID == id { return false }
++        lastID = id
++        out = r
++        return true
++    }
++
++    var currentConfig: SoundEffectConfig {
++        os_unfair_lock_lock(&lock)
++        let c = config
++        os_unfair_lock_unlock(&lock)
++        return c
++    }
++
++    var currentSampleRate: Float {
++        os_unfair_lock_lock(&lock)
++        let s = sampleRate
++        os_unfair_lock_unlock(&lock)
++        return s
++    }
++}
++
++// MARK: - 单个 tap 的处理器（只跑在音频线程）
++
++final class SoundEffectProcessor {
++    private var runtime: SoundEffectRuntime = .bypass
++    private var runtimeID: ObjectIdentifier?
++    private var lastReverbID: ObjectIdentifier?
++    private var lastEnabled = false
++    private var sampleRate: Float = 44100
++    private var isFloat32 = true
++
++    // 10 段 EQ 的滤波器状态（左右各一份）
++    private var z1L = [Float](repeating: 0, count: 10)
++    private var z2L = [Float](repeating: 0, count: 10)
++    private var z1R = [Float](repeating: 0, count: 10)
++    private var z2R = [Float](repeating: 0, count: 10)
++
++    private let compressor = WebAudioCompressor()
++    private let vocoder = PhaseVocoder()
++    private var pannerAngle: Float = 0
++    private var lastPitchActive = false
++    private var hopOutL = [Float](repeating: 0, count: 128)
++    private var hopOutR = [Float](repeating: 0, count: 128)
++
++    private var interleavedScratch: [Float] = []
++
++    // 混响需要固定块长，用 FIFO 把任意帧数转成 1024 一块
++    private static let blockSize = 1024
++    private var inL: [Float] = []
++    private var inR: [Float] = []
++    private var outL: [Float] = []
++    private var outR: [Float] = []
++    private var convInL = [Float](repeating: 0, count: blockSize)
++    private var convInR = [Float](repeating: 0, count: blockSize)
++    private var convWetL = [Float](repeating: 0, count: blockSize)
++    private var convWetR = [Float](repeating: 0, count: blockSize)
++    private var blockL = [Float](repeating: 0, count: blockSize)
++    private var blockR = [Float](repeating: 0, count: blockSize)
++    private var blockActive = false
++
++    func prepare(sampleRate: Float, isFloat32: Bool) {
++        self.sampleRate = sampleRate
++        self.isFloat32 = isFloat32
++        compressor.prepare(sampleRate: sampleRate)
++        // 用真实采样率重建（保留当前混响；48k 音源会触发 IR 重采样）
++        SoundEffectTap.shared.refreshForSampleRate(sampleRate)
++        SoundEffectTap.shared.rebuildIfNeeded(sampleRate: sampleRate)
++        runtimeID = nil
++        resetFilters()
++        flushFIFO()
++    }
++
++    private func flushFIFO() {
++        inL.removeAll(keepingCapacity: true)
++        inR.removeAll(keepingCapacity: true)
++        outL.removeAll(keepingCapacity: true)
++        outR.removeAll(keepingCapacity: true)
++        blockActive = false
++    }
++
++    /// 离线渲染（整链对拍用）：与 tap 走完全相同的处理链
++    func renderOffline(
++        left: UnsafeMutablePointer<Float>,
++        right: UnsafeMutablePointer<Float>,
++        frames: Int,
++        runtime r: SoundEffectRuntime
++    ) {
++        runtime = r
++        runtimeID = nil
++        lastReverbID = r.reverb.map { ObjectIdentifier($0) }
++        lastEnabled = r.enabled
++        lastPitchActive = r.pitchActive
++        sampleRate = r.sampleRate
++        compressor.prepare(sampleRate: r.sampleRate)
++        resetFilters()
++        flushFIFO()
++        vocoder.reset()
++        vocoder.setPitch(r.pitch)
++        if needsPipeline {
++            processWithPipeline(left, right, frames: frames)
++        } else {
++            processInPlace(left, right, frames: frames)
++        }
++    }
++
++    func process(bufferList: UnsafeMutablePointer<AudioBufferList>, frames: Int, channels: Int) {
++        guard isFloat32, frames > 0 else { return }
++
++        if SoundEffectState.shared.tryRead(into: &runtime, lastID: &runtimeID) {
++            let reverbID = runtime.reverb.map { ObjectIdentifier($0) }
++            if reverbID != lastReverbID || runtime.enabled != lastEnabled || runtime.pitchActive != lastPitchActive {
++                resetFilters()
++                flushFIFO()
++                vocoder.reset()
++                lastReverbID = reverbID
++                lastEnabled = runtime.enabled
++                lastPitchActive = runtime.pitchActive
++            }
++            vocoder.setPitch(runtime.pitch)
++        }
++        guard runtime.enabled else { return }
++
++        let abl = UnsafeMutableAudioBufferListPointer(bufferList)
++        let nonInterleaved = abl.count >= 2
++
++        if nonInterleaved {
++            guard abl.count >= 2,
++                  let lPtr = abl[0].mData?.assumingMemoryBound(to: Float.self),
++                  let rPtr = abl[1].mData?.assumingMemoryBound(to: Float.self) else { return }
++            if needsPipeline {
++                processWithPipeline(lPtr, rPtr, frames: frames)
++            } else {
++                processInPlace(lPtr, rPtr, frames: frames)
++            }
++        } else if channels >= 2 {
++            guard let data = abl[0].mData?.assumingMemoryBound(to: Float.self) else { return }
++            if interleavedScratch.count < frames * 2 {
++                interleavedScratch = [Float](repeating: 0, count: frames * 2)
++            }
++            interleavedScratch.withUnsafeMutableBufferPointer { buf in
++                guard let base = buf.baseAddress else { return }
++                for i in 0..<frames {
++                    base[i] = data[i * 2]
++                    base[frames + i] = data[i * 2 + 1]
++                }
++                if needsPipeline {
++                    processWithPipeline(base, base + frames, frames: frames)
++                } else {
++                    processInPlace(base, base + frames, frames: frames)
++                }
++                for i in 0..<frames {
++                    data[i * 2] = base[i]
++                    data[i * 2 + 1] = base[frames + i]
++                }
++            }
++        }
++    }
++
++    private func resetFilters() {
++        for i in 0..<10 {
++            z1L[i] = 0; z2L[i] = 0; z1R[i] = 0; z2R[i] = 0
++        }
++    }
++
++    /// 无混响：原地处理
++    private func processInPlace(_ left: UnsafeMutablePointer<Float>, _ right: UnsafeMutablePointer<Float>, frames: Int) {
++        applyEQ(left, right, frames: frames)
++        let dry = runtime.dryGain
++        if dry != 1 {
++            for i in 0..<frames { left[i] *= dry; right[i] *= dry }
++        }
++        compressor.process(left, right, frames: frames)
++        applyPanner(left, right, frames: frames)
++    }
++
++    private var needsPipeline: Bool { runtime.reverb != nil || runtime.pitchActive }
++
++    /// 混响/变调：固定 1024 块，输入/输出各一个 FIFO
++    private func processWithPipeline(_ left: UnsafeMutablePointer<Float>, _ right: UnsafeMutablePointer<Float>, frames: Int) {
++        let reverb = runtime.reverb
++        for i in 0..<frames {
++            inL.append(left[i])
++            inR.append(right[i])
++        }
++
++        while inL.count >= SoundEffectProcessor.blockSize {
++            for i in 0..<SoundEffectProcessor.blockSize {
++                blockL[i] = inL[i]
++                blockR[i] = inR[i]
++                convInL[i] = inL[i]
++                convInR[i] = inR[i]
++            }
++            inL.removeFirst(SoundEffectProcessor.blockSize)
++            inR.removeFirst(SoundEffectProcessor.blockSize)
++
++            applyEQ(&blockL, &blockR, frames: SoundEffectProcessor.blockSize)
++
++            // 变调（相位声码器，128 样本一个 hop）
++            if runtime.pitchActive {
++                var h = 0
++                while h < SoundEffectProcessor.blockSize {
++                    blockL.withUnsafeBufferPointer { bl in
++                        blockR.withUnsafeBufferPointer { br in
++                            hopOutL.withUnsafeMutableBufferPointer { ol in
++                                hopOutR.withUnsafeMutableBufferPointer { orr in
++                                    vocoder.processHop(
++                                        inL: bl.baseAddress! + h,
++                                        inR: br.baseAddress! + h,
++                                        outL: ol.baseAddress!,
++                                        outR: orr.baseAddress!
++                                    )
++                                }
++                            }
++                        }
++                    }
++                    for i in 0..<128 {
++                        blockL[h + i] = hopOutL[i]
++                        blockR[h + i] = hopOutR[i]
++                    }
++                    h += 128
++                }
++            }
++
++            if let reverb {
++                for i in 0..<SoundEffectProcessor.blockSize {
++                    convInL[i] = blockL[i]
++                    convInR[i] = blockR[i]
++                }
++                convWetL.withUnsafeMutableBufferPointer { wl in
++                    convWetR.withUnsafeMutableBufferPointer { wr in
++                        convInL.withUnsafeBufferPointer { il in
++                            convInR.withUnsafeBufferPointer { ir in
++                                reverb.processBlock(il.baseAddress!, ir.baseAddress!,
++                                                    outL: wl.baseAddress!, outR: wr.baseAddress!)
++                            }
++                        }
++                    }
++                }
++            }
++
++            let dry = runtime.dryGain
++            let wet = reverb == nil ? 0 : runtime.wetGain
++            for i in 0..<SoundEffectProcessor.blockSize {
++                blockL[i] = blockL[i] * dry + convWetL[i] * wet
++                blockR[i] = blockR[i] * dry + convWetR[i] * wet
++            }
++            blockL.withUnsafeMutableBufferPointer { bl in
++                blockR.withUnsafeMutableBufferPointer { br in
++                    compressor.process(bl.baseAddress!, br.baseAddress!, frames: SoundEffectProcessor.blockSize)
++                    applyPanner(bl.baseAddress!, br.baseAddress!, frames: SoundEffectProcessor.blockSize)
++                }
++            }
++            outL.append(contentsOf: blockL)
++            outR.append(contentsOf: blockR)
++        }
++
++        let available = min(frames, outL.count)
++        for i in 0..<available {
++            left[i] = outL[i]
++            right[i] = outR[i]
++        }
++        if available < frames {
++            // 启动阶段不足一块：补静音
++            for i in available..<frames {
++                left[i] = 0
++                right[i] = 0
++            }
++        }
++        if available > 0 {
++            outL.removeFirst(available)
++            outR.removeFirst(available)
++        }
++    }
++
++    private func applyEQ(_ left: UnsafeMutablePointer<Float>, _ right: UnsafeMutablePointer<Float>, frames: Int) {
++        guard runtime.eqActive else { return }
++        let coeffs = runtime.eqCoeffs
++        for band in 0..<min(10, coeffs.count) {
++            let c = coeffs[band]
++            var zl1 = z1L[band], zl2 = z2L[band]
++            var zr1 = z1R[band], zr2 = z2R[band]
++            for i in 0..<frames {
++                let xl = left[i]
++                let yl = c.b0 * xl + zl1
++                zl1 = c.b1 * xl - c.a1 * yl + zl2
++                zl2 = c.b2 * xl - c.a2 * yl
++                left[i] = yl
++
++                let xr = right[i]
++                let yr = c.b0 * xr + zr1
++                zr1 = c.b1 * xr - c.a1 * yr + zr2
++                zr2 = c.b2 * xr - c.a2 * yr
++                right[i] = yr
++            }
++            z1L[band] = zl1; z2L[band] = zl2
++            z1R[band] = zr1; z2R[band] = zr2
++        }
++    }
++
++    private func applyPanner(_ left: UnsafeMutablePointer<Float>, _ right: UnsafeMutablePointer<Float>, frames: Int) {
++        guard runtime.pannerEnabled else { return }
++        let step = runtime.pannerDegPerSec * (32 / sampleRate)
++        var i = 0
++        while i < frames {
++            let n = min(32, frames - i)
++            let (gl, gr) = EqualPowerPanner.gains(angleDegrees: pannerAngle, radius: runtime.pannerRadius)
++            for k in 0..<n {
++                left[i + k] *= gl
++                right[i + k] *= gr
++            }
++            pannerAngle += step
++            if pannerAngle >= 360 { pannerAngle -= 360 }
++            i += n
++        }
++    }
++}
++
++// MARK: - Tap 管理
++
++final class SoundEffectTap {
++    static let shared = SoundEffectTap()
++
++    private weak var currentItem: AVPlayerItem?
++    private var currentReverb: ReverbConvolver?
++    private var lastIRPath: String = ""
++    private var irSampleRate: Float = 0
++    private var irToken = 0
++    private let irQueue = DispatchQueue(label: "jk.soundEffect.ir", qos: .userInitiated)
++
++    private init() {}
++
++    var isEnabled: Bool { SoundEffectState.shared.currentConfig.enabled }
++
++    /// JS 下发配置
++    func apply(_ dict: [String: Any]) {
++        var config = SoundEffectConfig()
++        config.enabled = dict["enabled"] as? Bool ?? false
++        if let eq = dict["eq"] as? [NSNumber], eq.count == 10 {
++            config.eqGains = eq.map { $0.floatValue }
++        }
++        config.dryGain = (dict["dryGain"] as? NSNumber)?.floatValue ?? 1
++        config.wetGain = (dict["wetGain"] as? NSNumber)?.floatValue ?? 0
++        config.pannerEnabled = dict["pannerEnabled"] as? Bool ?? false
++        config.pannerRadius = (dict["pannerRadius"] as? NSNumber)?.floatValue ?? 0.5
++        config.pannerDegPerSec = (dict["pannerDegPerSec"] as? NSNumber)?.floatValue ?? 20
++        config.irPath = dict["irPath"] as? String ?? ""
++        config.pitch = (dict["pitch"] as? NSNumber)?.floatValue ?? 1
++
++        let rate = SoundEffectState.shared.currentSampleRate
++        SoundEffectState.shared.update(config, sampleRate: rate, reverb: currentReverb)
++        NSLog("[soundEffect] apply enabled=\(config.enabled) dry=\(config.dryGain) wet=\(config.wetGain) ir=\(config.irPath.split(separator: "/").last ?? "")")
++
++        if config.enabled {
++            if let item = currentItem {
++                attach(to: item)
++            }
++        } else {
++            currentItem?.audioMix = nil
++        }
++
++        if config.irPath != lastIRPath {
++            lastIRPath = config.irPath
++            currentReverb = nil
++            SoundEffectState.shared.update(config, sampleRate: rate, reverb: nil)
++            if !config.irPath.isEmpty {
++                loadReverb(path: config.irPath, sampleRate: rate)
++            }
++        }
++    }
++
++    /// 用真实采样率刷新运行时（保留当前混响实例）
++    func refreshForSampleRate(_ sampleRate: Float) {
++        SoundEffectState.shared.update(
++            SoundEffectState.shared.currentConfig,
++            sampleRate: sampleRate,
++            reverb: currentReverb
++        )
++    }
++
++    /// 采样率变化（切到 48k 音源）时按新采样率重建 IR
++    func rebuildIfNeeded(sampleRate: Float) {
++        guard !lastIRPath.isEmpty, abs(sampleRate - irSampleRate) > 1 else { return }
++        loadReverb(path: lastIRPath, sampleRate: sampleRate)
++    }
++
++    private func loadReverb(path: String, sampleRate: Float) {
++        irToken += 1
++        let token = irToken
++        irSampleRate = sampleRate
++        irQueue.async { [weak self] in
++            guard let self else { return }
++            do {
++                // JS 给的是 file:// URL；直接 URL(fileURLWithPath:) 会把 "file://" 当成路径前缀
++                let url: URL
++                if let u = URL(string: path), u.isFileURL {
++                    url = u
++                } else {
++                    url = URL(fileURLWithPath: path)
++                }
++                let channels = try ReverbIRLoader.load(
++                    url: url,
++                    targetSampleRate: Double(sampleRate)
++                )
++                let kernel = ReverbKernel(channels: channels, sampleRate: sampleRate)
++                let conv = ReverbConvolver(kernel: kernel)
++                DispatchQueue.main.async {
++                    guard token == self.irToken else { return }
++                    self.currentReverb = conv
++                    SoundEffectState.shared.update(
++                        SoundEffectState.shared.currentConfig,
++                        sampleRate: sampleRate,
++                        reverb: conv
++                    )
++                    NSLog("[soundEffect] reverb ready ch=\(channels.count) sr=\(sampleRate) parts=\(kernel.partitions)")
++                }
++            } catch {
++                NSLog("[soundEffect] reverb load failed: \(error)")
++            }
++        }
++    }
++
++    /// item 安装时调用：记住当前 item，启用时挂 audioMix
++    func attach(to item: AVPlayerItem) {
++        currentItem = item
++        guard isEnabled, item.audioMix == nil else { return }
++
++        item.asset.loadTracks(withMediaType: .audio) { [weak self, weak item] tracks, error in
++            guard let self, let item, let track = tracks?.first else {
++                NSLog("[soundEffect] no audio track: \(String(describing: error))")
++                return
++            }
++            DispatchQueue.main.async {
++                guard SoundEffectState.shared.currentConfig.enabled,
++                      self.currentItem === item else { return }
++                if let mix = self.makeMix(for: track) {
++                    item.audioMix = mix
++                    NSLog("[soundEffect] audioMix attached")
++                }
++            }
++        }
++    }
++
++    private func makeMix(for track: AVAssetTrack) -> AVAudioMix? {
++        let processor = SoundEffectProcessor()
++        let clientInfo = Unmanaged.passRetained(processor).toOpaque()
++
++        var callbacks = MTAudioProcessingTapCallbacks(
++            version: kMTAudioProcessingTapCallbacksVersion_0,
++            clientInfo: clientInfo,
++            init: tapInit,
++            finalize: tapFinalize,
++            prepare: tapPrepare,
++            unprepare: tapUnprepare,
++            process: tapProcess
++        )
++
++        var tap: MTAudioProcessingTap?
++        let status = MTAudioProcessingTapCreate(
++            kCFAllocatorDefault,
++            &callbacks,
++            kMTAudioProcessingTapCreationFlag_PostEffects,
++            &tap
++        )
++        guard status == noErr, let tap else {
++            Unmanaged<SoundEffectProcessor>.fromOpaque(clientInfo).release()
++            NSLog("[soundEffect] MTAudioProcessingTapCreate failed: \(status)")
++            return nil
++        }
++
++        let params = AVMutableAudioMixInputParameters(track: track)
++        params.audioTapProcessor = tap
++        let mix = AVMutableAudioMix()
++        mix.inputParameters = [params]
++        return mix
++    }
++}
++
++// MARK: - C 回调
++
++private func tapInit(
++    tap: MTAudioProcessingTap,
++    clientInfo: UnsafeMutableRawPointer?,
++    tapStorageOut: UnsafeMutablePointer<UnsafeMutableRawPointer?>
++) {
++    tapStorageOut.pointee = clientInfo
++}
++
++private func tapFinalize(tap: MTAudioProcessingTap) {
++    let storage = MTAudioProcessingTapGetStorage(tap)
++    Unmanaged<SoundEffectProcessor>.fromOpaque(storage).release()
++    NSLog("[soundEffect] tap finalize")
++}
++
++private func tapPrepare(
++    tap: MTAudioProcessingTap,
++    maxFrames: CMItemCount,
++    processingFormat: UnsafePointer<AudioStreamBasicDescription>
++) {
++    let fmt = processingFormat.pointee
++    let storage = MTAudioProcessingTapGetStorage(tap)
++    let processor = Unmanaged<SoundEffectProcessor>.fromOpaque(storage).takeUnretainedValue()
++
++    let isFloat = (fmt.mFormatFlags & kAudioFormatFlagIsFloat) != 0
++    processor.prepare(sampleRate: Float(fmt.mSampleRate), isFloat32: isFloat && fmt.mBitsPerChannel == 32)
++    NSLog("[soundEffect] tap prepare frames=\(maxFrames) sr=\(fmt.mSampleRate) ch=\(fmt.mChannelsPerFrame)")
++}
++
++private func tapUnprepare(tap: MTAudioProcessingTap) {
++    NSLog("[soundEffect] tap unprepare")
++}
++
++private func tapProcess(
++    tap: MTAudioProcessingTap,
++    numberFrames: CMItemCount,
++    flags: MTAudioProcessingTapFlags,
++    bufferListInOut: UnsafeMutablePointer<AudioBufferList>,
++    numberFramesOut: UnsafeMutablePointer<CMItemCount>,
++    flagsOut: UnsafeMutablePointer<MTAudioProcessingTapFlags>
++) {
++    let status = MTAudioProcessingTapGetSourceAudio(
++        tap,
++        numberFrames,
++        bufferListInOut,
++        flagsOut,
++        nil,
++        numberFramesOut
++    )
++    guard status == noErr else { return }
++
++    let storage = MTAudioProcessingTapGetStorage(tap)
++    let processor = Unmanaged<SoundEffectProcessor>.fromOpaque(storage).takeUnretainedValue()
++
++    let abl = UnsafeMutableAudioBufferListPointer(bufferListInOut)
++    let channels = abl.count >= 2 ? abl.count : (abl.count == 1 ? Int(abl[0].mNumberChannels) : 0)
++    processor.process(
++        bufferList: bufferListInOut,
++        frames: Int(numberFramesOut.pointee),
++        channels: channels
++    )
++}
+diff --git a/node_modules/@rntp/player/src/NativeTrackPlayer.ts b/node_modules/@rntp/player/src/NativeTrackPlayer.ts
+index 762fdaa..8da5f23 100644
+--- a/node_modules/@rntp/player/src/NativeTrackPlayer.ts
++++ b/node_modules/@rntp/player/src/NativeTrackPlayer.ts
+@@ -25,6 +25,8 @@ export interface Spec extends TurboModule {
+   clearCache(): void;
+   setPlaybackSpeed(speed: number): void;
+   setVolume(volume: number): void;
++  setSoundEffect(config: UnsafeObject): void;
++  refreshNowPlaying(): void;
+ 
+   // Queue - set
+   setMediaItem(mediaItem: UnsafeObject): void;
 diff --git a/node_modules/@rntp/player/src/trackPlayerModule.ts b/node_modules/@rntp/player/src/trackPlayerModule.ts
 index 3093274..362db37 100644
 --- a/node_modules/@rntp/player/src/trackPlayerModule.ts
 +++ b/node_modules/@rntp/player/src/trackPlayerModule.ts
-@@ -11,7 +11,6 @@
+@@ -11,7 +11,6 @@ import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
  // does not exist in browser ESM bundlers like Vite/webpack) out of the web
  // bundle entirely.
-
+ 
 -// @ts-expect-error global.__turboModuleProxy is injected by the New Architecture.
  const isTurboModuleEnabled = global.__turboModuleProxy != null;
-
+ 
  const TrackPlayerModule = isTurboModuleEnabled

@@ -28,33 +28,6 @@ const PLAYER_SIDE_RATIO = 0.027
 /** (tabs) 下这两个是遗留路由，不能出现在导航条里 */
 const HIDDEN_TAB_ROUTES = ['(songs)', 'radio']
 
-const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boolean, alpha: number }) => {
-	const g = glass(isDark, alpha)
-	return (
-		<View
-			style={[
-				StyleSheet.absoluteFill,
-				{
-					borderRadius: 26,
-					overflow: 'hidden',
-					borderWidth: 1,
-					borderColor: g.stroke,
-					backgroundColor: g.fill,
-				},
-			]}
-		>
-			<BlurView intensity={100} tint={tint} style={StyleSheet.absoluteFill} />
-			{/* 液态玻璃高光：顶部渐隐白，底部几乎没有 → 形成玻璃厚度 */}
-			<LinearGradient
-				pointerEvents="none"
-				colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0.06)', 'transparent']}
-				locations={[0, 0.4, 1]}
-				style={StyleSheet.absoluteFill}
-			/>
-		</View>
-	)
-}
-
 /**
  * 自定义底部导航条。
  *
@@ -65,9 +38,10 @@ const TabBarBackground = ({ tint, isDark, alpha }: { tint: BlurTint, isDark: boo
 const CustomTabBar = ({ state, descriptors, navigation }: any) => {
 	const { bottom } = useSafeAreaInsets()
 	const { width: winWidth } = useWindowDimensions()
-	const { blurTint, isDark, glassAlpha } = useAppTheme()
+	const { isDark, glassAlpha } = useAppTheme()
 	const mac = macPalette(!!isDark)
-	const g = glass(!!isDark, Number(glassAlpha ?? 0.55))
+	// 功能条固定浅色玻璃：0=全透明，100=纯白
+	const g = glass(false, Number(glassAlpha ?? 0.55))
 	const side = Math.round(winWidth * TAB_BAR_SIDE_RATIO)
 	// 高光强度跟随玻璃透明度：a=0 时完全没有白色，a=1 时最强
 	const ga = Math.min(1, Math.max(0, Number(glassAlpha ?? 0.55)))
@@ -93,7 +67,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
 				}}
 			>
 				{ga > 0.02 ? (
-					<BlurView intensity={Math.round(ga * 100)} tint={ga > 0.5 ? 'light' : 'dark'} style={StyleSheet.absoluteFill} />
+					<BlurView intensity={Math.round(ga * 100)} tint="light" style={StyleSheet.absoluteFill} />
 				) : null}
 				{ga > 0.02 ? (
 					<LinearGradient
@@ -139,7 +113,7 @@ const TabsNavigation = () => {
 	// 功能条长度 0.8×、播放条长度 1.1×（按屏宽比例换算成左右边距）
 	const tabBarSide = Math.round(winWidth * TAB_BAR_SIDE_RATIO)
 	const playerSide = Math.round(winWidth * PLAYER_SIDE_RATIO)
-	const { blurTint, colors, isDark, glassAlpha } = useAppTheme()
+	const { colors, isDark, glassAlpha } = useAppTheme()
 	const mac = macPalette(!!isDark)
 
 	const floatingPlayerStyle = useMemo(() => ({
@@ -189,7 +163,6 @@ const TabsNavigation = () => {
 						shadowOffset: { width: 0, height: 8 },
 					},
 					tabBarItemStyle: { paddingVertical: 0, justifyContent: 'center' },
-					tabBarBackground: () => <TabBarBackground tint={blurTint} isDark={!!isDark} alpha={Number(glassAlpha ?? 0.55)} />,
 				}}
 			>
 				{/* 顺序严格照桌面版：搜索 / 歌单 / 排行榜 / 我的列表 / 下载 / 设置 */}

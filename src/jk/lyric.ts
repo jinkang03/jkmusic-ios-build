@@ -5,7 +5,7 @@ import { getLyric as getJkLyric } from './musicSdk'
 import type { JKMusic } from './musicSdk'
 import { trackToJk } from './adapt'
 import { resolvedFromStore } from '@/player/PlayerStore'
-import { logInfo } from '@/helpers/logger'
+import { logInfo, logError } from '@/helpers/logger'
 import type { Track } from '@/player/types'
 
 export interface LyricResult {
@@ -13,6 +13,10 @@ export interface LyricResult {
 	tlyric?: string | null
 	lxlyric?: string | null
 }
+
+/** 成功歌词缓存：同一首歌重复进入/重播不再重新请求，避免偶发失败 */
+const lyricCache = new Map<string, LyricResult>()
+const cacheKeyOf = (music: JKMusic) => `${String(music?.source ?? '')}:${String(music?.id ?? '')}`
 
 const normalize = (raw: any): LyricResult => {
 	if (!raw) return { lyric: '[00:00.00]暂无歌词' }
@@ -93,7 +97,7 @@ const fetchLyricFromOtherSources = async(music: JKMusic): Promise<LyricResult | 
 		const norm = (v: any) => String(v ?? '').toLowerCase().replace(/[\s\-_·・,，.。()（）]/g, '')
 		const t = norm(title)
 		const a = norm(singer)
-		for (const src of ['kw', 'wy', 'tx'] as const) {
+		for (const src of ['kw', 'wy', 'tx', 'kg', 'mg'] as const) {
 			if (src === music.source) continue
 			try {
 				const list = await Promise.race([
@@ -145,14 +149,49 @@ export const fetchLyric = async(track: Track): Promise<LyricResult> => {
 			if (actual) audioSource = String(actual)
 		}
 	} catch { /* ignore */ }
+	// 流式播放没有缓存文件：音频实际来源就是 resolvedFromStore 里的换源目标。
+	// 不补这一步会导致「企鹅 → 酷我」的歌仍拿 tx 的 id 去要歌词，偶发拿不到。
+	try {
+		const u = String((track as any)?.url ?? '')
+		if (!u.includes('/musicCache/')) {
+			const swappedInfo = resolvedFromStore.getValue()
+			if (swappedInfo?.to && swappedInfo?.title === music.name) {
+				audioSource = String(swappedInfo.to)
+			}
+		}
+	} catch { /* ignore */ }
 	const swapped = buildSwappedMusic(music, audioSource)
+	const cached = lyricCache.get(cacheKeyOf(music))
+	if (cached && isUsableLyric(cached)) {
+		logInfo('[jk/lyric] cache hit', cacheKeyOf(music))
+		return cached
+	}
 	try {
 		const target = swapped ?? music
 		logInfo('[jk/lyric] source=', String(target.source), 'id=', String(target.id),
 			'audioSource=', audioSource, 'swapped=', String(!!swapped))
-		const res = await getJkLyric(target)
+		const fetchOnce = async(): Promise<any> => {
+			try {
+				const r = await getJkLyric(target)
+				const text = String(r?.lyric ?? '')
+				logInfo('[jk/lyric] raw len=', text.length, 'lx=', String(r?.lxlyric ?? '').length,
+					'tl=', String(r?.tlyric ?? '').length, 'usable=', isUsableLyric(r))
+				return r
+			} catch (e) {
+				logError('[jk/lyric] request failed', String((e as any)?.message ?? e))
+				return null
+			}
+		}
+		let res = await fetchOnce()
+		// 偶发失败（超时/限流）：1.2 秒后重试一次
+		if (!isUsableLyric(res)) {
+			await new Promise(r => setTimeout(r, 1200))
+			const retry = await fetchOnce()
+			if (isUsableLyric(retry)) res = retry
+		}
 		if (isUsableLyric(res)) {
 			const n = normalize(res)
+			lyricCache.set(cacheKeyOf(music), n)
 			logInfo('[jk/lyric] got lyric=', String(n.lyric?.length ?? 0),
 				'lx=', String(n.lxlyric ?? '').length, 'tl=', String(n.tlyric ?? '').length)
 			return n
@@ -161,14 +200,22 @@ export const fetchLyric = async(track: Track): Promise<LyricResult> => {
 		if (swapped) {
 			try {
 				const orig = await getJkLyric(music)
-				if (isUsableLyric(orig)) return normalize(orig)
+				if (isUsableLyric(orig)) {
+					const n = normalize(orig)
+					lyricCache.set(cacheKeyOf(music), n)
+					return n
+				}
 			} catch { /* ignore */ }
 		}
 		const alt = await fetchLyricFromOtherSources(music)
-		if (alt) return alt
+		if (alt) {
+			lyricCache.set(cacheKeyOf(music), alt)
+			return alt
+		}
+		logError('[jk/lyric] 所有来源都没有可用歌词', cacheKeyOf(music))
 		return normalize(res)
 	} catch (err) {
-		console.log('[jk/lyric] sdk failed, fallback', err)
+		logError('[jk/lyric] sdk failed, fallback', String((err as any)?.message ?? err))
 		// 换源歌词失败时退回原曲目再试一次，避免比不换源还差
 		if (swapped) {
 			try {
@@ -184,7 +231,7 @@ export const fetchLyric = async(track: Track): Promise<LyricResult> => {
 			const { myGetLyric } = await import('@/helpers/userApi/getMusicSource')
 			return normalize(await myGetLyric(track))
 		} catch (err2) {
-			console.log('[jk/lyric] fallback failed', err2)
+			logError('[jk/lyric] fallback failed', String((err2 as any)?.message ?? err2))
 			return { lyric: '[00:00.00]暂无歌词' }
 		}
 	}

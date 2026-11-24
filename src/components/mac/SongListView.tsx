@@ -45,6 +45,8 @@ export interface SongListViewProps {
 
 const SongListView = ({ tracks, queueId, autoPlayIndex, emptyText, onTrackPress, showActions, listName, listId }: SongListViewProps) => {
 	const c = macPalette(!!useAppTheme().isDark)
+	// 订阅「已缓存/已下载」标记：下载完成或删除后列表立即更新
+	void cachedKeysStore.useValue()
 	const router = useRouter()
 	const params = useLocalSearchParams<{ t?: string }>()
 	const currentMusic: any = myTrackPlayer.useCurrentMusic()

@@ -1,4 +1,5 @@
 import myTrackPlayer from '@/helpers/trackPlayerIndex'
+import { applySoundEffect } from '@/jk/soundEffect'
 import { useEffect } from 'react'
 import TrackPlayer, { PlayerCommand, RepeatMode } from '@rntp/player'
 
@@ -34,6 +35,8 @@ const setupPlayer = () => {
 	TrackPlayer.setVolume(1)
 	TrackPlayer.setRepeatMode(RepeatMode.Off)
 	TrackPlayer.setShuffleEnabled(false)
+	// 音效：把持久化的配置推给原生（默认关闭，关闭时不会挂 tap）
+	applySoundEffect(true)
 	nativeConfigured = true
 }
 

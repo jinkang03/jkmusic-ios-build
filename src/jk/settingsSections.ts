@@ -18,11 +18,11 @@ export type SettingsSectionDef = {
 export const SETTINGS_SECTIONS: SettingsSectionDef[] = [
 	{ id: 'basic', zh: '基本设置', en: 'Basic' },
 	{ id: 'player', zh: '播放设置', en: 'Playback' },
+	{ id: 'soundEffect', zh: '音效', en: 'Sound Effects' },
 	{ id: 'detail', zh: '播放详情页设置', en: 'Now Playing Page' },
 	{ id: 'search', zh: '搜索设置', en: 'Search' },
 	{ id: 'list', zh: '列表设置', en: 'Lists' },
 	{ id: 'download', zh: '下载设置', en: 'Downloads' },
-	{ id: 'ocd', zh: '强迫症设置', en: 'Perfectionism' },
 	{ id: 'backup', zh: '备份与恢复', en: 'Backup & Restore' },
 	{ id: 'other', zh: '其他', en: 'Other' },
 ]

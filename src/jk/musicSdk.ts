@@ -264,7 +264,12 @@ export const getSongListDetail = async(source: JKSource, id: string, page = 1) =
 			picUrl: String(s.artwork ?? ''),
 		}, 'tx'))
 		logInfo('[musicSdk] tx 歌单兜底(fcg_v8_playlist_cp)', id, 'count=', list.length)
-		return { list, total: list.length, page, info: { name: String(resp?.name ?? '') } }
+		return {
+			list,
+			total: list.length,
+			page,
+			info: { name: String(resp?.name ?? ''), img: String(resp?.artwork ?? '') },
+		}
 	}
 	const normalizedList = (res?.list ?? res?.musicList ?? []).map((music: any) => normalizeMusic(music, source))
 	void import('./crossSourceIndex').then(m => m.remember(normalizedList)).catch(() => undefined)

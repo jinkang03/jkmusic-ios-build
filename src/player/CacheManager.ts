@@ -121,10 +121,16 @@ export const downloadToCache = async (
 		const finalUri = getCacheFileUri(localPath)
 		const partUri = `${finalUri}.part`
 		try { await FileSystem.deleteAsync(partUri, { idempotent: true }) } catch { /* ignore */ }
+		let lastLoggedPercent = -10
 		await downloadFile(musicItem.url, partUri, (res) => {
 			const progress = res.bytesWritten / res.contentLength
-			if (typeof onProgress === 'function') onProgress(Math.round(progress * 100))
-			logInfo(`下载进度: ${(progress * 100).toFixed(2)}%`)
+			const percent = Math.round(progress * 100)
+			if (typeof onProgress === 'function') onProgress(percent)
+			// 每 10% 记一条：逐块写日志会让 logger store 频繁复制数组（内存涨、后台易被杀）
+			if (percent - lastLoggedPercent >= 10) {
+				lastLoggedPercent = percent
+				logInfo(`下载进度: ${(progress * 100).toFixed(1)}%`)
+			}
 		})
 		try { await FileSystem.deleteAsync(finalUri, { idempotent: true }) } catch { /* ignore */ }
 		await FileSystem.moveAsync({ from: partUri, to: finalUri })

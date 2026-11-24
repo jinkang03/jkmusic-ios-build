@@ -1,4 +1,3 @@
-import { fakeAudioMp3Uri } from '@/constants/images'
 import { resolveLocalFile } from '@/helpers/localFile'
 import { logError, logInfo } from '@/helpers/logger'
 import PersistStatus from '@/store/PersistStatus'
@@ -19,6 +18,8 @@ type ResolveSourceOptions = {
 	quality?: IMusic.IQualityKey
 	/** 手动下载：只取流，不做「先下载到缓存」那一步 */
 	skipDownload?: boolean
+	/** 跳过「末段预取」缓存，强制重新取流（失败重试用） */
+	bypassPreload?: boolean
 }
 
 type MusicUrlRequestContext = {
@@ -94,6 +95,11 @@ export const clearAltCache = () => {
 	altBackups.clear()
 }
 export const clearPreloadCache = () => { preloadCache.clear() }
+
+/** 丢掉某一首的预取地址（预热失败 / 起播失败时用，避免复用死链） */
+export const invalidatePreloaded = (item: IMusic.IMusicItem) => {
+	preloadCache.delete(makePreloadKey(item))
+}
 
 /**
  * 跨源兜底：当前平台取流失败时，把「歌名 + 歌手」拿到**所有其它平台**找同曲，
@@ -617,6 +623,8 @@ export const resolveSource = async (
 ): Promise<SourceResult> => {
 	const preloadKey = makePreloadKey(musicItem)
 	const requestType = options.requestType ?? 'current'
+	// 手动下载：只取流，不做「先下载到缓存」那一步（后面多处要用）
+	const isDownloadRequest = requestType === 'download'
 
 	const localFile = await resolveLocalFile(musicItem.url)
 	if (localFile.status !== 'nonlocal') {
@@ -625,14 +633,25 @@ export const resolveSource = async (
 				logError('本地文件无法访问:', musicItem.url, localFile.reason)
 				showToast('错误', '本地文件不存在，请删除并重新缓存或导入。', 'error')
 			}
-			return { url: fakeAudioMp3Uri, wasCached: false }
+			// 不再返回假音频：抛错交给 play() 走换源/重试，避免「能播但没声」
+			throw new Error('LOCAL_FILE_MISSING')
 		}
 		preloadCache.delete(preloadKey)
 		return { url: localFile.fileUri, wasCached: false }
 	}
 
-	// 手动下载必须按「请求的音质」重新取流：命中播放缓存会拿到别的音质（实测 128k 下成 flac）
-	const isDownloadRequest = requestType === 'download'
+	// 手动下载优先：用户主动下载的文件（通常更高音质、可离线），放在预取/缓存之前
+	if (!isDownloadRequest && isCurrentSourceRequest(requestType)) {
+		try {
+			const { getDownloadedUri } = await import('@/jk/downloadIndex')
+			const downloaded = await getDownloadedUri(String(musicItem.platform ?? ''), String(musicItem.id ?? ''))
+			if (downloaded) {
+				logInfo('[jk/play] 使用手动下载文件:', String(downloaded).slice(0, 140))
+				return { url: downloaded, wasCached: false }
+			}
+		} catch { /* 索引异常不影响取流 */ }
+	}
+
 
 	// 末段预取命中：放在 isCached（磁盘 stat）之前，切歌时省掉取流 + 磁盘检查。
 	// 预取地址本身已经过「缓存优先」判断（预取时走的就是 resolveSource）。
@@ -695,13 +714,15 @@ export const resolveSource = async (
 	}
 
 	// 只在本地与磁盘缓存都未命中时，才复用预加载的远端音源。
-	if (!musicItem.url || musicItem.url === 'Unknown' || musicItem.url.includes('fake')) {
+	// 下载请求必须重新取流：曲目自带的 url 是播放用的（可能是 128k），
+	// 直接复用会导致「选了 flac 却下载 128k」
+	if (isDownloadRequest || !musicItem.url || musicItem.url === 'Unknown' || musicItem.url.includes('fake')) {
 		const nowMusicApi = musicApiSelectedStore.getValue()
 		if (nowMusicApi == null) {
 			if (isCurrentSourceRequest(requestType)) {
 				showToast('错误', '获取音乐失败，请先导入音源。', 'error')
 			}
-			return { url: fakeAudioMp3Uri, wasCached: false }
+			throw new Error('NO_MUSIC_API')
 		}
 
 		const requestKey = createSourceRequestKey(musicItem, requestType)
@@ -801,6 +822,14 @@ export const resolveSource = async (
 					if (isCurrentSourceRequest(requestType)) {
 						showToast('提示', `该源暂不可用，已用${alt.label}播放`, 'info')
 						nowApiState.setValue('正常')
+						void import('@/jk/playbackDiagnostics').then(m => m.recordDiagnostic({
+							kind: 'switch',
+							title: String(musicItem.title ?? ''),
+							from: String(musicItem.platform ?? ''),
+							to: String(alt.source ?? ''),
+							reason: '主源取流失败（跨源兜底）',
+							detail: String(alt.url ?? '').slice(0, 80),
+						})).catch(() => undefined)
 					}
 					logInfo(`${logPrefix} 跨源兜底成功:`, alt.source, alt.title)
 				}
@@ -826,7 +855,7 @@ export const resolveSource = async (
 					nowApiState.setValue('异常')
 					throw new Error('无法获取任何音质的音乐，请稍后重试。')
 				}
-				return { url: fakeAudioMp3Uri, wasCached: false }
+				throw new Error('SOURCE_UNAVAILABLE')
 			}
 			const { getSetting: getDevSetting } = await import('@/jk/settingsStore')
 			const badFlag2 = getDevSetting<any>('_dev.forceBadUrl', false)
@@ -840,7 +869,7 @@ export const resolveSource = async (
 			logInfo(`${logPrefix} 最终的音乐 URL:`, resp_url)
 
 			// 音质「请求值 vs 实际值」诊断：从 url 的 bitrate$ 参数或脚本返回的 type 推断
-			const requested = String(qualityStore.getValue() ?? '')
+			const requested = String(requestedQuality ?? '')
 			const bm = /bitrate\$(\d+)/.exec(String(resp_url))
 			const actual = bm ? `${bm[1]}k` : (typeof resp_url === 'object' ? String((resp_url as any)?.type ?? 'unknown') : 'unknown')
 			logInfo('[quality] requested=', requested, 'actual=', actual, 'url=', String(resp_url).slice(0, 90))
@@ -889,7 +918,7 @@ export const resolveSource = async (
 				// 不在这里回退假音频（那会让播放器停在静音文件上，用户以为"没反应"）
 				throw new Error(errMsg === 'SOURCE_UNAVAILABLE' ? errMsg : 'SOURCE_UNAVAILABLE')
 			}
-			return { url: fakeAudioMp3Uri, wasCached: false }
+			throw new Error('SOURCE_UNAVAILABLE')
 		}
 	}
 
